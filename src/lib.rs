@@ -320,8 +320,6 @@ mod test {
 
     // Test suite from the Rust's Mutex implementation with minor modifications
     // since the API is not compatible with this crate implementation.
-    use once_cell::sync::Lazy;
-
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
     use std::sync::Arc;
@@ -340,7 +338,7 @@ mod test {
 
     #[test]
     fn lots_and_lots() {
-        static LOCK: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(0));
+        static LOCK: Mutex<u32> = Mutex::new(0);
 
         const ITERS: u32 = 1000;
         const CONCURRENCY: u32 = 3;

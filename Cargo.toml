@@ -17,6 +17,3 @@ keywords = ["no_std", "mutex", "spinlock", "mcs-lock"]
 
 [features]
 std = []
-
-[dev-dependencies]
-once_cell = "1"
