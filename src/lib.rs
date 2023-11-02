@@ -195,6 +195,20 @@ impl<T> From<T> for Mutex<T> {
     }
 }
 
+impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut node = MutexNode::new();
+
+        let mut d = f.debug_struct("Mutex");
+        match self.try_lock(&mut node) {
+            Some(guard) => d.field("data", &&*guard),
+            None => d.field("data", &format_args!("<locked>")),
+        };
+        d.field("tail", &self.tail);
+        d.finish()
+    }
+}
+
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 ///
