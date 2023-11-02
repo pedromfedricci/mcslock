@@ -1,0 +1,22 @@
+[package]
+description = """
+An implementation of Mellor-Crummey and Scott contention-free
+spin-lock for mutual exclusion, referred to as MCS lock.
+"""
+name = "mcslock"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+# documentation = "https://docs.rs/mcslock"
+# homepage = "https://crates.io/mcslock"
+repository = "https://github.com/pedromfedricci/mcslock"
+authors = ["Pedro de Matos Fedricci <pedromfedricci@gmail.com>"]
+categories = ["no-std", "no-std::no-alloc", "concurrency"]
+keywords = ["no_std", "mutex", "spinlock", "mcs-lock"]
+
+[features]
+std = []
+
+[dev-dependencies]
+once_cell = "1"
