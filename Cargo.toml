@@ -13,7 +13,7 @@ readme = "README.md"
 repository = "https://github.com/pedromfedricci/mcslock"
 authors = ["Pedro de Matos Fedricci <pedromfedricci@gmail.com>"]
 categories = ["no-std", "no-std::no-alloc", "concurrency"]
-keywords = ["no_std", "mutex", "spinlock", "mcs-lock"]
+keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
 [features]
 std = []

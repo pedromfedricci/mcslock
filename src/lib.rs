@@ -1,4 +1,49 @@
+//! A simple and correct implementation of Mellor-Crummey and Scott
+//! contention-free [spin-lock] for mutual exclusion, referred to as MCS lock.
+//!
+//! MCS lock is a List-Based Queuing Lock that avoids network contention by
+//! having threads spin on local memory locations. The main properties of this
+//! mechanism are:
+//!
+//! - guarantees FIFO ordering of lock acquisitions;
+//! - spins on locally-accessible flag variables only;
+//! - requires a small constant amount of space per lock; and
+//! - works equally well (requiring only O(1) network transactions per lock
+//!   acquisition) on machines with and without coherent caches.
+//!
+//! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
+//! And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
+//!
+//! # Use cases
+//!
+//! [Spinlocks are usually not what you want]. The majority of use cases are well
+//! covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
+//! These implementations will notify the system that the waiting thread should
+//! be parked, freeing the processor to work on something else.
+//!
+//! Spinlocks are only efficient in very few circunstances where the overhead
+//! of context switching or process rescheduling are greater than busy waiting
+//! for very short periods. Spinlocks can be useful inside operating-system kernels,
+//! on embedded systems or even complement other locking designs. As a reference
+//! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
+//! tailored for optimistic spinning during contention before actually sleeping.
+//!
+//! # API compatibility
+//!
+//!
+//!
+//! [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
+//! [`spin::Mutex`]: https://docs.rs/spin/latest/spin/type.Mutex.html
+//! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
+//! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
+//! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
+//! [Linux kernel mutexes]: https://www.kernel.org/doc/html/latest/locking/mutex-design.html
+//! [Spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
+//! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
+//! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
+
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
+#![warn(missing_docs)]
 
 use core::cell::UnsafeCell;
 use core::fmt;
@@ -8,12 +53,17 @@ use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
 
+/// A locally-accessible record for forming the waiting queue.
 ///
-/// `MutexNode` is an opaque allocation that holds metadata for a `Mutex`'s
-/// queue. To acquire the `Mutex` lock, an instance of `MutexNode` must be
-/// reachable and mutably borrowed for the duration of the associated
-/// `MutexGuard`. Once the guard is dropped, a node instance can be reused
-/// as the backing allocation for another lock acquisition.
+/// `MutexNode` is an opaque type that holds metadata for the [`Mutex`]'s
+/// wainting queue. To acquire a MCS lock, an instance of queue node must be
+/// reachable and mutably borrowed for the duration of some associated
+/// [`MutexGuard`]. Once the guard is dropped, a node instance can be reused as
+/// the backing allocation for another lock acquisition. See [`lock`] and
+/// [`try_lock`] methods on [`Mutex`].
+///
+/// [`lock`]: Mutex::lock
+/// [`try_lock`]: Mutex::try_lock
 #[derive(Debug)]
 pub struct MutexNode {
     next: MaybeUninit<AtomicPtr<AtomicBool>>,
@@ -21,7 +71,15 @@ pub struct MutexNode {
 
 impl MutexNode {
     /// Creates new `MutexNode` instance.
-    #[inline(always)]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcslock::MutexNode;
+    ///
+    /// let node = MutexNode::new();
+    /// ```
+    #[inline]
     pub const fn new() -> MutexNode {
         MutexNode { next: MaybeUninit::uninit() }
     }
@@ -43,7 +101,7 @@ impl MutexNode {
     }
 }
 
-/// A mutual exclusion primitive useful for protecting shared data
+/// A mutual exclusion primitive useful for protecting shared data.
 ///
 /// This mutex will block threads waiting for the lock to become available. The
 /// mutex can also be statically initialized or created via a [`new`]
@@ -58,6 +116,7 @@ impl MutexNode {
 /// use std::sync::Arc;
 /// use std::thread;
 /// use std::sync::mpsc::channel;
+///
 /// use mcslock::{Mutex, MutexNode};
 ///
 /// const N: usize = 10;
@@ -104,10 +163,16 @@ unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
 
 impl<T> Mutex<T> {
-    // Loom's Atomics cannot be constructed at compile-time.
-
     /// Creates a new mutex in an unlocked state ready for use.
-    #[inline(always)]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcslock::Mutex;
+    ///
+    /// let mutex = Mutex::new(0);
+    /// ```
+    #[inline]
     pub const fn new(value: T) -> Mutex<T> {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
@@ -115,7 +180,16 @@ impl<T> Mutex<T> {
     }
 
     /// Consumes this mutex, returning the underlying data.
-    #[inline(always)]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcslock::Mutex;
+    ///
+    /// let mutex = Mutex::new(0);
+    /// assert_eq!(mutex.into_inner().unwrap(), 0);
+    /// ```
+    #[inline]
     pub fn into_inner(self) -> T {
         self.data.into_inner()
     }
@@ -126,10 +200,37 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// If the lock could not be acquired at this time, then [`None`] is returned.
     /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
-    /// guard is dropped.
+    /// guard is dropped. To acquire a MCS lock, it's also required a mutably
+    /// borrowed queue node, which is a record that keeps a link for forming the
+    /// queue, see [`MutexNode`].
     ///
     /// This function does not block.
-    #[inline(always)]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::{Mutex, MutexNode};
+    ///
+    /// let mutex = Arc::new(Mutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || {
+    ///     let mut node = MutexNode::new();
+    ///     let mut lock = c_mutex.try_lock(&mut node);
+    ///     if let Some(ref mut mutex) = lock {
+    ///         **mutex = 10;
+    ///     } else {
+    ///         println!("try_lock failed");
+    ///     }
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// let mut node = MutexNode::new();
+    /// assert_eq!(*mutex.lock(&mut node), 10);
+    /// ```
     pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode) -> Option<MutexGuard<'a, T>> {
         // Must initialize `node.next` before any possible access to it.
         node.next_write_null();
@@ -143,15 +244,40 @@ impl<T: ?Sized> Mutex<T> {
     /// Acquires a mutex, blocking the current thread until it is able to do so.
     ///
     /// This function will block the local thread until it is available to acquire
-    /// the mutex. Upon returning, the thread is the only thread with the mutex
+    /// the mutex. Upon returning, the thread is the only thread with the lock
     /// held. An RAII guard is returned to allow scoped unlock of the lock. When
-    /// the guard goes out of scope, the mutex will be unlocked.
-    #[inline(always)]
+    /// the guard goes out of scope, the mutex will be unlocked. To acquire a MCS
+    /// lock, it's also required a mutably borrowed queue node, which is a record
+    /// that keeps a link for forming the queue, see [`MutexNode`].
+    ///
+    /// This function will block if the lock is unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::{Mutex, MutexNode};
+    ///
+    /// let mutex = Arc::new(Mutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || {
+    ///     let mut node = MutexNode::new();
+    ///     *c_mutex.lock(&mut node) = 10;
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// let mut node = MutexNode::new();
+    /// assert_eq!(*mutex.lock(&mut node), 10);
+    /// ```
     pub fn lock<'a>(&'a self, node: &'a mut MutexNode) -> MutexGuard<'a, T> {
         // Must initialize `node.next` before any possible access to it.
         node.next_write_null();
         let pred = self.tail.swap(node, AcqRel);
 
+        // We do have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             let locked = AtomicBool::new(true);
             // SAFETY: we already checked that `pred` is not null, it's `next`
@@ -173,7 +299,19 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// Since this call borrows the `Mutex` mutably, no actual locking needs to
     /// take place - the mutable borrow statically guarantees no locks exist.
-    #[inline(always)]
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcslock::{Mutex, MutexNode};
+    ///
+    /// let mut mutex = Mutex::new(0);
+    /// *mutex.get_mut() = 10;
+    ///
+    /// let mut node = MutexNode::new();
+    /// assert_eq!(*mutex.lock(&mut node), 10);
+    /// ```
+    #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.data.get() }
     }
@@ -181,7 +319,6 @@ impl<T: ?Sized> Mutex<T> {
 
 impl<T: ?Sized + Default> Default for Mutex<T> {
     /// Creates a `Mutex<T>`, with the `Default` value for `T`.
-    #[inline(always)]
     fn default() -> Mutex<T> {
         Mutex::new(Default::default())
     }
@@ -189,7 +326,6 @@ impl<T: ?Sized + Default> Default for Mutex<T> {
 
 impl<T> From<T> for Mutex<T> {
     /// Creates a `Mutex<T>` from a instance of `T`.
-    #[inline(always)]
     fn from(data: T) -> Self {
         Self::new(data)
     }
