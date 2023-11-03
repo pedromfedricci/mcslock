@@ -54,6 +54,15 @@
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
 //!
+//! ## Related projects
+//!
+//! These projects provide MCS lock implementations with slightly different APIs,
+//! implementation details or compiler requirements, you can check their
+//! repositories:
+//!
+//! - `mcs-rs`: <https://github.com/gereeter/mcs-rs>
+//! - `libmcs`: <https://github.com/topecongiro/libmcs>
+//!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
