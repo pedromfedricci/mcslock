@@ -14,7 +14,7 @@
 //! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
 //! And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
 //!
-//! # Use cases
+//! ## Use cases
 //!
 //! [Spinlocks are usually not what you want]. The majority of use cases are well
 //! covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
@@ -29,7 +29,7 @@
 //! tailored for optimistic spinning during contention before actually sleeping.
 //! This implementation is `no_std` by default, so it's useful in those environments.
 //!
-//! # API compatibility
+//! ## API compatibility
 //!
 //! The locking interface of a MCS lock is not quite the same as other mutexes.
 //! To acquire a MCS lock, a queue record must be mutably accessible for the
@@ -38,10 +38,27 @@
 //! If you are looking for spin-based primitives that are compatible with
 //! [lock_api], consider using [spin-rs], which is also suitable for `no_std`.
 //!
+//! ## Features
+//!
+//! This crate dos not provide any default features. Features that can be enabled
+//! are:
+//!
+//! ### yield
+//!
+//! The `yield` feature requires linking to the standard library, so it is not
+//! suitable for `no_std` environments. By enabling the `yield` feature, instead
+//! of busy-waiting during lock acquisitions and releases, this will call
+//! [`std::thread::yield_now`], which cooperatively gives up a timeslice to the
+//! OS scheduler. This may cause a context switch, so you may not want to enable
+//! this feature if your intention is to to actually do optimistic spinning. The
+//! default implementation calls [`core::hint::spin_loop`], which does in fact
+//! just simply busy-waits.
+//!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 //! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
+//! [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
 //! [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
 //! [spin-rs]: https://docs.rs/spin/latest/spin
 //! [lock_api]: https://docs.rs/lock_api/latest/lock_api
@@ -50,7 +67,7 @@
 //! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 //! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 
-#![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
+#![cfg_attr(all(not(feature = "yield"), not(test)), no_std)]
 #![warn(missing_docs)]
 
 use core::cell::UnsafeCell;
@@ -445,7 +462,7 @@ impl<'a, T: ?Sized> Drop for MutexGuard<'a, T> {
 /// This strategy cooperatively gives up a timeslice to the OS scheduler.
 /// Requires that `std` feature is enabled and therefore it is not suitable
 /// for `no_std` environments as it links to the `std` library.
-#[cfg(feature = "std")]
+#[cfg(feature = "yield")]
 fn wait() {
     std::thread::yield_now();
 }
@@ -453,7 +470,7 @@ fn wait() {
 /// This strategy emits machine instruction to signal the processor that it is
 /// running in a busy-wait spin-loop. Does not require linking to the `std`
 /// library, so it is suitable for `no_std` environments.
-#[cfg(not(feature = "std"))]
+#[cfg(not(feature = "yield"))]
 fn wait() {
     core::hint::spin_loop();
 }
