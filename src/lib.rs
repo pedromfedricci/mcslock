@@ -27,16 +27,24 @@
 //! on embedded systems or even complement other locking designs. As a reference
 //! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
 //! tailored for optimistic spinning during contention before actually sleeping.
+//! This implementation is `no_std` by default, so it's useful in those environments.
 //!
 //! # API compatibility
 //!
+//! The locking interface of a MCS lock is not quite the same as other mutexes.
+//! To acquire a MCS lock, a queue record must be mutably accessible for the
+//! durating of the [`lock`] and [`try_lock`] calls. This record is exposed as
+//! the [`MutexNode`] type. See their documentation for more information.
+//! If you are looking for spin-based primitives that are compatible with
+//! [lock_api], consider using [spin-rs], which is also suitable for `no_std`.
 //!
-//!
-//! [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
-//! [`spin::Mutex`]: https://docs.rs/spin/latest/spin/type.Mutex.html
-//! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
+//! [`lock`]: Mutex::lock
+//! [`try_lock`]: Mutex::try_lock
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 //! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
+//! [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
+//! [spin-rs]: https://docs.rs/spin/latest/spin
+//! [lock_api]: https://docs.rs/lock_api/latest/lock_api
 //! [Linux kernel mutexes]: https://www.kernel.org/doc/html/latest/locking/mutex-design.html
 //! [Spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 //! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
