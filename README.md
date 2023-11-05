@@ -1,4 +1,4 @@
-# A simple and correct implementation of Mellor-Crummey and Scott Lock
+# A simple and correct implementation of MCS lock
 
 MCS lock is a List-Based Queuing Lock that avoids network contention by
 having threads spin on local memory locations. The main properties of this
@@ -25,50 +25,50 @@ mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ## Example
 
 ```rust
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
-use std::sync::mpsc::channel;
 
 use mcslock::{Mutex, MutexNode};
 
 fn main() {
-	const N: usize = 10;
+    const N: usize = 10;
 
-	// Spawn a few threads to increment a shared variable (non-atomically), and
-	// let the main thread know once all increments are done.
-	//
-	// Here we're using an Arc to share memory among threads, and the data inside
-	// the Arc is protected with a mutex.
-	let data = Arc::new(Mutex::new(0));
+    // Spawn a few threads to increment a shared variable (non-atomically), and
+    // let the main thread know once all increments are done.
+    //
+    // Here we're using an Arc to share memory among threads, and the data inside
+    // the Arc is protected with a mutex.
+    let data = Arc::new(Mutex::new(0));
 
-	let (tx, rx) = channel();
-	for _ in 0..N {
-    let (data, tx) = (data.clone(), tx.clone());
-    thread::spawn(move || {
-        // A queue node must be mutably accessible.
-        let mut node = MutexNode::new();
-        // The shared state can only be accessed once the lock is held.
-        // Our non-atomic increment is safe because we're the only thread
-        // which can access the shared state when the lock is held.
-        //
-        // We unwrap() the return value to assert that we are not expecting
-        // threads to ever fail while holding the lock.
-        let mut data = data.lock(&mut node);
-        *data += 1;
-        if *data == N {
-            tx.send(()).unwrap();
-        }
-        // the lock is unlocked here when `data` goes out of scope.
-    });
-	}
-  let _message = rx.recv();
+    let (tx, rx) = channel();
+    for _ in 0..N {
+        let (data, tx) = (data.clone(), tx.clone());
+        thread::spawn(move || {
+            // A queue node must be mutably accessible.
+            let mut node = MutexNode::new();
+            // The shared state can only be accessed once the lock is held.
+            // Our non-atomic increment is safe because we're the only thread
+            // which can access the shared state when the lock is held.
+            //
+            // We unwrap() the return value to assert that we are not expecting
+            // threads to ever fail while holding the lock.
+            let mut data = data.lock(&mut node);
+            *data += 1;
+            if *data == N {
+                tx.send(()).unwrap();
+            }
+            // the lock is unlocked here when `data` goes out of scope.
+        });
+    }
+    let _message = rx.recv();
 
-  // A queue node must be mutably accessible.
-  let mut node = MutexNode::new();
-  // Would return `None` if lock was already held.
-  let Some(count) = data.try_lock(&mut node) else { return };
-  assert_eq!(N, *count);
-  // lock is unlock here when `count` goes out of scope.
+    // A queue node must be mutably accessible.
+    let mut node = MutexNode::new();
+    // Would return `None` if lock was already held.
+    let Some(count) = data.try_lock(&mut node) else { return };
+    assert_eq!(N, *count);
+    // lock is unlock here when `count` goes out of scope.
 }
 ```
 
@@ -100,8 +100,8 @@ This implementation is `no_std` by default, so it's useful in those environments
 
 The locking interface of a MCS lock is not quite the same as other mutexes.
 To acquire a MCS lock, a queue record must be mutably accessible for the
-durating of the [`lock`] and [`try_lock`] calls. This record is exposed as
-the [`MutexNode`] type. See their documentation for more information.
+durating of the `lock` and `try_lock` calls. This record is exposed as
+the `MutexNode` type. See their documentation for more information.
 If you are looking for spin-based primitives that are compatible with
 [lock_api], consider using [spin-rs], which is also suitable for `no_std`.
 
@@ -148,11 +148,10 @@ be dual licensed as above, without any additional terms or conditions.
 It is recommended to always use [cargo-crev] to verify the trustworthiness of
 each of your dependencies, including this one.
 
-[`lock`]: Mutex::lock
-[`try_lock`]: Mutex::try_lock
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
 [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
+[`core::hint::spin_loop`]: https://doc.rust-lang.org/core/hint/fn.spin_loop.html
 [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
 [spin-rs]: https://docs.rs/spin/latest/spin
 [lock_api]: https://docs.rs/lock_api/latest/lock_api
