@@ -777,7 +777,7 @@ mod test {
         }
 
         model(|| {
-            let data = Arc::new(Mutex::new(0));
+            let mut data = Arc::new(Mutex::new(0));
             let runs @ Range { end, .. } = 0..2;
 
             let handles = runs
@@ -792,6 +792,10 @@ mod test {
 
             let mut node = MutexNode::new();
             assert_eq!(end, *data.lock(&mut node).deref());
+
+            let data = Arc::get_mut(&mut data).unwrap();
+            *unsafe { data.get_mut().deref() } += 1;
+            assert_eq!(end + 1, *unsafe { data.get_mut().deref() });
         });
     }
 }
