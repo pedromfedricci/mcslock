@@ -76,16 +76,26 @@
 //! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 //! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 
-#![cfg_attr(all(not(feature = "yield"), not(test)), no_std)]
+#![cfg_attr(all(not(feature = "yield"), not(loom), not(test)), no_std)]
 #![warn(missing_docs)]
 
-use core::cell::UnsafeCell;
 use core::fmt;
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
+
+#[cfg(not(all(loom, test)))]
+use core::cell::UnsafeCell;
+#[cfg(not(all(loom, test)))]
 use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
+
+#[cfg(all(loom, test))]
+use core::marker::PhantomData;
+#[cfg(all(loom, test))]
+use loom::cell::{ConstPtr, MutPtr, UnsafeCell};
+#[cfg(all(loom, test))]
+use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -204,10 +214,20 @@ impl<T> Mutex<T> {
     /// ```
     /// use mcslock::Mutex;
     ///
+    /// const MUTEX: Mutex<i32> = Mutex::new(0);
     /// let mutex = Mutex::new(0);
     /// ```
+    #[cfg(not(all(loom, test)))]
     #[inline]
     pub const fn new(value: T) -> Mutex<T> {
+        let tail = AtomicPtr::new(ptr::null_mut());
+        let data = UnsafeCell::new(value);
+        Mutex { tail, data }
+    }
+
+    /// Creates a new mutex with Loom primitives (non-const).
+    #[cfg(all(loom, test))]
+    fn new(value: T) -> Mutex<T> {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
         Mutex { tail, data }
@@ -221,7 +241,7 @@ impl<T> Mutex<T> {
     /// use mcslock::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// assert_eq!(mutex.into_inner().unwrap(), 0);
+    /// assert_eq!(mutex.into_inner(), 0);
     /// ```
     #[inline]
     pub fn into_inner(self) -> T {
@@ -345,9 +365,17 @@ impl<T: ?Sized> Mutex<T> {
     /// let mut node = MutexNode::new();
     /// assert_eq!(*mutex.lock(&mut node), 10);
     /// ```
+    #[cfg(not(all(loom, test)))]
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
+        // SAFETY: We hold exclusive access to the Mutex data.
         unsafe { &mut *self.data.get() }
+    }
+
+    /// Returns a Loom mutable pointer to the underlying data.
+    #[cfg(all(loom, test))]
+    fn get_mut(&mut self) -> MutPtr<T> {
+        self.data.get_mut()
     }
 }
 
@@ -368,10 +396,9 @@ impl<T> From<T> for Mutex<T> {
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut node = MutexNode::new();
-
         let mut d = f.debug_struct("Mutex");
         match self.try_lock(&mut node) {
-            Some(guard) => d.field("data", &&*guard),
+            Some(guard) => guard.data_with(|data| d.field("data", &&*data)),
             None => d.field("data", &format_args!("<locked>")),
         };
         d.field("tail", &self.tail);
@@ -408,37 +435,68 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
         self.tail().compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 
-    /// Returns a raw `self.data` pointer.
-    fn data_ptr(&self) -> *mut T {
-        self.lock.data.get()
+    /// Runs `f` with an immutable reference to the wrapped value.
+    #[cfg(not(all(loom, test)))]
+    fn data_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&T) -> R,
+    {
+        // SAFETY: A guard instance holds the lock locked.
+        f(unsafe { &*self.lock.data.get() })
+    }
+
+    /// Runs `f` with an immutable reference to the wrapped value.
+    #[cfg(all(loom, test))]
+    fn data_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&T) -> R,
+    {
+        // SAFETY: A guard instance holds the lock locked.
+        f(unsafe { self.lock.data.get().deref() })
+    }
+
+    /// Get a Loom immutable pointer that borrows from this guard.
+    #[cfg(all(loom, test))]
+    fn deref(&self) -> MutexGuardDeref<'a, T> {
+        MutexGuardDeref::new(self.lock.data.get())
+    }
+
+    /// Get a Loom mutable pointer that mutably borrows from this guard.
+    #[cfg(all(loom, test))]
+    fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
+        MutexGuardDerefMut::new(self.lock.data.get_mut())
     }
 }
 
+#[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
     fn deref(&self) -> &T {
-        unsafe { &*self.data_ptr() }
+        // SAFETY: A guard instance holds the lock locked.
+        unsafe { &*self.lock.data.get() }
     }
 }
 
+#[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.data_ptr() }
+        // SAFETY: A guard instance holds the lock locked.
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
 impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&**self, f)
+        self.data_with(|data| fmt::Debug::fmt(data, f))
     }
 }
 
 impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&**self, f)
+        self.data_with(|data| fmt::Display::fmt(data, f))
     }
 }
 
@@ -468,23 +526,87 @@ impl<'a, T: ?Sized> Drop for MutexGuard<'a, T> {
     }
 }
 
+/// A Loom immutable pointer borrowed from a [`MutexGuard`] instance.
+#[cfg(all(loom, test))]
+struct MutexGuardDeref<'a, T: ?Sized> {
+    ptr: ConstPtr<T>,
+    marker: PhantomData<&'a MutexGuard<'a, T>>,
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> MutexGuardDeref<'a, T> {
+    fn new(ptr: ConstPtr<T>) -> Self {
+        Self { ptr, marker: PhantomData }
+    }
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> Deref for MutexGuardDeref<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: Our lifetime is bounded by the guard borrow.
+        unsafe { self.ptr.deref() }
+    }
+}
+
+/// A Loom mutable pointer mutably borrowed from a [`MutexGuard`] instance.
+#[cfg(all(loom, test))]
+struct MutexGuardDerefMut<'a, T: ?Sized> {
+    ptr: MutPtr<T>,
+    marker: PhantomData<&'a mut MutexGuard<'a, T>>,
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> MutexGuardDerefMut<'a, T> {
+    fn new(ptr: MutPtr<T>) -> Self {
+        Self { ptr, marker: PhantomData }
+    }
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> Deref for MutexGuardDerefMut<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: Our lifetime is bounded by the guard's borrow.
+        unsafe { self.ptr.deref() }
+    }
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T> DerefMut for MutexGuardDerefMut<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: Our lifetime is bounded by the guard's borrow.
+        unsafe { self.ptr.deref() }
+    }
+}
+
 /// This strategy cooperatively gives up a timeslice to the OS scheduler.
 /// Requires that `std` feature is enabled and therefore it is not suitable
 /// for `no_std` environments as it links to the `std` library.
-#[cfg(feature = "yield")]
+#[cfg(all(feature = "yield", not(loom)))]
 fn wait() {
     std::thread::yield_now();
+}
+
+/// This strategy yields the current thread execution to the loom executor
+/// so it can eventually work on the thread that we are waiting on to make
+/// progress.
+#[cfg(all(loom, test))]
+fn wait() {
+    loom::thread::yield_now();
 }
 
 /// This strategy emits machine instruction to signal the processor that it is
 /// running in a busy-wait spin-loop. Does not require linking to the `std`
 /// library, so it is suitable for `no_std` environments.
-#[cfg(not(feature = "yield"))]
+#[cfg(all(not(feature = "yield"), not(all(loom, test))))]
 fn wait() {
     core::hint::spin_loop();
 }
 
-#[cfg(test)]
+#[cfg(all(not(loom), test))]
 mod test {
     use super::{Mutex, MutexNode};
 
@@ -634,5 +756,42 @@ mod test {
         }
         let comp: &[i32] = &[4, 2, 5];
         assert_eq!(&*lock.lock(&mut node), comp);
+    }
+}
+
+#[cfg(all(loom, test))]
+mod test {
+    use super::{Mutex, MutexNode};
+
+    use loom::{model, thread};
+
+    #[test]
+    fn arc_mutex() {
+        use core::ops::Range;
+        use loom::sync::Arc;
+
+        fn inc(lock: Arc<Mutex<i32>>) {
+            let mut node = MutexNode::new();
+            let mut guard = lock.lock(&mut node).deref_mut();
+            *guard += 1;
+        }
+
+        model(|| {
+            let data = Arc::new(Mutex::new(0));
+            let runs @ Range { end, .. } = 0..2;
+
+            let handles = runs
+                .into_iter()
+                .map(|_| Arc::clone(&data))
+                .map(|data| thread::spawn(move || inc(data)))
+                .collect::<Vec<_>>();
+
+            for handle in handles {
+                let _r = handle.join().unwrap();
+            }
+
+            let mut node = MutexNode::new();
+            assert_eq!(end, *data.lock(&mut node).deref());
+        });
     }
 }

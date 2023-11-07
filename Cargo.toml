@@ -16,5 +16,8 @@ categories = ["no-std", "no-std::no-alloc", "concurrency"]
 keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
 [features]
-# This feature requires linking with std.
+# The `yield` feature requires linking with std.
 yield = []
+
+[target.'cfg(loom)'.dev-dependencies]
+loom = { version = "0.7" }
