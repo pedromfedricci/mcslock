@@ -398,7 +398,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
         let mut node = MutexNode::new();
         let mut d = f.debug_struct("Mutex");
         match self.try_lock(&mut node) {
-            Some(guard) => guard.data_with(|data| d.field("data", &&*data)),
+            Some(guard) => guard.data_with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         };
         d.field("tail", &self.tail);
@@ -787,7 +787,7 @@ mod test {
                 .collect::<Vec<_>>();
 
             for handle in handles {
-                let _r = handle.join().unwrap();
+                handle.join().unwrap();
             }
 
             let mut node = MutexNode::new();
