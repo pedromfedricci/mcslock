@@ -1,0 +1,29 @@
+# Build package in no_std environment.
+[tasks.no-std]
+command = "cargo"
+args = ["build", "--target", "thumbv7m-none-eabi"]
+
+# Lint yield feature.
+[tasks.yield-lint]
+command = "cargo"
+args = ["clippy", "--features", "yield"]
+
+# Run tests under miri.
+# NOTE: must run as: cargo +nightly make miri
+[tasks.miri-test]
+toolchain = "nightly"
+install_crate = { rustup_component_name = "miri" }
+command = "cargo"
+args = ["miri", "test"]
+
+# Run Loom tests.
+[tasks.loom-test]
+command = "cargo"
+env = { "RUSTFLAGS" = "--cfg loom" }
+args = ["test", "--lib", "--release"]
+
+# Lint Loom cfg.
+[tasks.loom-lint]
+command = "cargo"
+env = { "RUSTFLAGS" = "--cfg loom" }
+args = ["clippy", "--profile", "test"]
