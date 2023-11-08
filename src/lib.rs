@@ -372,10 +372,10 @@ impl<T: ?Sized> Mutex<T> {
         unsafe { &mut *self.data.get() }
     }
 
-    /// Returns a Loom mutable pointer to the underlying data.
+    /// Get a Loom mutable data pointer that mutably borrows this mutex.
     #[cfg(all(loom, test))]
-    fn get_mut(&mut self) -> MutPtr<T> {
-        self.data.get_mut()
+    fn get_mut(&mut self) -> MutexDerefMut<T> {
+        MutexDerefMut::new(self.data.get_mut())
     }
 }
 
@@ -403,6 +403,38 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
         };
         d.field("tail", &self.tail);
         d.finish()
+    }
+}
+
+/// A Loom mutable data pointer mutably borrowed from a [`Mutex`] instance.
+#[cfg(all(loom, test))]
+struct MutexDerefMut<'a, T: ?Sized> {
+    ptr: MutPtr<T>,
+    marker: PhantomData<&'a mut Mutex<T>>,
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> MutexDerefMut<'a, T> {
+    fn new(ptr: MutPtr<T>) -> Self {
+        Self { ptr, marker: PhantomData }
+    }
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> Deref for MutexDerefMut<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: Our lifetime is bounded by the mutex's borrow.
+        unsafe { self.ptr.deref() }
+    }
+}
+
+#[cfg(all(loom, test))]
+impl<'a, T: ?Sized> DerefMut for MutexDerefMut<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: Our lifetime is bounded by the mutex's borrow.
+        unsafe { self.ptr.deref() }
     }
 }
 
@@ -455,13 +487,13 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
         f(unsafe { self.lock.data.get().deref() })
     }
 
-    /// Get a Loom immutable pointer that borrows from this guard.
+    /// Get a Loom immutable data pointer that borrows from this guard.
     #[cfg(all(loom, test))]
     fn deref(&self) -> MutexGuardDeref<'a, T> {
         MutexGuardDeref::new(self.lock.data.get())
     }
 
-    /// Get a Loom mutable pointer that mutably borrows from this guard.
+    /// Get a Loom mutable data pointer that mutably borrows from this guard.
     #[cfg(all(loom, test))]
     fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
         MutexGuardDerefMut::new(self.lock.data.get_mut())
@@ -793,9 +825,9 @@ mod test {
             let mut node = MutexNode::new();
             assert_eq!(end, *data.lock(&mut node).deref());
 
-            let data = Arc::get_mut(&mut data).unwrap();
-            *unsafe { data.get_mut().deref() } += 1;
-            assert_eq!(end + 1, *unsafe { data.get_mut().deref() });
+            let mut data = Arc::get_mut(&mut data).unwrap().get_mut();
+            *data += 1;
+            assert_eq!(end + 1, *data);
         });
     }
 }
