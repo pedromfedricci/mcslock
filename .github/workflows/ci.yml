@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+  
+env:
+  CARGO_TERM_COLOR: always
+  LOOM_RUSTFLAGS: --cfg loom
+  NO_STD_TARGET: thumbv7m-none-eabi
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Check format
+        run: cargo fmt -- --check
+
+  no-std:
+    name: No std
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Add no_std target
+        run: rustup target add ${{ env.NO_STD_TARGET }}
+      - name: Build on no_std
+        run: cargo build --target ${{ env.NO_STD_TARGET }}
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Build docs
+        run: cargo doc
+
+  linter:
+    name: Linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Lint default
+        run: cargo clippy --no-default-features
+      - name: Lint yield
+        run: cargo clippy --features yield
+      - name: Lint loom
+        env:
+          RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
+        run: cargo clippy --profile test
+
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust nightly and Miri
+        # NOTE: not all nightly releases come with Miri
+        run: rustup toolchain install nightly --component miri
+      - name: Set Rust nightly as default
+        run: rustup default nightly
+      - name: Miri test
+        run: cargo miri test
+
+  loom:
+    name: Loom
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Loom test
+        env:
+          RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
+        run: cargo test --lib --release
