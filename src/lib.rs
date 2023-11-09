@@ -100,7 +100,7 @@ use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 /// A locally-accessible record for forming the waiting queue.
 ///
 /// `MutexNode` is an opaque type that holds metadata for the [`Mutex`]'s
-/// wainting queue. To acquire a MCS lock, an instance of queue node must be
+/// waiting queue. To acquire a MCS lock, an instance of queue node must be
 /// reachable and mutably borrowed for the duration of some associated
 /// [`MutexGuard`]. Once the guard is dropped, a node instance can be reused as
 /// the backing allocation for another lock acquisition. See [`lock`] and
@@ -371,12 +371,6 @@ impl<T: ?Sized> Mutex<T> {
         // SAFETY: We hold exclusive access to the Mutex data.
         unsafe { &mut *self.data.get() }
     }
-
-    /// Get a Loom mutable data pointer that mutably borrows this mutex.
-    #[cfg(all(loom, test))]
-    fn get_mut(&mut self) -> MutexDerefMut<T> {
-        MutexDerefMut::new(self.data.get_mut())
-    }
 }
 
 impl<T: ?Sized + Default> Default for Mutex<T> {
@@ -403,38 +397,6 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
         };
         d.field("tail", &self.tail);
         d.finish()
-    }
-}
-
-/// A Loom mutable data pointer mutably borrowed from a [`Mutex`] instance.
-#[cfg(all(loom, test))]
-struct MutexDerefMut<'a, T: ?Sized> {
-    ptr: MutPtr<T>,
-    marker: PhantomData<&'a mut Mutex<T>>,
-}
-
-#[cfg(all(loom, test))]
-impl<'a, T: ?Sized> MutexDerefMut<'a, T> {
-    fn new(ptr: MutPtr<T>) -> Self {
-        Self { ptr, marker: PhantomData }
-    }
-}
-
-#[cfg(all(loom, test))]
-impl<'a, T: ?Sized> Deref for MutexDerefMut<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: Our lifetime is bounded by the mutex's borrow.
-        unsafe { self.ptr.deref() }
-    }
-}
-
-#[cfg(all(loom, test))]
-impl<'a, T: ?Sized> DerefMut for MutexDerefMut<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: Our lifetime is bounded by the mutex's borrow.
-        unsafe { self.ptr.deref() }
     }
 }
 
@@ -633,7 +595,7 @@ fn wait() {
 /// This strategy emits machine instruction to signal the processor that it is
 /// running in a busy-wait spin-loop. Does not require linking to the `std`
 /// library, so it is suitable for `no_std` environments.
-#[cfg(all(not(feature = "yield"), not(all(loom, test))))]
+#[cfg(all(not(feature = "yield"), not(loom)))]
 fn wait() {
     core::hint::spin_loop();
 }
@@ -641,7 +603,6 @@ fn wait() {
 #[cfg(all(not(loom), test))]
 mod test {
     use super::{Mutex, MutexNode};
-
     // Test suite from the Rust's Mutex implementation with minor modifications
     // since the API is not compatible with this crate implementation.
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -794,11 +755,10 @@ mod test {
 #[cfg(all(loom, test))]
 mod test {
     use super::{Mutex, MutexNode};
-
     use loom::{model, thread};
 
     #[test]
-    fn arc_mutex() {
+    fn threads_join() {
         use core::ops::Range;
         use loom::sync::Arc;
 
@@ -809,7 +769,8 @@ mod test {
         }
 
         model(|| {
-            let mut data = Arc::new(Mutex::new(0));
+            let data = Arc::new(Mutex::new(0));
+            // 3 or more threads make this model run for too long.
             let runs @ Range { end, .. } = 0..2;
 
             let handles = runs
@@ -824,10 +785,27 @@ mod test {
 
             let mut node = MutexNode::new();
             assert_eq!(end, *data.lock(&mut node).deref());
+        });
+    }
 
-            let mut data = Arc::get_mut(&mut data).unwrap().get_mut();
-            *data += 1;
-            assert_eq!(end + 1, *data);
+    #[test]
+    fn threads_fork() {
+        // Using std's Arc or else this model runs for loo long.
+        use std::sync::Arc;
+
+        fn inc(lock: Arc<Mutex<i32>>) {
+            let mut node = MutexNode::new();
+            let mut guard = lock.lock(&mut node).deref_mut();
+            *guard += 1;
+        }
+
+        model(|| {
+            let data = Arc::new(Mutex::new(0));
+            // 4 or more threads make this model run for too long.
+            for _ in 0..3 {
+                let data = Arc::clone(&data);
+                thread::spawn(move || inc(data));
+            }
         });
     }
 }
