@@ -15,6 +15,9 @@ authors = ["Pedro de Matos Fedricci <pedromfedricci@gmail.com>"]
 categories = ["no-std", "no-std::no-alloc", "concurrency"]
 keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
+[workspace]
+members = [".", "benches"]
+
 [features]
 # The `yield` feature requires linking with std.
 yield = []

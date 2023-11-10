@@ -1,3 +1,7 @@
+# Don't run these tasks for all crates in the workspace.
+[config]
+default_to_workspace = false
+
 # Build package in no_std environment.
 [tasks.no-std]
 command = "cargo"
@@ -27,3 +31,13 @@ args = ["test", "--lib", "--release"]
 command = "cargo"
 env = { "RUSTFLAGS" = "--cfg loom" }
 args = ["clippy", "--profile", "test"]
+
+# Run busy loop bench.
+[tasks.bench-busy]
+command = "cargo"
+args = ["bench", "--package", "benches", "--bench", "busy"]
+
+# Run yield loop bench.
+[tasks.bench-yield]
+command = "cargo"
+args = ["bench", "--package", "benches", "--bench", "yield", "--features", "mcslock/yield"]
