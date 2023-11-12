@@ -49,6 +49,17 @@ jobs:
       - name: Build docs
         run: cargo doc
 
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Run raw example
+        run: cargo run --example raw
+
   linter:
     name: Linter
     runs-on: ubuntu-latest
