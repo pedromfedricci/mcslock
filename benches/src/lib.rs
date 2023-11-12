@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::thread;
 
 use criterion::{black_box, Bencher};
-use mcslock::{Mutex, MutexNode};
+use mcslock::raw::{Mutex, MutexNode};
 
 pub fn gen_create(bencher: &mut Bencher) {
     bencher.iter(|| {

@@ -22,14 +22,20 @@ And a simpler correctness proof of the MCS lock was proposed by [Johnson and Har
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
-## Example
+## Examples
+
+### Raw locking APIs
+
+Raw locking APIs require exclusive access to a local queue node. This node is
+represented by the `MutexNode` type. The `raw` module provides `no_std` compatible
+interfaces but also requires that queue nodes must be instantiated by the callers.
 
 ```rust
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::{Mutex, MutexNode};
+use mcslock::raw::{Mutex, MutexNode};
 
 fn main() {
     const N: usize = 10;
@@ -66,8 +72,8 @@ fn main() {
     // A queue node must be mutably accessible.
     let mut node = MutexNode::new();
     // Would return `None` if lock was already held.
-    let Some(count) = data.try_lock(&mut node) else { return };
-    assert_eq!(N, *count);
+    let count = data.try_lock(&mut node).unwrap();
+    assert_eq!(*count, N);
     // lock is unlock here when `count` goes out of scope.
 }
 ```
@@ -98,12 +104,12 @@ This implementation is `no_std` by default, so it's useful in those environments
 
 ## API compatibility
 
-The locking interface of a MCS lock is not quite the same as other mutexes.
-To acquire a MCS lock, a queue record must be mutably accessible for the
-durating of the `lock` and `try_lock` calls. This record is exposed as
-the `MutexNode` type. See their documentation for more information.
-If you are looking for spin-based primitives that are compatible with
-[lock_api], consider using [spin-rs], which is also suitable for `no_std`.
+The raw locking interface of a MCS lock is not quite the same as other mutexes.
+To acquire a raw MCS lock, a queue node must be exclusively borrowed for the
+lifetime of the guard returned by `lock` or `try_lock`. This node is exposed as
+the `MutexNode` type. See their documentation for more information. If you are
+looking for spin-based primitives that implement the [lock_api] interface
+and also compatible with `no_std`, consider using [spin-rs].
 
 ## Features
 

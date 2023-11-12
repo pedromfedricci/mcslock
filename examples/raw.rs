@@ -2,7 +2,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::{Mutex, MutexNode};
+use mcslock::raw::{Mutex, MutexNode};
 
 fn main() {
     const N: usize = 10;
@@ -39,7 +39,7 @@ fn main() {
     // A queue node must be mutably accessible.
     let mut node = MutexNode::new();
     // Would return `None` if lock was already held.
-    let Some(count) = data.try_lock(&mut node) else { return };
-    assert_eq!(N, *count);
+    let count = data.try_lock(&mut node).unwrap();
+    assert_eq!(*count, N);
     // lock is unlock here when `count` goes out of scope.
 }
