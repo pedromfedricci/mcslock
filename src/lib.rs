@@ -14,6 +14,65 @@
 //! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
 //! And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
 //!
+//! ## Raw locking APIs
+//!
+//! Raw locking APIs require exclusive access to a local queue node. This node is
+//! represented by the `MutexNode` type. The `raw` module provides an implmentation
+//! that is `no_std` compatible, but also requires that queue nodes must be
+//! instantiated by the callers.
+//!
+//! ```
+//! use std::sync::Arc;
+//! use std::thread;
+//!
+//! use mcslock::raw::{Mutex, MutexNode};
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let c_mutex = Arc::clone(&mutex);
+//!
+//! thread::spawn(move || {
+//!     // A queue node must be mutably accessible.
+//!     let mut node = MutexNode::new();
+//!     *c_mutex.lock(&mut node) = 10;
+//! })
+//! .join().expect("thread::spawn failed");
+//!
+//! // A queue node must be mutably accessible.
+//! let mut node = MutexNode::new();
+//! assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
+//! ```
+//!
+//! ## Standard locking APIs
+//!
+//! This crate also provides locking interfaces that are [lock_api] compliant, by
+//! enabling the `thread_local` feature. These APIs cannot be used in `no_std`
+//! environments, but will manage queue nodes internally.
+//!
+//! ```
+//! # #[cfg(feature = "thread_local")]
+//! # {
+//! use std::sync::Arc;
+//! use std::thread;
+//!
+//! // Requires `thread_local` feature.
+//! use mcslock::Mutex;
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let c_mutex = Arc::clone(&mutex);
+//!
+//! thread::spawn(move || {
+//!     // Node instantiation is not required.
+//!     *c_mutex.lock() = 10;
+//! })
+//! .join().expect("thread::spawn failed");
+//!
+//! // Node instantiation is not required.
+//! assert_eq!(*mutex.try_lock().unwrap(), 10);
+//! # }
+//! # #[cfg(not(feature = "thread_local"))]
+//! # fn main() {}
+//! ```
+//!
 //! ## Use cases
 //!
 //! [Spinlocks are usually not what you want]. The majority of use cases are well
@@ -29,11 +88,11 @@
 //! tailored for optimistic spinning during contention before actually sleeping.
 //! This implementation is `no_std` by default, so it's useful in those environments.
 //!
-//! ## API compatibility
+//! ## API for `no_std` environments
 //!
-//! The raw locking interface of a MCS lock is not quite the same as other mutexes.
-//! To acquire a raw MCS lock, a queue node must be exclusively borrowed for the
-//! lifetime of the guard returned by [`lock`] or [`try_lock`]. This node is exposed
+//! The [`raw`] locking interface of a MCS lock is not quite the same as other
+//! mutexes. To acquire a raw MCS lock, a queue node must be exclusively borrowed for
+//! the lifetime of the guard returned by [`lock`] or [`try_lock`]. This node is exposed
 //! as the [`MutexNode`] type. See their documentation for more information. If you
 //! are looking for spin-based primitives that implement the [lock_api] interface
 //! and also compatible with `no_std`, consider using [spin-rs].
@@ -53,6 +112,13 @@
 //! this feature if your intention is to to actually do optimistic spinning. The
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
+//!
+//! ### thread_local
+//!
+//! The `thread_local` feature provides locking interfaces that are [lock_api]
+//! compliant, but this also requires linking to the standard library. This
+//! implementation handles the queue's nodes internally, by storing them in the
+//! thread local storage of the waiting threads.
 //!
 //! ## Related projects
 //!
@@ -77,7 +143,16 @@
 //! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 //! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 
-#![cfg_attr(all(not(feature = "yield"), not(loom), not(test)), no_std)]
+#![cfg_attr(
+    all(not(any(feature = "yield", feature = "thread_local")), not(loom), not(test)),
+    no_std
+)]
 #![warn(missing_docs)]
 
 pub mod raw;
+
+// The `thread_local` feature requires linking with std.
+#[cfg(feature = "thread_local")]
+mod thread_local;
+#[cfg(feature = "thread_local")]
+pub use thread_local::{Mutex, MutexGuard};

@@ -47,7 +47,7 @@ jobs:
       - name: Install Rust stable
         run: rustup toolchain install stable
       - name: Build docs
-        run: cargo doc
+        run: cargo doc --all-features
 
   examples:
     name: Examples
@@ -68,10 +68,12 @@ jobs:
         uses: actions/checkout@v3
       - name: Install Rust stable
         run: rustup toolchain install stable
-      - name: Lint default
+      - name: Lint no default
         run: cargo clippy --no-default-features
       - name: Lint yield
         run: cargo clippy --features yield
+      - name: Lint thread_local
+        run: cargo clippy --features thread_local
       - name: Lint loom
         env:
           RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
@@ -89,7 +91,7 @@ jobs:
       - name: Set Rust nightly as default
         run: rustup default nightly
       - name: Miri test
-        run: cargo miri test
+        run: cargo miri test --features thread_local
 
   loom:
     name: Loom

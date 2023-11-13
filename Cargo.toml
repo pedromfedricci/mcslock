@@ -21,6 +21,8 @@ members = [".", "benches"]
 [features]
 # The `yield` feature requires linking with std.
 yield = []
+# The `thread_local` feature requires linking with std.
+thread_local = []
 
 [target.'cfg(loom)'.dev-dependencies]
 loom = { version = "0.7" }

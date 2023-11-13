@@ -18,7 +18,7 @@ args = ["clippy", "--features", "yield"]
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
 command = "cargo"
-args = ["miri", "test"]
+args = ["miri", "test", "--features", "thread_local"]
 
 # Run Loom tests.
 [tasks.loom-test]

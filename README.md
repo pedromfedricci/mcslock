@@ -19,62 +19,65 @@ And a simpler correctness proof of the MCS lock was proposed by [Johnson and Har
 # Cargo.toml
 
 [dependencies]
+# Avaliable features = `yield` and `thread_local`.
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
-## Examples
-
-### Raw locking APIs
+## Raw locking APIs
 
 Raw locking APIs require exclusive access to a local queue node. This node is
-represented by the `MutexNode` type. The `raw` module provides `no_std` compatible
-interfaces but also requires that queue nodes must be instantiated by the callers.
+represented by the `MutexNode` type. The `raw` module provides an implmentation
+that is `no_std` compatible, but also requires that queue nodes must be
+instantiated by the callers.
 
 ```rust
-use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
 use mcslock::raw::{Mutex, MutexNode};
 
 fn main() {
-    const N: usize = 10;
+    let mutex = Arc::new(Mutex::new(0));
+    let c_mutex = Arc::clone(&mutex);
 
-    // Spawn a few threads to increment a shared variable (non-atomically), and
-    // let the main thread know once all increments are done.
-    //
-    // Here we're using an Arc to share memory among threads, and the data inside
-    // the Arc is protected with a mutex.
-    let data = Arc::new(Mutex::new(0));
-
-    let (tx, rx) = channel();
-    for _ in 0..N {
-        let (data, tx) = (data.clone(), tx.clone());
-        thread::spawn(move || {
-            // A queue node must be mutably accessible.
-            let mut node = MutexNode::new();
-            // The shared state can only be accessed once the lock is held.
-            // Our non-atomic increment is safe because we're the only thread
-            // which can access the shared state when the lock is held.
-            //
-            // We unwrap() the return value to assert that we are not expecting
-            // threads to ever fail while holding the lock.
-            let mut data = data.lock(&mut node);
-            *data += 1;
-            if *data == N {
-                tx.send(()).unwrap();
-            }
-            // the lock is unlocked here when `data` goes out of scope.
-        });
-    }
-    let _message = rx.recv();
+    thread::spawn(move || {
+        // A queue node must be mutably accessible.
+        let mut node = MutexNode::new();
+        *c_mutex.lock(&mut node) = 10;
+    })
+    .join().expect("thread::spawn failed");
 
     // A queue node must be mutably accessible.
     let mut node = MutexNode::new();
-    // Would return `None` if lock was already held.
-    let count = data.try_lock(&mut node).unwrap();
-    assert_eq!(*count, N);
-    // lock is unlock here when `count` goes out of scope.
+    assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
+}
+```
+
+## Standard locking APIs
+
+This crate also provides locking interfaces that are [lock_api] compliant, by
+enabling the `thread_local` feature. These APIs cannot be used in `no_std`
+environments, but will manage queue nodes internally.
+
+```rust
+use std::sync::Arc;
+use std::thread;
+
+// Requires `thread_local` feature.
+use mcslock::Mutex;
+
+fn main() {
+    let mutex = Arc::new(Mutex::new(0));
+    let c_mutex = Arc::clone(&mutex);
+
+    thread::spawn(move || {
+        // Node instantiation is not required.
+        *c_mutex.lock() = 10;
+    })
+    .join().expect("thread::spawn failed");
+
+    // Node instantiation is not required.
+    assert_eq!(*mutex.try_lock().unwrap(), 10);
 }
 ```
 
@@ -102,13 +105,13 @@ use case, some [Linux kernel mutexes] run an customized MCS lock specifically
 tailored for optimistic spinning during contention before actually sleeping.
 This implementation is `no_std` by default, so it's useful in those environments.
 
-## API compatibility
+## API for `no_std` environments
 
-The raw locking interface of a MCS lock is not quite the same as other mutexes.
-To acquire a raw MCS lock, a queue node must be exclusively borrowed for the
-lifetime of the guard returned by `lock` or `try_lock`. This node is exposed as
-the `MutexNode` type. See their documentation for more information. If you are
-looking for spin-based primitives that implement the [lock_api] interface
+The `raw` locking interface of a MCS lock is not quite the same as other
+mutexes. To acquire a raw MCS lock, a queue node must be exclusively borrowed for
+the lifetime of the guard returned by `lock` or `try_lock`. This node is exposed
+as the `MutexNode` type. See their documentation for more information. If you
+are looking for spin-based primitives that implement the [lock_api] interface
 and also compatible with `no_std`, consider using [spin-rs].
 
 ## Features
@@ -126,6 +129,13 @@ OS scheduler. This may cause a context switch, so you may not want to enable
 this feature if your intention is to to actually do optimistic spinning. The
 default implementation calls [`core::hint::spin_loop`], which does in fact
 just simply busy-waits.
+
+### thread_local
+
+The `thread_local` feature provides locking interfaces that are [lock_api]
+compliant, but this also requires linking to the standard library. This
+implementation handles the queue's nodes internally, by storing them in the
+thread local storage of the waiting threads.
 
 ## Related projects
 

@@ -1,8 +1,8 @@
-//! Raw locking APIs require exclusive access to a local queue node. This node is
+//! Raw locking APIs require exclusive access to a local queue node. Queue node are
 //! represented by the `MutexNode` type.
 //!
-//! The `raw` module provides `no_std` compatible interfaces but also requires
-//! that queue nodes must be instantiated by the callers.
+//! The `raw` module provides an implmentation that is `no_std` compatible, but also
+//! requires that queue nodes must be instantiated by the callers.
 
 use core::fmt;
 use core::mem::MaybeUninit;
@@ -99,6 +99,7 @@ impl MutexNode {
 /// for _ in 0..N {
 ///     let (data, tx) = (data.clone(), tx.clone());
 ///     thread::spawn(move || {
+///         // A queue node must be mutably accessible.
 ///         let mut node = MutexNode::new();
 ///         // The shared state can only be accessed once the lock is held.
 ///         // Our non-atomic increment is safe because we're the only thread
@@ -319,6 +320,12 @@ impl<T: ?Sized> Mutex<T> {
     pub fn get_mut(&mut self) -> &mut T {
         // SAFETY: We hold exclusive access to the Mutex data.
         unsafe { &mut *self.data.get() }
+    }
+
+    /// Returns a reference to the queue's tail.
+    #[cfg(feature = "thread_local")]
+    pub(crate) fn tail(&self) -> &AtomicPtr<MutexNode> {
+        &self.tail
     }
 }
 
