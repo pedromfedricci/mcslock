@@ -284,7 +284,7 @@ impl<T: ?Sized> Mutex<T> {
         // We do have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             let locked = AtomicBool::new(true);
-            // SAFETY: we already checked that `pred` is not null, it's `next`
+            // SAFETY: we already checked that `pred` is not null, its `next`
             // has already been inialized by either `lock` or `try_lock`,
             // and we do not dereference `next`, only write into it.
             let next = unsafe { (*pred).next_assume_init_ref() };
@@ -297,6 +297,29 @@ impl<T: ?Sized> Mutex<T> {
         }
 
         MutexGuard::new(self, unsafe { &*node })
+    }
+
+    /// Returns `true` if the lock is currently held.
+    ///
+    /// This method does not provide any synchronization guarantees, so its only
+    /// useful as a heuristic, and so must be considered not up to date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mcslock::raw::{Mutex, MutexNode};
+    ///
+    /// let mutex = Mutex::new(0);
+    /// let mut node = MutexNode::new();
+    ///
+    /// let guard = mutex.lock(&mut node);
+    /// drop(guard);
+    ///
+    /// assert_eq!(mutex.is_locked(), false);
+    /// ```
+    pub fn is_locked(&self) -> bool {
+        // Relaxed is sufficient because this method only guarantees atomicity.
+        !self.tail.load(Relaxed).is_null()
     }
 
     /// Returns a mutable reference to the underlying data.

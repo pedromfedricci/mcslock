@@ -186,6 +186,27 @@ impl<T: ?Sized> Mutex<T> {
         unsafe { self.node_with(|raw, node| MutexGuard::new(raw.lock_raw(node))) }
     }
 
+    /// Returns `true` if the lock is currently held.
+    ///
+    /// This method does not provide any synchronization guarantees, so its only
+    /// useful as a heuristic, and so must be considered not up to date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mcslock::Mutex;
+    ///
+    /// let mutex = Mutex::new(0);
+    ///
+    /// let guard = mutex.lock();
+    /// drop(guard);
+    ///
+    /// assert_eq!(mutex.is_locked(), false);
+    /// ```
+    pub fn is_locked(&self) -> bool {
+        self.0.is_locked()
+    }
+
     /// Returns a mutable reference to the underlying data.
     ///
     /// Since this call borrows the `Mutex` mutably, no actual locking needs to
