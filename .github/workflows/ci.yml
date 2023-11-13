@@ -11,6 +11,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   LOOM_RUSTFLAGS: --cfg loom
+  DOCSRS_RUSTDOCFLAGS: --cfg docsrs
   NO_STD_TARGET: thumbv7m-none-eabi
 
 jobs:
@@ -44,9 +45,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install Rust stable
-        run: rustup toolchain install stable
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly
       - name: Build docs
+        env:
+          RUSTDOCFLAGS: ${{ env.DOCSRS_RUSTDOCFLAGS }}
         run: cargo doc --all-features
 
   examples:

@@ -7,6 +7,13 @@ default_to_workspace = false
 command = "cargo"
 args = ["build", "--target", "thumbv7m-none-eabi"]
 
+# Build docs for docs.rs.
+[tasks.docsrs]
+toolchain = "nightly"
+command = "cargo"
+env = { "RUSTDOCFLAGS" = "--cfg docsrs" }
+args = ["doc", "--all-features", "--open"]
+
 # Lint yield feature.
 [tasks.yield-lint]
 command = "cargo"

@@ -55,9 +55,9 @@ fn main() {
 
 ## Standard locking APIs
 
-This crate also provides locking interfaces that are [lock_api] compliant, by
-enabling the `thread_local` feature. These APIs cannot be used in `no_std`
-environments, but will manage queue nodes internally.
+This crate also provides locking APIs that do not require user-side node
+instantiation, by enabling the `thread_local` feature. These APIs cannot
+be used in `no_std` environments, but will manage queue nodes internally.
 
 ```rust
 use std::sync::Arc;
@@ -132,10 +132,10 @@ just simply busy-waits.
 
 ### thread_local
 
-The `thread_local` feature provides locking interfaces that are [lock_api]
-compliant, but this also requires linking to the standard library. This
-implementation handles the queue's nodes internally, by storing them in the
-thread local storage of the waiting threads.
+The `thread_local` feature provides locking APIs that do not require user-side
+node instantiation, but this also requires linking to the standard library.
+This implementation handles the queue's nodes internally, by storing them in
+the thread local storage of the waiting threads.
 
 ## Related projects
 

@@ -26,3 +26,7 @@ thread_local = []
 
 [target.'cfg(loom)'.dev-dependencies]
 loom = { version = "0.7" }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,8 +1,8 @@
 //! A MCS lock implementation that stores queue nodes in the thread local
 //! storage of the waiting thread.
 //!
-//! This module provide a mutex API that are compliant with the [lock_api]
-//! interface, by managing the queue nodes allocations internally. Queue
+//! This module provide MCS locking APIs that do not require user-side node
+//! instantiation, by managing the queue's nodes allocations internally. Queue
 //! nodes are stored in the thread local storage, therefore this implementation
 //! requires support from the standard library.
 
