@@ -35,6 +35,7 @@ use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 /// [`try_lock`]: Mutex::try_lock
 #[derive(Debug)]
 pub struct MutexNode {
+    // The `next` pointer must be initialized before any access to it.
     next: MaybeUninit<AtomicPtr<AtomicBool>>,
 }
 
@@ -62,7 +63,7 @@ impl MutexNode {
     ///
     /// # Safety
     ///
-    /// User must garantee that `self.next` has been previously initialized.
+    /// Caller must garantee that `self.next` has been previously initialized.
     unsafe fn next_assume_init_ref(&self) -> &AtomicPtr<AtomicBool> {
         unsafe { self.next.assume_init_ref() }
     }
@@ -155,7 +156,7 @@ impl<T> Mutex<T> {
         Mutex { tail, data }
     }
 
-    /// Creates a new mutex with Loom primitives (non-const).
+    /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
     fn new(value: T) -> Mutex<T> {
         let tail = AtomicPtr::new(ptr::null_mut());
@@ -224,13 +225,14 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// # Safety
     ///
-    /// This requires exclusive access to the queue node.
+    /// This requires exclusive access to this node for all the guard's lifetime.
     pub(crate) unsafe fn try_lock_raw(&self, node: *mut MutexNode) -> Option<MutexGuard<'_, T>> {
         // Must initialize `node.next` before any possible access to it.
         unsafe { &mut *node }.next_write_null();
 
         self.tail
             .compare_exchange(ptr::null_mut(), node, Acquire, Relaxed)
+            // SAFETY: already initialized the node's next pointer.
             .map(|_| MutexGuard::new(self, unsafe { &*node }))
             .ok()
     }
@@ -275,7 +277,7 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// # Safety
     ///
-    /// This requires exclusive access to the queue node.
+    /// This requires exclusive access to this node for all the guard's lifetime.
     pub(crate) unsafe fn lock_raw(&self, node: *mut MutexNode) -> MutexGuard<'_, T> {
         // Must initialize `node.next` before any possible access to it.
         unsafe { &mut *node }.next_write_null();
@@ -284,9 +286,9 @@ impl<T: ?Sized> Mutex<T> {
         // We do have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             let locked = AtomicBool::new(true);
-            // SAFETY: we already checked that `pred` is not null, its `next`
-            // has already been inialized by either `lock` or `try_lock`,
-            // and we do not dereference `next`, only write into it.
+            // SAFETY: We already checked that `pred` is not null, its `next`
+            // has already been inialized by either `lock` or `try_lock`, and
+            // we do not dereference `next`, only write into it.
             let next = unsafe { (*pred).next_assume_init_ref() };
             next.store(&locked as *const _ as *mut _, Release);
 
@@ -350,6 +352,38 @@ impl<T: ?Sized> Mutex<T> {
     pub(crate) fn tail(&self) -> &AtomicPtr<MutexNode> {
         &self.tail
     }
+
+    /// Unlocks this mutex.
+    ///
+    /// # Safety
+    ///
+    /// Must only be called if this mutex is held by the current context, that
+    /// is, it must be associated with a guard returned by `lock` or `try_lock`.
+    /// The guard must be pointing to the provided node, and the node must have
+    /// been initialized.
+    pub(crate) unsafe fn unlock_raw(&self, node: *mut MutexNode) {
+        let next = unsafe { (*node).next_assume_init_ref() };
+        let mut locked = next.load(Relaxed);
+
+        // If we don't have a successor currently,
+        if locked.is_null() {
+            // and we are the tail, then dequeue and free the lock.
+            if self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok() {
+                return;
+            }
+
+            // But if we are not the tail, then we have a pending successor.
+            while locked.is_null() {
+                wait();
+                locked = next.load(Relaxed);
+            }
+        }
+
+        fence(Acquire);
+        // SAFETY: Already verified that successor is not null.
+        let locked = unsafe { &*locked };
+        locked.store(false, Release);
+    }
 }
 
 impl<T: ?Sized + Default> Default for Mutex<T> {
@@ -361,8 +395,8 @@ impl<T: ?Sized + Default> Default for Mutex<T> {
 
 impl<T> From<T> for Mutex<T> {
     /// Creates a `Mutex<T>` from a instance of `T`.
-    fn from(data: T) -> Self {
-        Self::new(data)
+    fn from(data: T) -> Mutex<T> {
+        Mutex::new(data)
     }
 }
 
@@ -393,14 +427,6 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// Creates a new `MutexGuard` instance.
     fn new(lock: &'a Mutex<T>, node: &'a MutexNode) -> Self {
         Self { lock, node }
-    }
-
-    /// Dequeues the current node as the queue's tail, if it is in fact the tail.
-    /// If returns `true`, then node was the queue's tail, and now the queue is
-    /// empty. Returns `false` if the tail points somewhere else.
-    fn dequeue(&self) -> bool {
-        let node = self.node as *const _ as *mut _;
-        self.lock.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 
     /// Runs `f` with an immutable reference to the wrapped value.
@@ -436,6 +462,15 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     }
 }
 
+impl<'a, T: ?Sized> Drop for MutexGuard<'a, T> {
+    fn drop(&mut self) {
+        let node = self.node as *const _ as *mut _;
+        // SAFETY: This guard holds the mutex locked, and it is pointing to a
+        // initialized node.
+        unsafe { self.lock.unlock_raw(node) }
+    }
+}
+
 #[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
     type Target = T;
@@ -465,32 +500,6 @@ impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'a, T> {
 impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.data_with(|data| fmt::Display::fmt(data, f))
-    }
-}
-
-impl<'a, T: ?Sized> Drop for MutexGuard<'a, T> {
-    fn drop(&mut self) {
-        // SAFETY: `MutexGuard` can only be constructed by either `lock` or
-        // `try_lock`, and both must have initialized `self.node.next`.
-        let next = unsafe { self.node.next_assume_init_ref() };
-        let mut locked = next.load(Relaxed);
-
-        // If we don't have a successor currently,
-        if locked.is_null() {
-            // and we are the tail, then dequeue and free the lock.
-            let false = self.dequeue() else { return };
-
-            // But if we are not the tail, then we have a pending successor.
-            while locked.is_null() {
-                wait();
-                locked = next.load(Relaxed);
-            }
-        }
-
-        fence(Acquire);
-        // SAFETY: Already verified that successor is not null.
-        let locked = unsafe { &*locked };
-        locked.store(false, Release);
     }
 }
 

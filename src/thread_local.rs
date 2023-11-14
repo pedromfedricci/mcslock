@@ -99,11 +99,12 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
-    /// Runs `f` over the inner [`RawMutex`] and the thread local [`MutexNode`].
+    /// Runs `f` over the inner mutex and the thread local node.
     ///
     /// # Safety
     ///
-    /// The node pointer must not escape the closure.
+    /// The node pointer must not escape the closure, and node mutations must
+    /// guarantee serialization.
     unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
     where
         F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
@@ -146,8 +147,8 @@ impl<T: ?Sized> Mutex<T> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        // SAFETY: The node pointer does not escape the closure, we have
-        // exclusive access to it.
+        // SAFETY: The node pointer does not escape the closure, and node
+        // mutations are serialized by `try_lock_raw`.
         unsafe { self.node_with(|raw, node| raw.try_lock_raw(node).map(MutexGuard::new)) }
     }
 
@@ -181,8 +182,8 @@ impl<T: ?Sized> Mutex<T> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     pub fn lock(&self) -> MutexGuard<'_, T> {
-        // SAFETY: The node pointer does not escape the closure, we have
-        // exclusive access to it.
+        // SAFETY: The node pointer does not escape the closure, and node
+        // mutations are serialized by `lock_raw`.
         unsafe { self.node_with(|raw, node| MutexGuard::new(raw.lock_raw(node))) }
     }
 
@@ -237,8 +238,8 @@ impl<T: ?Sized + Default> Default for Mutex<T> {
 
 impl<T> From<T> for Mutex<T> {
     /// Creates a `Mutex<T>` from a instance of `T`.
-    fn from(data: T) -> Self {
-        Self::new(data)
+    fn from(data: T) -> Mutex<T> {
+        Mutex::new(data)
     }
 }
 
@@ -251,6 +252,40 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
         };
         d.field("tail", self.0.tail());
         d.finish()
+    }
+}
+
+#[cfg(feature = "lock_api")]
+unsafe impl lock_api::RawMutex for Mutex<()> {
+    // Guard will access thread local storage during drop call, can't be Send.
+    type GuardMarker = lock_api::GuardNoSend;
+
+    // Can safely be const since the inner type wrapped around the UnsafeCell
+    // is a unit type.
+    #[allow(clippy::declare_interior_mutable_const)]
+    const INIT: Self = Mutex::new(());
+
+    fn lock(&self) {
+        core::mem::forget(Mutex::lock(self))
+    }
+
+    fn try_lock(&self) -> bool {
+        Mutex::try_lock(self).map(core::mem::forget).is_some()
+    }
+
+    unsafe fn unlock(&self) {
+        unsafe { self.node_with(|raw, node| raw.unlock_raw(node)) }
+    }
+
+    fn is_locked(&self) -> bool {
+        Mutex::is_locked(self)
+    }
+}
+
+#[cfg(feature = "lock_api")]
+unsafe impl lock_api::RawMutexFair for Mutex<()> {
+    unsafe fn unlock_fair(&self) {
+        <Self as lock_api::RawMutex>::unlock(self)
     }
 }
 

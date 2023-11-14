@@ -14,11 +14,6 @@ command = "cargo"
 env = { "RUSTDOCFLAGS" = "--cfg docsrs" }
 args = ["doc", "--all-features", "--open"]
 
-# Lint yield feature.
-[tasks.yield-lint]
-command = "cargo"
-args = ["clippy", "--features", "yield"]
-
 # Run tests under miri.
 # NOTE: must run as: cargo +nightly make miri
 [tasks.miri-test]

@@ -15,11 +15,13 @@ And a simpler correctness proof of the MCS lock was proposed by [Johnson and Har
 
 ## Install
 
+Include the following under the `[dependencies]` section in your `Cargo.toml` file.
+
 ```toml
 # Cargo.toml
 
 [dependencies]
-# Avaliable features = `yield` and `thread_local`.
+# Avaliable features: `yield`, `thread_local` and `lock_api`.
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
@@ -135,7 +137,13 @@ just simply busy-waits.
 The `thread_local` feature provides locking APIs that do not require user-side
 node instantiation, but this also requires linking to the standard library.
 This implementation handles the queue's nodes internally, by storing them in
-the thread local storage of the waiting threads.
+the thread local storage of the waiting threads. Not `no_std` compatible.
+
+### lock_api
+
+This feature implements [`RawMutex`] and [`RawMutexFair`] from the [lock_api]
+crate for `mcslock::Mutex`, provided that the `thread_local` feature is enabled.
+Which means this feature is also not `no_std` compatible.
 
 ## Related projects
 
@@ -166,6 +174,8 @@ each of your dependencies, including this one.
 
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
+[`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
+[`RawMutexFair`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutexFair.html
 [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
 [`core::hint::spin_loop`]: https://doc.rust-lang.org/core/hint/fn.spin_loop.html
 [spin-lock]: https://en.wikipedia.org/wiki/Spinlock

@@ -12,6 +12,7 @@ env:
   CARGO_TERM_COLOR: always
   LOOM_RUSTFLAGS: --cfg loom
   DOCSRS_RUSTDOCFLAGS: --cfg docsrs
+  LOCK_API_FEATURES: thread_local lock_api
   NO_STD_TARGET: thumbv7m-none-eabi
 
 jobs:
@@ -64,6 +65,8 @@ jobs:
         run: rustup toolchain install stable
       - name: Run raw example
         run: cargo run --example raw
+      - name: Run lock_api example
+        run: cargo run --example lock_api --features "${{ env.LOCK_API_FEATURES }}"
 
   linter:
     name: Linter
@@ -79,6 +82,8 @@ jobs:
         run: cargo clippy --features yield
       - name: Lint thread_local
         run: cargo clippy --features thread_local
+      - name: Lint lock_api
+        run: cargo clippy --features "${{ env.LOCK_API_FEATURES }}"
       - name: Lint loom
         env:
           RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}

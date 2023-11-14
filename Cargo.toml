@@ -6,6 +6,7 @@ spin-lock for mutual exclusion, referred to as MCS lock.
 name = "mcslock"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.60.0"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 # documentation = "https://docs.rs/mcslock"
@@ -23,6 +24,11 @@ members = [".", "benches"]
 yield = []
 # The `thread_local` feature requires linking with std.
 thread_local = []
+# The `lock_api` feature requires linking with std.
+lock_api = [ "thread_local", "dep:lock_api" ]
+
+[dependencies]
+lock_api = { version = "0.4", default-features = false, optional = true }
 
 [target.'cfg(loom)'.dev-dependencies]
 loom = { version = "0.7" }
@@ -30,3 +36,7 @@ loom = { version = "0.7" }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "lock_api"
+required-features = ["thread_local", "lock_api"]

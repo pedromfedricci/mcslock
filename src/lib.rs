@@ -118,7 +118,13 @@
 //! The `thread_local` feature provides locking APIs that do not require user-side
 //! node instantiation, but this also requires linking to the standard library.
 //! This implementation handles the queue's nodes internally, by storing them in
-//! the thread local storage of the waiting threads.
+//! the thread local storage of the waiting threads. Not `no_std` compatible.
+//!
+//! ### lock_api
+//!
+//! This feature implements [`RawMutex`] and [`RawMutexFair`] from the [lock_api]
+//! crate for [`mcslock::Mutex`], provided that the `thread_local` feature is enabled.
+//! Which means this feature is also not `no_std` compatible.
 //!
 //! ## Related projects
 //!
@@ -134,6 +140,9 @@
 //! [`try_lock`]: raw::Mutex::try_lock
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 //! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
+//! [`mcslock::Mutex`]: crate::Mutex
+//! [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
+//! [`RawMutexFair`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutexFair.html
 //! [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
 //! [spin-lock]: https://en.wikipedia.org/wiki/Spinlock
 //! [spin-rs]: https://docs.rs/spin/latest/spin
@@ -157,3 +166,6 @@ pub mod raw;
 mod thread_local;
 #[cfg(feature = "thread_local")]
 pub use thread_local::{Mutex, MutexGuard};
+
+#[cfg(all(feature = "thread_local", feature = "lock_api"))]
+pub mod lock_api;
