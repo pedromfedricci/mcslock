@@ -1,5 +1,5 @@
 //! A MCS lock implementation that stores queue nodes in the thread local
-//! storage of the waiting thread.
+//! storage of the waiting threads.
 //!
 //! This module provide MCS locking APIs that do not require user-side node
 //! instantiation, by managing the queue's nodes allocations internally. Queue
@@ -285,7 +285,7 @@ unsafe impl lock_api::RawMutex for Mutex<()> {
 #[cfg(feature = "lock_api")]
 unsafe impl lock_api::RawMutexFair for Mutex<()> {
     unsafe fn unlock_fair(&self) {
-        <Self as lock_api::RawMutex>::unlock(self)
+        unsafe { <Self as lock_api::RawMutex>::unlock(self) }
     }
 }
 
@@ -301,7 +301,7 @@ pub struct MutexGuard<'a, T: ?Sized> {
 }
 
 // SAFETY: Guard only access thread local storage during drop call, can be Sync.
-unsafe impl<'a, T: ?Sized + Send> Sync for MutexGuard<'a, T> {}
+unsafe impl<'a, T: ?Sized + Sync> Sync for MutexGuard<'a, T> {}
 
 impl<'a, T: ?Sized> MutexGuard<'a, T> {
     fn new(raw: RawMutexGuard<'a, T>) -> Self {

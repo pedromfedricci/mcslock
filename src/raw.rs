@@ -134,6 +134,7 @@ pub struct Mutex<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
+// Same unsafe impls as `std::sync::Mutex`.
 unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
 
@@ -422,6 +423,9 @@ pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
     node: &'a MutexNode,
 }
+
+// Same unsafe impl as `std::sync::MutexGuard`.
+unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
 
 impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// Creates a new `MutexGuard` instance.
