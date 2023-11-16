@@ -159,7 +159,7 @@ impl<T> Mutex<T> {
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
-    fn new(value: T) -> Mutex<T> {
+    pub(crate) fn new(value: T) -> Mutex<T> {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
         Mutex { tail, data }
@@ -320,6 +320,7 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// assert_eq!(mutex.is_locked(), false);
     /// ```
+    #[inline]
     pub fn is_locked(&self) -> bool {
         // Relaxed is sufficient because this method only guarantees atomicity.
         !self.tail.load(Relaxed).is_null()
@@ -435,7 +436,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 
     /// Runs `f` with an immutable reference to the wrapped value.
     #[cfg(not(all(loom, test)))]
-    fn data_with<F, R>(&self, f: F) -> R
+    pub(crate) fn data_with<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
     {
@@ -445,7 +446,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 
     /// Runs `f` with an immutable reference to the wrapped value.
     #[cfg(all(loom, test))]
-    fn data_with<F, R>(&self, f: F) -> R
+    pub(crate) fn data_with<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
     {
@@ -455,13 +456,13 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 
     /// Get a Loom immutable data pointer that borrows from this guard.
     #[cfg(all(loom, test))]
-    fn deref(&self) -> MutexGuardDeref<'a, T> {
+    pub(crate) fn deref(&self) -> MutexGuardDeref<'a, T> {
         MutexGuardDeref::new(self.lock.data.get())
     }
 
     /// Get a Loom mutable data pointer that mutably borrows from this guard.
     #[cfg(all(loom, test))]
-    fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
+    pub(crate) fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
         MutexGuardDerefMut::new(self.lock.data.get_mut())
     }
 }
@@ -509,7 +510,7 @@ impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
 
 /// A Loom immutable pointer borrowed from a [`MutexGuard`] instance.
 #[cfg(all(loom, test))]
-struct MutexGuardDeref<'a, T: ?Sized> {
+pub(crate) struct MutexGuardDeref<'a, T: ?Sized> {
     ptr: ConstPtr<T>,
     marker: PhantomData<&'a MutexGuard<'a, T>>,
 }
@@ -533,7 +534,7 @@ impl<'a, T: ?Sized> Deref for MutexGuardDeref<'a, T> {
 
 /// A Loom mutable pointer mutably borrowed from a [`MutexGuard`] instance.
 #[cfg(all(loom, test))]
-struct MutexGuardDerefMut<'a, T: ?Sized> {
+pub(crate) struct MutexGuardDerefMut<'a, T: ?Sized> {
     ptr: MutPtr<T>,
     marker: PhantomData<&'a mut MutexGuard<'a, T>>,
 }

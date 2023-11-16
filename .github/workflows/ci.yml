@@ -87,7 +87,7 @@ jobs:
       - name: Lint loom
         env:
           RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
-        run: cargo clippy --profile test
+        run: cargo clippy --profile test --features thread_local
 
   miri:
     name: Miri
@@ -114,4 +114,4 @@ jobs:
       - name: Loom test
         env:
           RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
-        run: cargo test --lib --release
+        run: cargo test --lib --release --features thread_local

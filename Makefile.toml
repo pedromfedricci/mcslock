@@ -26,13 +26,13 @@ args = ["miri", "test", "--features", "thread_local"]
 [tasks.loom-test]
 command = "cargo"
 env = { "RUSTFLAGS" = "--cfg loom" }
-args = ["test", "--lib", "--release"]
+args = ["test", "--lib", "--release", "--features", "thread_local"]
 
 # Lint Loom cfg.
 [tasks.loom-lint]
 command = "cargo"
 env = { "RUSTFLAGS" = "--cfg loom" }
-args = ["clippy", "--profile", "test"]
+args = ["clippy", "--profile", "test", "--features", "thread_local"]
 
 # Run busy loop bench.
 [tasks.bench-busy]

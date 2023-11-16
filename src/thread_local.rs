@@ -6,10 +6,18 @@
 //! nodes are stored in the thread local storage, therefore this implementation
 //! requires support from the standard library.
 
-use core::cell::UnsafeCell;
 use core::fmt;
 use core::marker::PhantomData;
+
+#[cfg(not(all(loom, test)))]
+use core::cell::UnsafeCell;
+#[cfg(not(all(loom, test)))]
 use core::ops::{Deref, DerefMut};
+
+#[cfg(all(loom, test))]
+use crate::raw::{MutexGuardDeref, MutexGuardDerefMut};
+#[cfg(all(loom, test))]
+use loom::cell::UnsafeCell;
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 
@@ -77,8 +85,15 @@ impl<T> Mutex<T> {
     /// const MUTEX: Mutex<i32> = Mutex::new(0);
     /// let mutex = Mutex::new(0);
     /// ```
+    #[cfg(not(all(loom, test)))]
     #[inline]
     pub const fn new(value: T) -> Mutex<T> {
+        Self(RawMutex::new(value))
+    }
+
+    /// Creates a new unlocked mutex with Loom primitives (non-const).
+    #[cfg(all(loom, test))]
+    fn new(value: T) -> Mutex<T> {
         Self(RawMutex::new(value))
     }
 
@@ -105,14 +120,32 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// The node pointer must not escape the closure, and node mutations must
     /// guarantee serialization.
+    #[cfg(not(all(loom, test)))]
     unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
     where
         F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
     {
-        thread_local!(static NODE: UnsafeCell<MutexNode> = const {
+        std::thread_local!(static NODE: UnsafeCell<MutexNode> = const {
             UnsafeCell::new(MutexNode::new())
         });
         NODE.with(|node| f(&self.0, node.get()))
+    }
+
+    /// Runs `f` over the inner Loom based mutex and the thread local node.
+    ///
+    /// # Safety
+    ///
+    /// The node pointer must not escape the closure, and node mutations must
+    /// guarantee serialization.
+    #[cfg(all(loom, test))]
+    unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
+    where
+        F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
+    {
+        loom::thread_local!(static NODE: UnsafeCell<MutexNode> =
+            UnsafeCell::new(MutexNode::new())
+        );
+        NODE.with(|node| node.with_mut(|node| f(&self.0, node)))
     }
 
     /// Attempts to acquire this lock.
@@ -204,6 +237,7 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// assert_eq!(mutex.is_locked(), false);
     /// ```
+    #[inline]
     pub fn is_locked(&self) -> bool {
         self.0.is_locked()
     }
@@ -223,6 +257,7 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
+    #[cfg(not(all(loom, test)))]
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         self.0.get_mut()
@@ -247,7 +282,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
         match self.try_lock() {
-            Some(guard) => d.field("data", &&*guard),
+            Some(guard) => guard.raw.data_with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         };
         d.field("tail", self.0.tail());
@@ -255,7 +290,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
     }
 }
 
-#[cfg(feature = "lock_api")]
+#[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl lock_api::RawMutex for Mutex<()> {
     // Guard will access thread local storage during drop call, can't be Send.
     type GuardMarker = lock_api::GuardNoSend;
@@ -282,7 +317,7 @@ unsafe impl lock_api::RawMutex for Mutex<()> {
     }
 }
 
-#[cfg(feature = "lock_api")]
+#[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl lock_api::RawMutexFair for Mutex<()> {
     unsafe fn unlock_fair(&self) {
         unsafe { <Self as lock_api::RawMutex>::unlock(self) }
@@ -307,21 +342,35 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
     fn new(raw: RawMutexGuard<'a, T>) -> Self {
         Self { raw, marker: PhantomData }
     }
+
+    /// Get a Loom immutable data pointer that borrows from this guard.
+    #[cfg(all(loom, test))]
+    fn deref(&self) -> MutexGuardDeref<'a, T> {
+        self.raw.deref()
+    }
+
+    /// Get a Loom mutable data pointer that mutably borrows from this guard.
+    #[cfg(all(loom, test))]
+    fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
+        self.raw.deref_mut()
+    }
 }
 
+#[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
     fn deref(&self) -> &T {
-        self.raw.deref()
+        &self.raw
     }
 }
 
+#[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
-        self.raw.deref_mut()
+        &mut self.raw
     }
 }
 
@@ -476,5 +525,60 @@ mod test {
         }
         let comp: &[i32] = &[4, 2, 5];
         assert_eq!(&*lock.lock(), comp);
+    }
+}
+
+#[cfg(all(loom, test))]
+mod test {
+    use super::Mutex;
+    use loom::{model, thread};
+
+    #[test]
+    fn threads_join() {
+        use core::ops::Range;
+        use loom::sync::Arc;
+
+        fn inc(lock: Arc<Mutex<i32>>) {
+            let mut guard = lock.lock().deref_mut();
+            *guard += 1;
+        }
+
+        model(|| {
+            let data = Arc::new(Mutex::new(0));
+            // 3 or more threads make this model run for too long.
+            let runs @ Range { end, .. } = 0..2;
+
+            let handles = runs
+                .into_iter()
+                .map(|_| Arc::clone(&data))
+                .map(|data| thread::spawn(move || inc(data)))
+                .collect::<Vec<_>>();
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+
+            assert_eq!(end, *data.lock().deref());
+        });
+    }
+
+    #[test]
+    fn threads_fork() {
+        // Using std's Arc or else this model runs for loo long.
+        use std::sync::Arc;
+
+        fn inc(lock: Arc<Mutex<i32>>) {
+            let mut guard = lock.lock().deref_mut();
+            *guard += 1;
+        }
+
+        model(|| {
+            let data = Arc::new(Mutex::new(0));
+            // 4 or more threads make this model run for too long.
+            for _ in 0..3 {
+                let data = Arc::clone(&data);
+                thread::spawn(move || inc(data));
+            }
+        });
     }
 }
