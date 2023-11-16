@@ -367,24 +367,28 @@ impl<T: ?Sized> Mutex<T> {
         let next = unsafe { (*node).next_assume_init_ref() };
         let mut locked = next.load(Relaxed);
 
-        // If we don't have a successor currently,
+        // If we don't have a known successor currently,
         if locked.is_null() {
             // and we are the tail, then dequeue and free the lock.
-            if self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok() {
-                return;
-            }
+            let false = self.try_unlock(node) else { return };
 
-            // But if we are not the tail, then we have a pending successor.
-            while locked.is_null() {
-                wait();
+            // But if we are not the tail, then we have a pending successor. We
+            // must wait for them to finish linking with us.
+            loop {
                 locked = next.load(Relaxed);
+                let true = locked.is_null() else { break };
+                wait();
             }
         }
 
         fence(Acquire);
-        // SAFETY: Already verified that successor is not null.
-        let locked = unsafe { &*locked };
-        locked.store(false, Release);
+        // SAFETY: We already verified that our successor is not null.
+        unsafe { &*locked }.store(false, Release);
+    }
+
+    /// Unlocks the lock if the candidate node is the queue's tail.
+    fn try_unlock(&self, node: *mut MutexNode) -> bool {
+        self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 }
 

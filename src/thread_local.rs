@@ -295,8 +295,8 @@ unsafe impl lock_api::RawMutex for Mutex<()> {
     // Guard will access thread local storage during drop call, can't be Send.
     type GuardMarker = lock_api::GuardNoSend;
 
-    // Can safely be const since the inner type wrapped around the UnsafeCell
-    // is a unit type.
+    // Can safely be const since the inner type wrapped by the UnsafeCell is
+    // the Unit type.
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Mutex::new(());
 

@@ -4,7 +4,7 @@ use std::thread;
 
 // Requires `thread_local` and `lock_api` features.
 //
-// You may export this types to your callers, change the inner mutex type
+// You may export these types to your callers, change the inner mutex type
 // (as long as it implements the same raw mutex interfaces), without breaking
 // their code.
 //
