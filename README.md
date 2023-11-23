@@ -55,18 +55,19 @@ fn main() {
 }
 ```
 
-## Standard locking APIs
+## Thread local locking APIs
 
 This crate also provides locking APIs that do not require user-side node
-instantiation, by enabling the `thread_local` feature. These APIs cannot
-be used in `no_std` environments, but will manage queue nodes internally.
+instantiation, by enabling the `thread_local` feature. These APIs require
+that critical sections must be provided as closures, and are not compatible
+with `no_std` environments as they require thread local storage.
 
 ```rust
 use std::sync::Arc;
 use std::thread;
 
 // Requires `thread_local` feature.
-use mcslock::Mutex;
+use mcslock::thread_local::Mutex;
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -74,12 +75,14 @@ fn main() {
 
     thread::spawn(move || {
         // Node instantiation is not required.
-        *c_mutex.lock() = 10;
+        // Critical section must be defined as closure.
+        *c_mutex.lock_with(|guard| **guard) = 10;
     })
     .join().expect("thread::spawn failed");
 
     // Node instantiation is not required.
-    assert_eq!(*mutex.try_lock().unwrap(), 10);
+    // Critical section must be defined as closure.
+    assert_eq!(*mutex.try_lock_with(|guard| **guard).unwrap(), 10);
 }
 ```
 
@@ -135,15 +138,9 @@ just simply busy-waits.
 ### thread_local
 
 The `thread_local` feature provides locking APIs that do not require user-side
-node instantiation, but this also requires linking to the standard library.
-This implementation handles the queue's nodes internally, by storing them in
+node instantiation, but critical sections must be provided as closures. This
+implementation handles the queue's nodes transparently, by storing them in
 the thread local storage of the waiting threads. Not `no_std` compatible.
-
-### lock_api
-
-This feature implements [`RawMutex`] and [`RawMutexFair`] from the [lock_api]
-crate for `mcslock::Mutex`, provided that the `thread_local` feature is enabled.
-Which means this feature is also not `no_std` compatible.
 
 ## Related projects
 

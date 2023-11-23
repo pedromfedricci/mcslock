@@ -7,19 +7,16 @@
 //! requires support from the standard library.
 
 use core::fmt;
-use core::marker::PhantomData;
 
 #[cfg(not(all(loom, test)))]
 use core::cell::UnsafeCell;
-#[cfg(not(all(loom, test)))]
-use core::ops::{Deref, DerefMut};
 
 #[cfg(all(loom, test))]
 use crate::raw::{MutexGuardDeref, MutexGuardDerefMut};
 #[cfg(all(loom, test))]
 use loom::cell::UnsafeCell;
 
-use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
+use crate::raw::{Mutex as RawMutex, MutexGuard, MutexNode};
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -37,7 +34,7 @@ use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 /// use std::thread;
 /// use std::sync::mpsc::channel;
 ///
-/// use mcslock::Mutex;
+/// use mcslock::thread_local::Mutex;
 ///
 /// const N: usize = 10;
 ///
@@ -121,14 +118,16 @@ impl<T: ?Sized> Mutex<T> {
     /// The node pointer must not escape the closure, and node mutations must
     /// guarantee serialization.
     #[cfg(not(all(loom, test)))]
-    unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
+    unsafe fn node_with<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
+        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
     {
-        std::thread_local!(static NODE: UnsafeCell<MutexNode> = const {
-            UnsafeCell::new(MutexNode::new())
-        });
-        NODE.with(|node| f(&self.0, node.get()))
+        std::thread_local! {
+            static NODE: UnsafeCell<MutexNode> = const {
+                UnsafeCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| f(&self.0, unsafe { &mut *node.get() }))
     }
 
     /// Runs `f` over the inner Loom based mutex and the thread local node.
@@ -138,14 +137,16 @@ impl<T: ?Sized> Mutex<T> {
     /// The node pointer must not escape the closure, and node mutations must
     /// guarantee serialization.
     #[cfg(all(loom, test))]
-    unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
+    unsafe fn node_with<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
+        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
     {
-        loom::thread_local!(static NODE: UnsafeCell<MutexNode> =
-            UnsafeCell::new(MutexNode::new())
-        );
-        NODE.with(|node| node.with_mut(|node| f(&self.0, node)))
+        loom::thread_local! {
+            static NODE: UnsafeCell<MutexNode> = {
+                UnsafeCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| node.with_mut(|node| f(&self.0, unsafe { &mut *node })))
     }
 
     /// Attempts to acquire this lock.
@@ -155,34 +156,11 @@ impl<T: ?Sized> Mutex<T> {
     /// guard is dropped.
     ///
     /// This function does not block.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::sync::Arc;
-    /// use std::thread;
-    ///
-    /// use mcslock::Mutex;
-    ///
-    /// let mutex = Arc::new(Mutex::new(0));
-    /// let c_mutex = Arc::clone(&mutex);
-    ///
-    /// thread::spawn(move || {
-    ///     let mut lock = c_mutex.try_lock();
-    ///     if let Some(ref mut mutex) = lock {
-    ///         **mutex = 10;
-    ///     } else {
-    ///         println!("try_lock failed");
-    ///     }
-    /// })
-    /// .join().expect("thread::spawn failed");
-    ///
-    /// assert_eq!(*mutex.lock(), 10);
-    /// ```
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        // SAFETY: The node pointer does not escape the closure, and node
-        // mutations are serialized by `try_lock_raw`.
-        unsafe { self.node_with(|raw, node| raw.try_lock_raw(node).map(MutexGuard::new)) }
+    pub fn try_lock_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(Option<&mut MutexGuard<'_, T>>) -> R,
+    {
+        unsafe { self.node_with(|raw, node| f(raw.try_lock(node).as_mut())) }
     }
 
     /// Acquires a mutex, blocking the current thread until it is able to do so.
@@ -214,10 +192,11 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
-    pub fn lock(&self) -> MutexGuard<'_, T> {
-        // SAFETY: The node pointer does not escape the closure, and node
-        // mutations are serialized by `lock_raw`.
-        unsafe { self.node_with(|raw, node| MutexGuard::new(raw.lock_raw(node))) }
+    pub fn lock_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut MutexGuard<'_, T>) -> R,
+    {
+        unsafe { self.node_with(|raw, node| f(&mut raw.lock(node))) }
     }
 
     /// Returns `true` if the lock is currently held.
@@ -281,108 +260,12 @@ impl<T> From<T> for Mutex<T> {
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
-        match self.try_lock() {
-            Some(guard) => guard.raw.data_with(|data| d.field("data", &data)),
+        self.try_lock_with(|guard| match guard {
+            Some(g) => g.data_with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
-        };
+        });
         d.field("tail", self.0.tail());
         d.finish()
-    }
-}
-
-#[cfg(all(feature = "lock_api", not(loom)))]
-unsafe impl lock_api::RawMutex for Mutex<()> {
-    // Guard will access thread local storage during drop call, can't be Send.
-    type GuardMarker = lock_api::GuardNoSend;
-
-    // Can safely be const since the inner type wrapped by the UnsafeCell is
-    // the Unit type.
-    #[allow(clippy::declare_interior_mutable_const)]
-    const INIT: Self = Mutex::new(());
-
-    fn lock(&self) {
-        core::mem::forget(Mutex::lock(self))
-    }
-
-    fn try_lock(&self) -> bool {
-        Mutex::try_lock(self).map(core::mem::forget).is_some()
-    }
-
-    unsafe fn unlock(&self) {
-        unsafe { self.node_with(|raw, node| raw.unlock_raw(node)) }
-    }
-
-    fn is_locked(&self) -> bool {
-        Mutex::is_locked(self)
-    }
-}
-
-#[cfg(all(feature = "lock_api", not(loom)))]
-unsafe impl lock_api::RawMutexFair for Mutex<()> {
-    unsafe fn unlock_fair(&self) {
-        unsafe { <Self as lock_api::RawMutex>::unlock(self) }
-    }
-}
-
-/// An RAII implementation of a "scoped lock" of a mutex. When this structure is
-/// dropped (falls out of scope), the lock will be unlocked.
-///
-/// The data protected by the mutex can be access through this guard via its
-/// [`Deref`] and [`DerefMut`] implementations.
-pub struct MutexGuard<'a, T: ?Sized> {
-    raw: RawMutexGuard<'a, T>,
-    // Guard will access thread local storage during drop call, can't be Send.
-    marker: PhantomData<*mut ()>,
-}
-
-// SAFETY: Guard only access thread local storage during drop call, can be Sync.
-unsafe impl<'a, T: ?Sized + Sync> Sync for MutexGuard<'a, T> {}
-
-impl<'a, T: ?Sized> MutexGuard<'a, T> {
-    fn new(raw: RawMutexGuard<'a, T>) -> Self {
-        Self { raw, marker: PhantomData }
-    }
-
-    /// Get a Loom immutable data pointer that borrows from this guard.
-    #[cfg(all(loom, test))]
-    fn deref(&self) -> MutexGuardDeref<'a, T> {
-        self.raw.deref()
-    }
-
-    /// Get a Loom mutable data pointer that mutably borrows from this guard.
-    #[cfg(all(loom, test))]
-    fn deref_mut(&mut self) -> MutexGuardDerefMut<'a, T> {
-        self.raw.deref_mut()
-    }
-}
-
-#[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
-    type Target = T;
-
-    /// Dereferences the guard to access the underlying data.
-    fn deref(&self) -> &T {
-        &self.raw
-    }
-}
-
-#[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
-    /// Mutably dereferences the guard to access the underlying data.
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.raw
-    }
-}
-
-impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.raw.fmt(f)
-    }
-}
-
-impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.raw.fmt(f)
     }
 }
 
@@ -401,10 +284,26 @@ mod test {
 
     #[test]
     fn smoke() {
-        let m = Mutex::new(());
-        drop(m.lock());
-        drop(m.lock());
+        let m = Mutex::new(1);
+        let data = m.lock_with(|guard| **guard);
+        assert_eq!(data, 1);
+        m.lock_with(|guard| **guard = 2);
+        let data = m.lock_with(|guard| **guard);
+        assert_eq!(data, 2);
     }
+
+    // #[test]
+    // fn should_not_compile() {
+    //     let m = Mutex::new(1);
+    //     let guard = m.lock_with(|guard| guard);
+    //     let _value = *guard;
+
+    //     let m = Mutex::new(1);
+    //     let _val = m.lock_with(|guard| &mut **guard);
+
+    //     let m = Mutex::new(1);
+    //     let _val = m.lock_with(|guard| &**guard);
+    // }
 
     #[test]
     fn lots_and_lots() {
@@ -415,8 +314,8 @@ mod test {
 
         fn inc() {
             for _ in 0..ITERS {
-                let mut g = LOCK.lock();
-                *g += 1;
+                LOCK.lock_with(|data| **data += 1);
+                LOCK.lock_with(|data| **data += 1);
             }
         }
 
@@ -438,13 +337,15 @@ mod test {
         for _ in 0..2 * CONCURRENCY {
             rx.recv().unwrap();
         }
-        assert_eq!(*LOCK.lock(), ITERS * CONCURRENCY * 2);
+        let data = LOCK.lock_with(|data| **data);
+        assert_eq!(data, ITERS * CONCURRENCY * 2 * 2);
     }
 
     #[test]
-    fn try_lock() {
+    fn test_try_lock() {
         let m = Mutex::new(());
-        *m.try_lock().unwrap() = ();
+        let val = m.try_lock_with(|g| g.map(|_| ())).unwrap();
+        assert_eq!(val, ());
     }
 
     #[test]
@@ -478,6 +379,7 @@ mod test {
         assert_eq!(m.into_inner(), NonCopy(20));
     }
 
+    // TODO: this must panic, else it's UB.
     #[test]
     fn test_lock_arc_nested() {
         // Tests nested locks and access
@@ -486,9 +388,8 @@ mod test {
         let arc2 = Arc::new(Mutex::new(arc));
         let (tx, rx) = channel();
         let _t = thread::spawn(move || {
-            let lock = arc2.lock();
-            let lock2 = lock.lock();
-            assert_eq!(*lock2, 1);
+            let val = arc2.lock_with(|arc2| arc2.lock_with(|g| **g));
+            assert_eq!(val, 1);
             tx.send(()).unwrap();
         });
         rx.recv().unwrap();
@@ -504,27 +405,28 @@ mod test {
             }
             impl Drop for Unwinder {
                 fn drop(&mut self) {
-                    *self.i.lock() += 1;
+                    self.i.lock_with(|g| **g += 1);
                 }
             }
             let _u = Unwinder { i: arc2 };
             panic!();
         })
         .join();
-        let lock = arc.lock();
-        assert_eq!(*lock, 2);
+        let value = arc.lock_with(|g| **g);
+        assert_eq!(value, 2);
     }
 
     #[test]
     fn test_lock_unsized() {
         let lock: &Mutex<[i32]> = &Mutex::new([1, 2, 3]);
         {
-            let b = &mut *lock.lock();
-            b[0] = 4;
-            b[2] = 5;
+            lock.lock_with(|g| {
+                g[0] = 4;
+                g[2] = 5;
+            });
         }
         let comp: &[i32] = &[4, 2, 5];
-        assert_eq!(&*lock.lock(), comp);
+        lock.lock_with(|g| assert_eq!(&**g, comp));
     }
 }
 
