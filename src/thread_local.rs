@@ -9,7 +9,7 @@
 use core::fmt;
 
 #[cfg(not(all(loom, test)))]
-use core::cell::UnsafeCell;
+use core::cell::RefCell;
 
 #[cfg(all(loom, test))]
 use crate::raw::{MutexGuardDeref, MutexGuardDerefMut};
@@ -112,41 +112,16 @@ impl<T> Mutex<T> {
 
 impl<T: ?Sized> Mutex<T> {
     /// Runs `f` over the inner mutex and the thread local node.
-    ///
-    /// # Safety
-    ///
-    /// The node pointer must not escape the closure, and node mutations must
-    /// guarantee serialization.
-    #[cfg(not(all(loom, test)))]
-    unsafe fn node_with<F, R>(&self, f: F) -> R
+    fn node_with<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
     {
         std::thread_local! {
-            static NODE: UnsafeCell<MutexNode> = const {
-                UnsafeCell::new(MutexNode::new())
+            static NODE: RefCell<MutexNode> = const {
+                RefCell::new(MutexNode::new())
             }
         }
-        NODE.with(|node| f(&self.0, unsafe { &mut *node.get() }))
-    }
-
-    /// Runs `f` over the inner Loom based mutex and the thread local node.
-    ///
-    /// # Safety
-    ///
-    /// The node pointer must not escape the closure, and node mutations must
-    /// guarantee serialization.
-    #[cfg(all(loom, test))]
-    unsafe fn node_with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
-    {
-        loom::thread_local! {
-            static NODE: UnsafeCell<MutexNode> = {
-                UnsafeCell::new(MutexNode::new())
-            }
-        }
-        NODE.with(|node| node.with_mut(|node| f(&self.0, unsafe { &mut *node })))
+        NODE.with(|node| f(&self.0, &mut *node.borrow_mut()))
     }
 
     /// Attempts to acquire this lock.
@@ -160,7 +135,7 @@ impl<T: ?Sized> Mutex<T> {
     where
         F: FnOnce(Option<&mut MutexGuard<'_, T>>) -> R,
     {
-        unsafe { self.node_with(|raw, node| f(raw.try_lock(node).as_mut())) }
+        self.node_with(|raw, node| f(raw.try_lock(node).as_mut()))
     }
 
     /// Acquires a mutex, blocking the current thread until it is able to do so.
@@ -196,7 +171,7 @@ impl<T: ?Sized> Mutex<T> {
     where
         F: FnOnce(&mut MutexGuard<'_, T>) -> R,
     {
-        unsafe { self.node_with(|raw, node| f(&mut raw.lock(node))) }
+        self.node_with(|raw, node| f(&mut raw.lock(node)))
     }
 
     /// Returns `true` if the lock is currently held.
@@ -293,7 +268,7 @@ mod test {
     }
 
     // #[test]
-    // fn should_not_compile() {
+    // fn must_not_compile() {
     //     let m = Mutex::new(1);
     //     let guard = m.lock_with(|guard| guard);
     //     let _value = *guard;
@@ -379,11 +354,11 @@ mod test {
         assert_eq!(m.into_inner(), NonCopy(20));
     }
 
-    // TODO: this must panic, else it's UB.
     #[test]
+    #[should_panic]
     fn test_lock_arc_nested() {
-        // Tests nested locks and access
-        // to underlying data.
+        // Tests nested locks are not allowed and
+        // will panic, else this would be UB.
         let arc = Arc::new(Mutex::new(1));
         let arc2 = Arc::new(Mutex::new(arc));
         let (tx, rx) = channel();
