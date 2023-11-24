@@ -145,6 +145,7 @@ impl<T: ?Sized> Mutex<T> {
         NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
     }
 
+    /// Runs `f` over the inner mutex and the thread local node.
     #[cfg(all(loom, test))]
     fn node_with<F, R>(&self, f: F) -> R
     where
