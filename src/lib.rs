@@ -154,11 +154,12 @@
     all(not(any(feature = "yield", feature = "thread_local")), not(loom), not(test)),
     no_std
 )]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 
 pub mod raw;
 
 // The `thread_local` feature requires linking with std.
 #[cfg(feature = "thread_local")]
+#[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;
