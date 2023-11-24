@@ -145,6 +145,7 @@ impl<T: ?Sized> Mutex<T> {
         NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
     }
 
+    /// Runs `f` over the inner mutex and the thread local node.
     #[cfg(all(loom, test))]
     fn node_with<F, R>(&self, f: F) -> R
     where
@@ -334,7 +335,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
             Some(g) => g.raw.data_with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         });
-        d.field("tail", self.0.tail());
+        d.field("tail", self.0.tail_debug());
         d.finish()
     }
 }

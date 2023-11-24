@@ -38,8 +38,7 @@ fn main() {
 
     // A queue node must be mutably accessible.
     let mut node = MutexNode::new();
-    // Would return `None` if lock was already held.
-    let count = data.try_lock(&mut node).unwrap();
+    let count = data.lock(&mut node);
     assert_eq!(*count, N);
     // lock is unlock here when `count` goes out of scope.
 }
