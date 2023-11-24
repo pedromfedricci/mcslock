@@ -4,20 +4,28 @@
 //! This module provide MCS locking APIs that do not require user-side node
 //! instantiation, by managing the queue's nodes allocations internally. Queue
 //! nodes are stored in the thread local storage, therefore this implementation
-//! requires support from the standard library.
+//! requires support from the standard library. The critical sections must be
+//! provided to [`lock_with`] and [`try_lock_with`] as closures. Closure arguments
+//! provide a reference to a RAII guard that has exclusive over the data. These
+//! guards will be dropped at the end of the call, freeing the mutex.
+//!
+//! # Panics
+//!
+//! The `thread_local` [`Mutex`] implementation does not allow recursive locking,
+//! doing so will cause a panic. See [`lock_with`] and [`try_lock_with`] functions
+//! for more information.
+//!
+//! [`lock_with`]: Mutex::lock_with
+//! [`try_lock_with`]: Mutex::try_lock_with
 
 use core::fmt;
-use core::marker::PhantomData;
+use core::{cell::RefCell, marker::PhantomData};
 
-#[cfg(not(all(loom, test)))]
-use core::cell::UnsafeCell;
 #[cfg(not(all(loom, test)))]
 use core::ops::{Deref, DerefMut};
 
 #[cfg(all(loom, test))]
 use crate::raw::{MutexGuardDeref, MutexGuardDerefMut};
-#[cfg(all(loom, test))]
-use loom::cell::UnsafeCell;
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 
@@ -27,8 +35,14 @@ use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 /// mutex can also be statically initialized or created via a [`new`]
 /// constructor. Each mutex has a type parameter which represents the data that
 /// it is protecting. The data can only be accessed through the RAII guards
-/// returned from [`lock`] and [`try_lock`], which guarantees that the data is only
-/// ever accessed when the mutex is locked.
+/// provided as closure arguments from [`lock_with`] and [`try_lock_with`], which
+/// guarantees that the data is only ever accessed when the mutex is locked.
+///
+/// # Panics
+///
+/// The `thread_local` [`Mutex`] implementation does not allow recursive locking,
+/// doing so will cause a panic. See [`lock_with`] and [`try_lock_with`] functions
+/// for more information.
 ///
 /// # Examples
 ///
@@ -37,7 +51,7 @@ use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 /// use std::thread;
 /// use std::sync::mpsc::channel;
 ///
-/// use mcslock::Mutex;
+/// use mcslock::thread_local::Mutex;
 ///
 /// const N: usize = 10;
 ///
@@ -58,20 +72,23 @@ use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 ///         //
 ///         // We unwrap() the return value to assert that we are not expecting
 ///         // threads to ever fail while holding the lock.
-///         let mut data = data.lock();
-///         *data += 1;
-///         if *data == N {
-///             tx.send(()).unwrap();
-///         }
-///         // the lock is unlocked here when `data` goes out of scope.
+///         //
+///         // Data is exclusively accessed by the guard argument.
+///         data.lock_with(|data| {
+///             **data += 1;
+///             if **data == N {
+///                 tx.send(()).unwrap();
+///             }
+///             // the lock is unlocked here when `data` goes out of scope.
+///         })
 ///     });
 /// }
 ///
 /// rx.recv().unwrap();
 /// ```
 /// [`new`]: Mutex::new
-/// [`lock`]: Mutex::lock
-/// [`try_lock`]: Mutex::try_lock
+/// [`lock_with`]: Mutex::lock_with
+/// [`try_lock_with`]: Mutex::try_lock_with
 pub struct Mutex<T: ?Sized>(RawMutex<T>);
 
 impl<T> Mutex<T> {
@@ -80,14 +97,14 @@ impl<T> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// const MUTEX: Mutex<i32> = Mutex::new(0);
     /// let mutex = Mutex::new(0);
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
-    pub const fn new(value: T) -> Mutex<T> {
+    pub const fn new(value: T) -> Self {
         Self(RawMutex::new(value))
     }
 
@@ -102,7 +119,7 @@ impl<T> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
@@ -115,46 +132,46 @@ impl<T> Mutex<T> {
 
 impl<T: ?Sized> Mutex<T> {
     /// Runs `f` over the inner mutex and the thread local node.
-    ///
-    /// # Safety
-    ///
-    /// The node pointer must not escape the closure, and node mutations must
-    /// guarantee serialization.
     #[cfg(not(all(loom, test)))]
-    unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
+    fn node_with<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
+        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
     {
-        std::thread_local!(static NODE: UnsafeCell<MutexNode> = const {
-            UnsafeCell::new(MutexNode::new())
-        });
-        NODE.with(|node| f(&self.0, node.get()))
+        std::thread_local! {
+            static NODE: RefCell<MutexNode> = const {
+                RefCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
     }
 
-    /// Runs `f` over the inner Loom based mutex and the thread local node.
-    ///
-    /// # Safety
-    ///
-    /// The node pointer must not escape the closure, and node mutations must
-    /// guarantee serialization.
     #[cfg(all(loom, test))]
-    unsafe fn node_with<'a, F, R>(&'a self, f: F) -> R
+    fn node_with<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&'a RawMutex<T>, *mut MutexNode) -> R,
+        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
     {
-        loom::thread_local!(static NODE: UnsafeCell<MutexNode> =
-            UnsafeCell::new(MutexNode::new())
-        );
-        NODE.with(|node| node.with_mut(|node| f(&self.0, node)))
+        loom::thread_local! {
+            static NODE: RefCell<MutexNode> = {
+                RefCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
     }
 
     /// Attempts to acquire this lock.
     ///
-    /// If the lock could not be acquired at this time, then [`None`] is returned.
-    /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
-    /// guard is dropped.
+    /// If the lock could not be acquired at this time, then a [`None`] value is
+    /// given to the user provided closure as the argument. If the lock has been
+    /// acquired, then a [`Some`] with the mutex guard is given instead. The lock
+    /// will be unlocked when the guard is dropped at the end of the call.
     ///
     /// This function does not block.
+    ///
+    /// # Panics
+    ///
+    /// This lock implementation cannot be recursively acquired, doing so it
+    /// result in a panic. That is the case for both `lock_with` and
+    /// `try_lock_with`.
     ///
     /// # Examples
     ///
@@ -162,39 +179,56 @@ impl<T: ?Sized> Mutex<T> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     let mut lock = c_mutex.try_lock();
-    ///     if let Some(ref mut mutex) = lock {
-    ///         **mutex = 10;
-    ///     } else {
-    ///         println!("try_lock failed");
-    ///     }
+    ///     c_mutex.try_lock_with(|guard| {
+    ///         **guard.unwrap() = 10;
+    ///     });
     /// })
     /// .join().expect("thread::spawn failed");
     ///
-    /// assert_eq!(*mutex.lock(), 10);
+    /// assert_eq!(mutex.lock_with(|guard| **guard), 10);
     /// ```
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        // SAFETY: The node pointer does not escape the closure, and node
-        // mutations are serialized by `try_lock_raw`.
-        unsafe { self.node_with(|raw, node| raw.try_lock_raw(node).map(MutexGuard::new)) }
+    ///
+    /// An example of panic:
+    ///
+    /// ```should_panic
+    /// use mcslock::thread_local::Mutex;
+    ///
+    /// let mutex = Mutex::new(0);
+    ///
+    /// mutex.try_lock_with(|guard| {
+    ///     let mutex = Mutex::new(());
+    ///     // Recursive locking a thread_local::Mutex
+    ///     // is not allowed, this will panic.
+    ///     mutex.lock_with(|_guard| ());
+    /// });
+    /// ```
+    pub fn try_lock_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(Option<&mut MutexGuard<'_, T>>) -> R,
+    {
+        self.node_with(|raw, node| f(raw.try_lock(node).map(MutexGuard::new).as_mut()))
     }
 
     /// Acquires a mutex, blocking the current thread until it is able to do so.
     ///
     /// This function will block the local thread until it is available to acquire
-    /// the mutex. Upon returning, the thread is the only thread with the lock
-    /// held. An RAII guard is returned to allow scoped unlock of the lock. When
-    /// the guard goes out of scope, the mutex will be unlocked. To acquire a MCS
-    /// lock, it's also required a mutably borrowed queue node, which is a record
-    /// that keeps a link for forming the queue, see [`MutexNode`].
+    /// the mutex. Upon acquiring the mutex, the user provided closure will be
+    /// executed against the mutex guard reference, then the guard will be
+    /// automatically dropped at the end of the call.
     ///
     /// This function will block if the lock is unavailable.
+    ///
+    /// # Panics
+    ///
+    /// This lock implementation cannot be recursively acquired, doing so it
+    /// result in a panic. That is the case for both `lock_with` and
+    /// `try_lock_with`.
     ///
     /// # Examples
     ///
@@ -202,22 +236,38 @@ impl<T: ?Sized> Mutex<T> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     *c_mutex.lock() = 10;
+    ///     c_mutex.lock_with(|guard| **guard = 10);
     /// })
     /// .join().expect("thread::spawn failed");
     ///
-    /// assert_eq!(*mutex.lock(), 10);
+    /// assert_eq!(mutex.lock_with(|guard| **guard), 10);
     /// ```
-    pub fn lock(&self) -> MutexGuard<'_, T> {
-        // SAFETY: The node pointer does not escape the closure, and node
-        // mutations are serialized by `lock_raw`.
-        unsafe { self.node_with(|raw, node| MutexGuard::new(raw.lock_raw(node))) }
+    ///
+    /// An example of panic:
+    ///
+    /// ```should_panic
+    /// use mcslock::thread_local::Mutex;
+    ///
+    /// let mutex = Mutex::new(0);
+    ///
+    /// mutex.lock_with(|_guard| {
+    ///     let mutex = Mutex::new(());
+    ///     // Recursive locking a thread_local::Mutex
+    ///     // is not allowed, this will panic.
+    ///     mutex.try_lock_with(|_guard| ());
+    /// });
+    /// ```
+    pub fn lock_with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut MutexGuard<'_, T>) -> R,
+    {
+        self.node_with(|raw, node| f(&mut MutexGuard::new(raw.lock(node))))
     }
 
     /// Returns `true` if the lock is currently held.
@@ -228,12 +278,11 @@ impl<T: ?Sized> Mutex<T> {
     /// # Example
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     ///
-    /// let guard = mutex.lock();
-    /// drop(guard);
+    /// mutex.lock_with(|guard| **guard = 1);
     ///
     /// assert_eq!(mutex.is_locked(), false);
     /// ```
@@ -250,12 +299,12 @@ impl<T: ?Sized> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::thread_local::Mutex;
     ///
     /// let mut mutex = Mutex::new(0);
     /// *mutex.get_mut() = 10;
     ///
-    /// assert_eq!(*mutex.lock(), 10);
+    /// assert_eq!(mutex.lock_with(|guard| **guard), 10);
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
@@ -266,64 +315,29 @@ impl<T: ?Sized> Mutex<T> {
 
 impl<T: ?Sized + Default> Default for Mutex<T> {
     /// Creates a `Mutex<T>`, with the `Default` value for `T`.
-    fn default() -> Mutex<T> {
-        Mutex::new(Default::default())
+    fn default() -> Self {
+        Self::new(Default::default())
     }
 }
 
 impl<T> From<T> for Mutex<T> {
     /// Creates a `Mutex<T>` from a instance of `T`.
-    fn from(data: T) -> Mutex<T> {
-        Mutex::new(data)
+    fn from(data: T) -> Self {
+        Self::new(data)
     }
 }
 
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
-        match self.try_lock() {
-            Some(guard) => guard.raw.data_with(|data| d.field("data", &data)),
+        self.try_lock_with(|guard| match guard {
+            Some(g) => g.raw.data_with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
-        };
+        });
         d.field("tail", self.0.tail());
         d.finish()
     }
 }
-
-#[cfg(all(feature = "lock_api", not(loom)))]
-unsafe impl lock_api::RawMutex for Mutex<()> {
-    // Guard will access thread local storage during drop call, can't be Send.
-    type GuardMarker = lock_api::GuardNoSend;
-
-    // Can safely be const since the inner type wrapped by the UnsafeCell is
-    // the Unit type.
-    #[allow(clippy::declare_interior_mutable_const)]
-    const INIT: Self = Mutex::new(());
-
-    fn lock(&self) {
-        core::mem::forget(Mutex::lock(self))
-    }
-
-    fn try_lock(&self) -> bool {
-        Mutex::try_lock(self).map(core::mem::forget).is_some()
-    }
-
-    unsafe fn unlock(&self) {
-        unsafe { self.node_with(|raw, node| raw.unlock_raw(node)) }
-    }
-
-    fn is_locked(&self) -> bool {
-        Mutex::is_locked(self)
-    }
-}
-
-#[cfg(all(feature = "lock_api", not(loom)))]
-unsafe impl lock_api::RawMutexFair for Mutex<()> {
-    unsafe fn unlock_fair(&self) {
-        unsafe { <Self as lock_api::RawMutex>::unlock(self) }
-    }
-}
-
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 ///
@@ -401,10 +415,26 @@ mod test {
 
     #[test]
     fn smoke() {
-        let m = Mutex::new(());
-        drop(m.lock());
-        drop(m.lock());
+        let m = Mutex::new(1);
+        let data = m.lock_with(|guard| **guard);
+        assert_eq!(data, 1);
+        m.lock_with(|guard| **guard = 2);
+        let data = m.lock_with(|guard| **guard);
+        assert_eq!(data, 2);
     }
+
+    // #[test]
+    // fn must_not_compile() {
+    //     let m = Mutex::new(1);
+    //     let guard = m.lock_with(|guard| guard);
+    //     let _value = *guard;
+
+    //     let m = Mutex::new(1);
+    //     let _val = m.lock_with(|guard| &mut **guard);
+
+    //     let m = Mutex::new(1);
+    //     let _val = m.lock_with(|guard| &**guard);
+    // }
 
     #[test]
     fn lots_and_lots() {
@@ -415,8 +445,7 @@ mod test {
 
         fn inc() {
             for _ in 0..ITERS {
-                let mut g = LOCK.lock();
-                *g += 1;
+                LOCK.lock_with(|data| **data += 1);
             }
         }
 
@@ -438,13 +467,15 @@ mod test {
         for _ in 0..2 * CONCURRENCY {
             rx.recv().unwrap();
         }
-        assert_eq!(*LOCK.lock(), ITERS * CONCURRENCY * 2);
+        let data = LOCK.lock_with(|data| **data);
+        assert_eq!(data, ITERS * CONCURRENCY * 2);
     }
 
     #[test]
-    fn try_lock() {
+    fn test_try_lock() {
         let m = Mutex::new(());
-        *m.try_lock().unwrap() = ();
+        let val = m.try_lock_with(|g| g.map(|_| ())).unwrap();
+        assert_eq!(val, ());
     }
 
     #[test]
@@ -479,18 +510,38 @@ mod test {
     }
 
     #[test]
+    #[should_panic]
     fn test_lock_arc_nested() {
-        // Tests nested locks and access
-        // to underlying data.
+        // Tests nested locks are not allowed and
+        // will panic, else this would be UB.
         let arc = Arc::new(Mutex::new(1));
         let arc2 = Arc::new(Mutex::new(arc));
         let (tx, rx) = channel();
         let _t = thread::spawn(move || {
-            let lock = arc2.lock();
-            let lock2 = lock.lock();
-            assert_eq!(*lock2, 1);
+            let val = arc2.lock_with(|arc2| arc2.lock_with(|g| **g));
+            assert_eq!(val, 1);
             tx.send(()).unwrap();
         });
+        rx.recv().unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_recursive_lock() {
+        let arc = Arc::new(Mutex::new(1));
+        let (tx, rx) = channel();
+        for _ in 0..4 {
+            let tx2 = tx.clone();
+            let c_arc = Arc::clone(&arc);
+            let _t = thread::spawn(move || {
+                let _lock = c_arc.lock_with(|_g| {
+                    let mutex = Mutex::new(());
+                    let _lock = mutex.lock_with(|_g| ());
+                });
+                tx2.send(()).unwrap();
+            });
+        }
+        drop(tx);
         rx.recv().unwrap();
     }
 
@@ -504,27 +555,28 @@ mod test {
             }
             impl Drop for Unwinder {
                 fn drop(&mut self) {
-                    *self.i.lock() += 1;
+                    self.i.lock_with(|g| **g += 1);
                 }
             }
             let _u = Unwinder { i: arc2 };
             panic!();
         })
         .join();
-        let lock = arc.lock();
-        assert_eq!(*lock, 2);
+        let value = arc.lock_with(|g| **g);
+        assert_eq!(value, 2);
     }
 
     #[test]
     fn test_lock_unsized() {
         let lock: &Mutex<[i32]> = &Mutex::new([1, 2, 3]);
         {
-            let b = &mut *lock.lock();
-            b[0] = 4;
-            b[2] = 5;
+            lock.lock_with(|g| {
+                g[0] = 4;
+                g[2] = 5;
+            });
         }
         let comp: &[i32] = &[4, 2, 5];
-        assert_eq!(&*lock.lock(), comp);
+        lock.lock_with(|g| assert_eq!(&**g, comp));
     }
 }
 
@@ -539,8 +591,7 @@ mod test {
         use loom::sync::Arc;
 
         fn inc(lock: Arc<Mutex<i32>>) {
-            let mut guard = lock.lock().deref_mut();
-            *guard += 1;
+            lock.lock_with(|guard| *guard.deref_mut() += 1);
         }
 
         model(|| {
@@ -558,7 +609,7 @@ mod test {
                 handle.join().unwrap();
             }
 
-            assert_eq!(end, *data.lock().deref());
+            assert_eq!(end, data.lock_with(|guard| *guard.deref()));
         });
     }
 
@@ -568,8 +619,7 @@ mod test {
         use std::sync::Arc;
 
         fn inc(lock: Arc<Mutex<i32>>) {
-            let mut guard = lock.lock().deref_mut();
-            *guard += 1;
+            lock.lock_with(|guard| *guard.deref_mut() += 1);
         }
 
         model(|| {

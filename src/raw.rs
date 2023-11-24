@@ -117,14 +117,7 @@ impl MutexNode {
 ///     });
 /// }
 ///
-/// let _message = rx.recv();
-///
-/// // A queue node must be mutably accessible.
-/// let mut node = MutexNode::new();
-/// // Would return `None` if lock was already held.
-/// let count = data.try_lock(&mut node).unwrap();
-/// assert_eq!(N, *count);
-/// // lock is unlock here when `count` goes out of scope.
+/// rx.recv().unwrap();
 /// ```
 /// [`new`]: crate::raw::Mutex::new
 /// [`lock`]: crate::raw::Mutex::lock
@@ -230,7 +223,6 @@ impl<T: ?Sized> Mutex<T> {
     pub(crate) unsafe fn try_lock_raw(&self, node: *mut MutexNode) -> Option<MutexGuard<'_, T>> {
         // Must initialize `node.next` before any possible access to it.
         unsafe { &mut *node }.next_write_null();
-
         self.tail
             .compare_exchange(ptr::null_mut(), node, Acquire, Relaxed)
             // SAFETY: already initialized the node's next pointer.
@@ -283,7 +275,6 @@ impl<T: ?Sized> Mutex<T> {
         // Must initialize `node.next` before any possible access to it.
         unsafe { &mut *node }.next_write_null();
         let pred = self.tail.swap(node, AcqRel);
-
         // We do have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             let locked = AtomicBool::new(true);
@@ -292,13 +283,11 @@ impl<T: ?Sized> Mutex<T> {
             // we do not dereference `next`, only write into it.
             let next = unsafe { (*pred).next_assume_init_ref() };
             next.store(&locked as *const _ as *mut _, Release);
-
             while locked.load(Relaxed) {
                 wait();
             }
             fence(Acquire);
         }
-
         MutexGuard::new(self, unsafe { &*node })
     }
 
@@ -366,12 +355,10 @@ impl<T: ?Sized> Mutex<T> {
     pub(crate) unsafe fn unlock_raw(&self, node: *mut MutexNode) {
         let next = unsafe { (*node).next_assume_init_ref() };
         let mut locked = next.load(Relaxed);
-
         // If we don't have a known successor currently,
         if locked.is_null() {
             // and we are the tail, then dequeue and free the lock.
             let false = self.try_unlock(node) else { return };
-
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
             loop {
@@ -380,7 +367,6 @@ impl<T: ?Sized> Mutex<T> {
                 wait();
             }
         }
-
         fence(Acquire);
         // SAFETY: We already verified that our successor is not null.
         unsafe { &*locked }.store(false, Release);
@@ -704,6 +690,27 @@ mod test {
             assert_eq!(*lock2, 1);
             tx.send(()).unwrap();
         });
+        rx.recv().unwrap();
+    }
+
+    #[test]
+    fn test_recursive_lock() {
+        let arc = Arc::new(Mutex::new(1));
+        let (tx, rx) = channel();
+        for _ in 0..4 {
+            let tx2 = tx.clone();
+            let c_arc = Arc::clone(&arc);
+            let _t = thread::spawn(move || {
+                let mutex = Mutex::new(1);
+                let mut node1 = MutexNode::new();
+                let _lock = c_arc.lock(&mut node1);
+                let mut node2 = MutexNode::new();
+                let lock2 = mutex.lock(&mut node2);
+                assert_eq!(*lock2, 1);
+                tx2.send(()).unwrap();
+            });
+        }
+        drop(tx);
         rx.recv().unwrap();
     }
 

@@ -24,11 +24,6 @@ members = [".", "benches"]
 yield = []
 # The `thread_local` feature requires linking with std.
 thread_local = []
-# The `lock_api` feature requires linking with std.
-lock_api = [ "thread_local", "dep:lock_api" ]
-
-[dependencies]
-lock_api = { version = "0.4", default-features = false, optional = true }
 
 [target.'cfg(loom)'.dev-dependencies]
 loom = { version = "0.7" }
@@ -38,5 +33,5 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[example]]
-name = "lock_api"
-required-features = ["thread_local", "lock_api"]
+name = "thread_local"
+required-features = ["thread_local"]
