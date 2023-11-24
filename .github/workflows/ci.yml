@@ -64,6 +64,8 @@ jobs:
         run: rustup toolchain install stable
       - name: Run raw example
         run: cargo run --example raw
+      - name: Run thread_local example
+        run: cargo run --example thread_local --features thread_local
 
   linter:
     name: Linter

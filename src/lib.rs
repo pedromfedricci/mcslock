@@ -64,13 +64,13 @@
 //! thread::spawn(move || {
 //!     // Node instantiation is not required.
 //!     // Critical section must be defined as closure.
-//!     *c_mutex.lock_with(|guard| **guard = 10);
+//!     c_mutex.lock_with(|guard| **guard = 10);
 //! })
 //! .join().expect("thread::spawn failed");
 //!
 //! // Node instantiation is not required.
 //! // Critical section must be defined as closure.
-//! assert_eq!(*mutex.try_lock_with(|guard| **guard).unwrap(), 10);
+//! assert_eq!(mutex.try_lock_with(|guard| **guard.unwrap()), 10);
 //! # }
 //! # #[cfg(not(feature = "thread_local"))]
 //! # fn main() {}
@@ -121,7 +121,8 @@
 //! The `thread_local` feature provides locking APIs that do not require user-side
 //! node instantiation, but critical sections must be provided as closures. This
 //! implementation handles the queue's nodes transparently, by storing them in
-//! the thread local storage of the waiting threads. Not `no_std` compatible.
+//! the thread local storage of the waiting threads. Thes locking implementations
+//! will panic if recursively acquired. Not `no_std` compatible.
 //!
 //! ## Related projects
 //!

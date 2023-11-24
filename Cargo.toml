@@ -31,3 +31,7 @@ loom = { version = "0.7" }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "thread_local"
+required-features = ["thread_local"]

@@ -21,7 +21,7 @@ Include the following under the `[dependencies]` section in your `Cargo.toml` fi
 # Cargo.toml
 
 [dependencies]
-# Avaliable features: `yield`, `thread_local` and `lock_api`.
+# Avaliable features: `yield`, `thread_local`.
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
@@ -76,13 +76,13 @@ fn main() {
     thread::spawn(move || {
         // Node instantiation is not required.
         // Critical section must be defined as closure.
-        *c_mutex.lock_with(|guard| **guard) = 10;
+        c_mutex.lock_with(|guard| **guard = 10);
     })
     .join().expect("thread::spawn failed");
 
     // Node instantiation is not required.
     // Critical section must be defined as closure.
-    assert_eq!(*mutex.try_lock_with(|guard| **guard).unwrap(), 10);
+    assert_eq!(mutex.try_lock_with(|guard| **guard.unwrap()), 10);
 }
 ```
 
@@ -92,7 +92,7 @@ Currently this project documentation is not hosted anywhere, you can render
 the documentation by cloning this repository and then run:
 
 ```bash
-cargo doc --open
+cargo doc --all-features --open
 ```
 
 ## Use cases
@@ -140,7 +140,8 @@ just simply busy-waits.
 The `thread_local` feature provides locking APIs that do not require user-side
 node instantiation, but critical sections must be provided as closures. This
 implementation handles the queue's nodes transparently, by storing them in
-the thread local storage of the waiting threads. Not `no_std` compatible.
+the thread local storage of the waiting threads. These locking implementations
+will panic if recursively acquired. Not `no_std` compatible.
 
 ## Related projects
 

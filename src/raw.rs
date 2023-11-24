@@ -117,14 +117,7 @@ impl MutexNode {
 ///     });
 /// }
 ///
-/// let _message = rx.recv();
-///
-/// // A queue node must be mutably accessible.
-/// let mut node = MutexNode::new();
-/// // Would return `None` if lock was already held.
-/// let count = data.try_lock(&mut node).unwrap();
-/// assert_eq!(N, *count);
-/// // lock is unlock here when `count` goes out of scope.
+/// rx.recv().unwrap();
 /// ```
 /// [`new`]: crate::raw::Mutex::new
 /// [`lock`]: crate::raw::Mutex::lock
