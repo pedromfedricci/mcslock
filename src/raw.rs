@@ -22,6 +22,37 @@ use loom::cell::{ConstPtr, MutPtr, UnsafeCell};
 #[cfg(all(loom, test))]
 use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 
+/// The inner definition of [`MutexNode`], which is known to be in a initialized
+/// state.
+#[derive(Debug)]
+struct MutexNodeInit {
+    next: AtomicPtr<MutexNodeInit>,
+    locked: AtomicBool,
+}
+
+impl MutexNodeInit {
+    /// Crates a new `MutexNodeInit` instance.
+    #[cfg(not(all(loom, test)))]
+    const fn new() -> Self {
+        let next = AtomicPtr::new(ptr::null_mut());
+        let locked = AtomicBool::new(true);
+        Self { next, locked }
+    }
+
+    /// Creates a new Loom based `MutexNodeInit` instance (non-const).
+    #[cfg(all(loom, test))]
+    fn new() -> Self {
+        let next = AtomicPtr::new(ptr::null_mut());
+        let locked = AtomicBool::new(true);
+        Self { next, locked }
+    }
+
+    /// Returns a raw mutable pointer of this node.
+    const fn as_ptr(&self) -> *mut Self {
+        self as *const _ as *mut _
+    }
+}
+
 /// A locally-accessible record for forming the waiting queue.
 ///
 /// `MutexNode` is an opaque type that holds metadata for the [`Mutex`]'s
@@ -33,11 +64,9 @@ use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 ///
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
+#[repr(transparent)]
 #[derive(Debug)]
-pub struct MutexNode {
-    // The `next` pointer must be initialized before any access to it.
-    next: MaybeUninit<AtomicPtr<AtomicBool>>,
-}
+pub struct MutexNode(MaybeUninit<MutexNodeInit>);
 
 impl MutexNode {
     /// Creates new `MutexNode` instance.
@@ -50,22 +79,15 @@ impl MutexNode {
     /// let node = MutexNode::new();
     /// ```
     #[inline]
-    pub const fn new() -> MutexNode {
-        MutexNode { next: MaybeUninit::uninit() }
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(MaybeUninit::uninit())
     }
 
-    /// Writes a null mutable raw pointer into `self.next`.
-    fn next_write_null(&mut self) {
-        self.next.write(AtomicPtr::new(ptr::null_mut()));
-    }
-
-    /// Returns a reference of `self.next`.
-    ///
-    /// # Safety
-    ///
-    /// Caller must garantee that `self.next` has been previously initialized.
-    unsafe fn next_assume_init_ref(&self) -> &AtomicPtr<AtomicBool> {
-        unsafe { self.next.assume_init_ref() }
+    /// Initializes this node and returns a exclusive reference to the initialized
+    /// inner state.
+    fn initialize(&mut self) -> &mut MutexNodeInit {
+        self.0.write(MutexNodeInit::new())
     }
 }
 
@@ -123,7 +145,7 @@ impl MutexNode {
 /// [`lock`]: crate::raw::Mutex::lock
 /// [`try_lock`]: crate::raw::Mutex::try_lock
 pub struct Mutex<T: ?Sized> {
-    tail: AtomicPtr<MutexNode>,
+    tail: AtomicPtr<MutexNodeInit>,
     data: UnsafeCell<T>,
 }
 
@@ -144,18 +166,18 @@ impl<T> Mutex<T> {
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
-    pub const fn new(value: T) -> Mutex<T> {
+    pub const fn new(value: T) -> Self {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
-        Mutex { tail, data }
+        Self { tail, data }
     }
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
-    pub(crate) fn new(value: T) -> Mutex<T> {
+    pub(crate) fn new(value: T) -> Self {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
-        Mutex { tail, data }
+        Self { tail, data }
     }
 
     /// Consumes this mutex, returning the underlying data.
@@ -211,22 +233,10 @@ impl<T: ?Sized> Mutex<T> {
     /// assert_eq!(*mutex.lock(&mut node), 10);
     /// ```
     pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode) -> Option<MutexGuard<'a, T>> {
-        // SAFETY: We have exclusive access to the queue node.
-        unsafe { self.try_lock_raw(node) }
-    }
-
-    /// Attempts to acquire this lock.
-    ///
-    /// # Safety
-    ///
-    /// This requires exclusive access to this node for all the guard's lifetime.
-    pub(crate) unsafe fn try_lock_raw(&self, node: *mut MutexNode) -> Option<MutexGuard<'_, T>> {
-        // Must initialize `node.next` before any possible access to it.
-        unsafe { &mut *node }.next_write_null();
+        let node = node.initialize();
         self.tail
-            .compare_exchange(ptr::null_mut(), node, Acquire, Relaxed)
-            // SAFETY: already initialized the node's next pointer.
-            .map(|_| MutexGuard::new(self, unsafe { &*node }))
+            .compare_exchange(ptr::null_mut(), node.as_ptr(), Acquire, Relaxed)
+            .map(|_| MutexGuard::new(self, node))
             .ok()
     }
 
@@ -262,33 +272,18 @@ impl<T: ?Sized> Mutex<T> {
     /// assert_eq!(*mutex.lock(&mut node), 10);
     /// ```
     pub fn lock<'a>(&'a self, node: &'a mut MutexNode) -> MutexGuard<'a, T> {
-        // SAFETY: We have exclusive access to the queue node.
-        unsafe { self.lock_raw(node) }
-    }
-
-    /// Acquires a mutex, blocking the current thread until it is able to do so.
-    ///
-    /// # Safety
-    ///
-    /// This requires exclusive access to this node for all the guard's lifetime.
-    pub(crate) unsafe fn lock_raw(&self, node: *mut MutexNode) -> MutexGuard<'_, T> {
-        // Must initialize `node.next` before any possible access to it.
-        unsafe { &mut *node }.next_write_null();
-        let pred = self.tail.swap(node, AcqRel);
-        // We do have a predecessor, complete the link so it will notify us.
+        let node = node.initialize();
+        let pred = self.tail.swap(node.as_ptr(), AcqRel);
+        // If we have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
-            let locked = AtomicBool::new(true);
-            // SAFETY: We already checked that `pred` is not null, its `next`
-            // has already been inialized by either `lock` or `try_lock`, and
-            // we do not dereference `next`, only write into it.
-            let next = unsafe { (*pred).next_assume_init_ref() };
-            next.store(&locked as *const _ as *mut _, Release);
-            while locked.load(Relaxed) {
+            // SAFETY: Already verified that predecessor is not null.
+            unsafe { &*pred }.next.store(node.as_ptr(), Release);
+            while node.locked.load(Relaxed) {
                 wait();
             }
             fence(Acquire);
         }
-        MutexGuard::new(self, unsafe { &*node })
+        MutexGuard::new(self, node)
     }
 
     /// Returns `true` if the lock is currently held.
@@ -338,57 +333,49 @@ impl<T: ?Sized> Mutex<T> {
         unsafe { &mut *self.data.get() }
     }
 
-    /// Returns a reference to the queue's tail.
+    /// Returns a reference to the queue's tail debug impl.
     #[cfg(feature = "thread_local")]
-    pub(crate) fn tail(&self) -> &AtomicPtr<MutexNode> {
+    pub(crate) fn tail_debug(&self) -> &impl fmt::Debug {
         &self.tail
     }
 
     /// Unlocks this mutex.
-    ///
-    /// # Safety
-    ///
-    /// Must only be called if this mutex is held by the current context, that
-    /// is, it must be associated with a guard returned by `lock` or `try_lock`.
-    /// The guard must be pointing to the provided node, and the node must have
-    /// been initialized.
-    pub(crate) unsafe fn unlock_raw(&self, node: *mut MutexNode) {
-        let next = unsafe { (*node).next_assume_init_ref() };
-        let mut locked = next.load(Relaxed);
+    fn unlock(&self, node: &MutexNodeInit) {
+        let mut next = node.next.load(Relaxed);
         // If we don't have a known successor currently,
-        if locked.is_null() {
+        if next.is_null() {
             // and we are the tail, then dequeue and free the lock.
-            let false = self.try_unlock(node) else { return };
+            let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
             loop {
-                locked = next.load(Relaxed);
-                let true = locked.is_null() else { break };
+                next = node.next.load(Relaxed);
+                let true = next.is_null() else { break };
                 wait();
             }
         }
         fence(Acquire);
         // SAFETY: We already verified that our successor is not null.
-        unsafe { &*locked }.store(false, Release);
+        unsafe { &*next }.locked.store(false, Release);
     }
 
     /// Unlocks the lock if the candidate node is the queue's tail.
-    fn try_unlock(&self, node: *mut MutexNode) -> bool {
+    fn try_unlock(&self, node: *mut MutexNodeInit) -> bool {
         self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 }
 
 impl<T: ?Sized + Default> Default for Mutex<T> {
     /// Creates a `Mutex<T>`, with the `Default` value for `T`.
-    fn default() -> Mutex<T> {
-        Mutex::new(Default::default())
+    fn default() -> Self {
+        Self::new(Default::default())
     }
 }
 
 impl<T> From<T> for Mutex<T> {
     /// Creates a `Mutex<T>` from a instance of `T`.
-    fn from(data: T) -> Mutex<T> {
-        Mutex::new(data)
+    fn from(data: T) -> Self {
+        Self::new(data)
     }
 }
 
@@ -412,7 +399,7 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
 /// [`Deref`] and [`DerefMut`] implementations.
 pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
-    node: &'a MutexNode,
+    node: &'a MutexNodeInit,
 }
 
 // Same unsafe impl as `std::sync::MutexGuard`.
@@ -420,7 +407,7 @@ unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
 
 impl<'a, T: ?Sized> MutexGuard<'a, T> {
     /// Creates a new `MutexGuard` instance.
-    fn new(lock: &'a Mutex<T>, node: &'a MutexNode) -> Self {
+    const fn new(lock: &'a Mutex<T>, node: &'a MutexNodeInit) -> Self {
         Self { lock, node }
     }
 
@@ -459,10 +446,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
 
 impl<'a, T: ?Sized> Drop for MutexGuard<'a, T> {
     fn drop(&mut self) {
-        let node = self.node as *const _ as *mut _;
-        // SAFETY: This guard holds the mutex locked, and it is pointing to a
-        // initialized node.
-        unsafe { self.lock.unlock_raw(node) }
+        self.lock.unlock(self.node);
     }
 }
 

@@ -105,7 +105,7 @@
 //! This crate dos not provide any default features. Features that can be enabled
 //! are:
 //!
-//! ### yield
+//! ### `yield`
 //!
 //! The `yield` feature requires linking to the standard library, so it is not
 //! suitable for `no_std` environments. By enabling the `yield` feature, instead
@@ -116,7 +116,7 @@
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
 //!
-//! ### thread_local
+//! ### `thread_local`
 //!
 //! The `thread_local` feature provides locking APIs that do not require user-side
 //! node instantiation, but critical sections must be provided as closures. This

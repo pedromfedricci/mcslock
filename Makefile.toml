@@ -17,7 +17,7 @@ args = ["doc", "--all-features", "--open"]
 # Lint all features.
 [tasks.lint]
 command = "cargo"
-args = ["clippy", "--all-features"]
+args = ["clippy", "--all-features", "--", "-D", "clippy::pedantic", "-D", "clippy::nursery"]
 
 # Run tests under miri.
 # NOTE: must run as: cargo +nightly make miri

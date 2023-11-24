@@ -35,6 +35,8 @@ fn main() {
             })
         });
     }
+    let _message = rx.recv().unwrap();
 
-    rx.recv().unwrap();
+    let count = data.lock_with(|guard| **guard);
+    assert_eq!(count, N);
 }
