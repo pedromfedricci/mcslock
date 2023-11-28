@@ -64,13 +64,13 @@
 //! thread::spawn(move || {
 //!     // Node instantiation is not required.
 //!     // Critical section must be defined as closure.
-//!     c_mutex.lock_with(|guard| **guard = 10);
+//!     c_mutex.lock_with(|mut guard| *guard = 10);
 //! })
 //! .join().expect("thread::spawn failed");
 //!
 //! // Node instantiation is not required.
 //! // Critical section must be defined as closure.
-//! assert_eq!(mutex.try_lock_with(|guard| **guard.unwrap()), 10);
+//! assert_eq!(mutex.try_lock_with(|guard| *guard.unwrap()), 10);
 //! # }
 //! # #[cfg(not(feature = "thread_local"))]
 //! # fn main() {}
@@ -156,6 +156,9 @@
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
+
+#[cfg(all(loom, test))]
+pub(crate) mod loom;
 
 pub mod raw;
 

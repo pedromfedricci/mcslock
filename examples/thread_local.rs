@@ -26,9 +26,9 @@ fn main() {
             // threads to ever fail while holding the lock.
             //
             // Data is exclusively accessed by the guard argument.
-            data.lock_with(|data| {
-                **data += 1;
-                if **data == N {
+            data.lock_with(|mut data| {
+                *data += 1;
+                if *data == N {
                     tx.send(()).unwrap();
                 }
                 // the lock is unlocked here when `data` goes out of scope.
@@ -37,6 +37,6 @@ fn main() {
     }
     let _message = rx.recv().unwrap();
 
-    let count = data.lock_with(|guard| **guard);
+    let count = data.lock_with(|guard| *guard);
     assert_eq!(count, N);
 }
