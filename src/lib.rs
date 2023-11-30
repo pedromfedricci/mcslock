@@ -157,10 +157,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 
+pub mod raw;
+pub mod relax;
+
 #[cfg(all(loom, test))]
 pub(crate) mod loom;
-
-pub mod raw;
 
 // The `thread_local` feature requires linking with std.
 #[cfg(feature = "thread_local")]

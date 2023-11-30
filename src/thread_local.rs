@@ -29,6 +29,7 @@ use core::ops::{Deref, DerefMut};
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
+use crate::relax::{Relax, Spin};
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -90,9 +91,9 @@ use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 /// [`new`]: Mutex::new
 /// [`lock_with`]: Mutex::lock_with
 /// [`try_lock_with`]: Mutex::try_lock_with
-pub struct Mutex<T: ?Sized>(RawMutex<T>);
+pub struct Mutex<T: ?Sized, R = Spin>(RawMutex<T, R>);
 
-impl<T> Mutex<T> {
+impl<T, R> Mutex<T, R> {
     /// Creates a new mutex in an unlocked state ready for use.
     ///
     /// # Examples
@@ -131,35 +132,7 @@ impl<T> Mutex<T> {
     }
 }
 
-impl<T: ?Sized> Mutex<T> {
-    /// Runs `f` over the inner mutex and the thread local node.
-    #[cfg(not(all(loom, test)))]
-    fn node_with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
-    {
-        std::thread_local! {
-            static NODE: RefCell<MutexNode> = const {
-                RefCell::new(MutexNode::new())
-            }
-        }
-        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
-    }
-
-    /// Runs `f` over the inner mutex and the thread local node.
-    #[cfg(all(loom, test))]
-    fn node_with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&RawMutex<T>, &mut MutexNode) -> R,
-    {
-        loom::thread_local! {
-            static NODE: RefCell<MutexNode> = {
-                RefCell::new(MutexNode::new())
-            }
-        }
-        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
-    }
-
+impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// Attempts to acquire this lock and run the closure against its guard.
     ///
     /// If the lock could not be acquired at this time, then a [`None`] value is
@@ -210,9 +183,9 @@ impl<T: ?Sized> Mutex<T> {
     ///     mutex.lock_with(|_guard| ());
     /// });
     /// ```
-    pub fn try_lock_with<F, R>(&self, f: F) -> R
+    pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T>>) -> R,
+        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
         self.node_with(|raw, node| f(raw.try_lock(node).map(MutexGuard::new)))
     }
@@ -265,13 +238,15 @@ impl<T: ?Sized> Mutex<T> {
     ///     mutex.try_lock_with(|_guard| ());
     /// });
     /// ```
-    pub fn lock_with<F, R>(&self, f: F) -> R
+    pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T>) -> R,
+        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
         self.node_with(|raw, node| f(MutexGuard::new(raw.lock(node))))
     }
+}
 
+impl<T: ?Sized, R> Mutex<T, R> {
     /// Returns `true` if the lock is currently held.
     ///
     /// This method does not provide any synchronization guarantees, so its only
@@ -313,23 +288,51 @@ impl<T: ?Sized> Mutex<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.0.get_mut()
     }
+
+    /// Runs `f` over the inner mutex and the thread local node.
+    #[cfg(not(all(loom, test)))]
+    fn node_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(&RawMutex<T, R>, &mut MutexNode) -> Ret,
+    {
+        std::thread_local! {
+            static NODE: RefCell<MutexNode> = const {
+                RefCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
+    }
+
+    /// Runs `f` over the inner mutex and the thread local node.
+    #[cfg(all(loom, test))]
+    fn node_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(&RawMutex<T, R>, &mut MutexNode) -> Ret,
+    {
+        loom::thread_local! {
+            static NODE: RefCell<MutexNode> = {
+                RefCell::new(MutexNode::new())
+            }
+        }
+        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
+    }
 }
 
-impl<T: ?Sized + Default> Default for Mutex<T> {
+impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
     /// Creates a `Mutex<T>`, with the `Default` value for `T`.
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
-impl<T> From<T> for Mutex<T> {
+impl<T, R> From<T> for Mutex<T, R> {
     /// Creates a `Mutex<T>` from a instance of `T`.
     fn from(data: T) -> Self {
         Self::new(data)
     }
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
+impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
         self.try_lock_with(|guard| match guard {
@@ -346,23 +349,23 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for Mutex<T> {
 ///
 /// The data protected by the mutex can be access through this guard via its
 /// [`Deref`] and [`DerefMut`] implementations.
-pub struct MutexGuard<'a, T: ?Sized> {
-    inner: RawMutexGuard<'a, T>,
+pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
+    inner: RawMutexGuard<'a, T, R>,
     // Guard will access thread local storage during drop call, can't be Send.
     marker: PhantomData<*mut ()>,
 }
 
 // SAFETY: Guard only access thread local storage during drop call, can be Sync.
-unsafe impl<'a, T: ?Sized + Sync> Sync for MutexGuard<'a, T> {}
+unsafe impl<'a, T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'a, T, R> {}
 
-impl<'a, T: ?Sized> MutexGuard<'a, T> {
-    fn new(inner: RawMutexGuard<'a, T>) -> Self {
+impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
+    fn new(inner: RawMutexGuard<'a, T, R>) -> Self {
         Self { inner, marker: PhantomData }
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
+impl<'a, T: ?Sized, R: Relax> Deref for MutexGuard<'a, T, R> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -372,20 +375,20 @@ impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized> DerefMut for MutexGuard<'a, T> {
+impl<'a, T: ?Sized, R: Relax> DerefMut for MutexGuard<'a, T, R> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         &mut self.inner
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Display, R: Relax> fmt::Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
@@ -394,8 +397,8 @@ impl<'a, T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'a, T> {
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<'a, T: ?Sized> Guard<'a, T> for MutexGuard<'a, T> {
-    type Guard = RawMutexGuard<'a, T>;
+unsafe impl<'a, T: ?Sized, R: Relax> Guard<'a, T> for MutexGuard<'a, T, R> {
+    type Guard = RawMutexGuard<'a, T, R>;
 
     fn deref(&'a self) -> GuardDeref<'a, T, Self::Guard> {
         self.inner.deref()
@@ -408,13 +411,27 @@ unsafe impl<'a, T: ?Sized> Guard<'a, T> for MutexGuard<'a, T> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use super::Mutex;
     // Test suite from the Rust's Mutex implementation with minor modifications
-    // since the API is not compatible with this crate implementation.
+    // since the API is not compatible with this crate implementation and some
+    // new tests as well.
+    //
+    // Copyright 2014 The Rust Project Developers.
+    //
+    // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+    // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+    // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+    // option. This file may not be copied, modified, or distributed
+    // except according to those terms.
+
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
     use std::sync::Arc;
     use std::thread;
+
+    use super::Mutex as GenMutex;
+    use crate::relax::Spin;
+
+    type Mutex<T> = GenMutex<T, Spin>;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
