@@ -28,7 +28,7 @@ mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ## Raw locking APIs
 
 Raw locking APIs require exclusive access to a local queue node. This node is
-represented by the `MutexNode` type. The `raw` module provides an implmentation
+represented by the `MutexNode` type. The `raw` module provides an implementation
 that is `no_std` compatible, but also requires that queue nodes must be
 instantiated by the callers.
 

@@ -4,10 +4,15 @@
 //! This module provide MCS locking APIs that do not require user-side node
 //! instantiation, by managing the queue's nodes allocations internally. Queue
 //! nodes are stored in the thread local storage, therefore this implementation
-//! requires support from the standard library. The critical sections must be
+//! requires support from the standard library. Critical sections must be
 //! provided to [`lock_with`] and [`try_lock_with`] as closures. Closure arguments
-//! provide a reference to a RAII guard that has exclusive over the data. These
-//! guards will be dropped at the end of the call, freeing the mutex.
+//! provide a RAII guard that has exclusive over the data. The mutex guard will
+//! be dropped at the end of the call, freeing the mutex.
+//!
+//! The Mutex is generic over the relax strategy. User may choose a strategy
+//! as long as it implements the [`Relax`] trait. There is a number of strategies
+//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
+//! See their documentation for more information.
 //!
 //! # Panics
 //!
@@ -17,6 +22,9 @@
 //!
 //! [`lock_with`]: Mutex::lock_with
 //! [`try_lock_with`]: Mutex::try_lock_with
+//! [`relax`]: crate::relax
+//! [`Relax`]: crate::relax::Relax
+//! [`Spin`]: crate::relax::Spin
 
 use core::cell::RefCell;
 use core::fmt;
@@ -349,6 +357,13 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
 ///
 /// The data protected by the mutex can be access through this guard via its
 /// [`Deref`] and [`DerefMut`] implementations.
+///
+/// This structure is given as closure argument by [`lock_with`] and
+/// [`try_lock_with`] methods on [`Mutex`].
+///
+/// [`lock_with`]: Mutex::lock_with
+/// [`try_lock_with`]: Mutex::try_lock_with
+#[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
     inner: RawMutexGuard<'a, T, R>,
     // Guard will access thread local storage during drop call, can't be Send.
@@ -429,9 +444,9 @@ mod test {
     use std::thread;
 
     use super::Mutex as GenMutex;
-    use crate::relax::Spin;
+    use crate::relax::Yield;
 
-    type Mutex<T> = GenMutex<T, Spin>;
+    type Mutex<T> = GenMutex<T, Yield>;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -605,9 +620,13 @@ mod test {
 
 #[cfg(all(loom, test))]
 mod test {
-    use super::Mutex;
-    use crate::loom::Guard;
     use loom::{model, thread};
+
+    use super::Mutex as GenMutex;
+    use crate::loom::Guard;
+    use crate::relax::Yield;
+
+    type Mutex<T> = GenMutex<T, Yield>;
 
     #[test]
     fn threads_join() {

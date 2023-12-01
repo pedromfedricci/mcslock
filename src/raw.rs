@@ -1,8 +1,26 @@
-//! Raw locking APIs require exclusive access to a local queue node. Queue node are
-//! represented by the `MutexNode` type.
+//! A MCS lock implementation that requires instantiation and exclusive access
+//! to a queue node.
 //!
-//! The `raw` module provides an implmentation that is `no_std` compatible, but also
-//! requires that queue nodes must be instantiated by the callers.
+//! The `raw` module provides an implementation that is `no_std` compatible, but
+//! also requires that queue nodes must be instantiated by the callers. Queue
+//! nodes are represented by the [`MutexNode`] type. The lock is hold for as
+//! long as its associated RAII guard is in scope. Once the guard is dropped,
+//! the mutex is freed. Mutex guards are returned by [`lock`] and [`try_lock`].
+//! Guards are also accessible as the closure argument for [`lock_with`] and
+//! [`try_lock_with`] methods.
+//!
+//! The Mutex is generic over the relax strategy. User may choose a strategy
+//! as long as it implements the [`Relax`] trait. There is a number of strategies
+//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
+//! See their documentation for more information.
+//!
+//! [`lock`]: Mutex::lock
+//! [`try_lock`]: Mutex::try_lock
+//! [`lock_with`]: Mutex::lock_with
+//! [`try_lock_with`]: Mutex::try_lock_with
+//! [`relax`]: crate::relax
+//! [`Relax`]: crate::relax::Relax
+//! [`Spin`]: crate::relax::Spin
 
 use core::fmt;
 use core::marker::PhantomData;
@@ -146,9 +164,9 @@ impl MutexNode {
 ///
 /// rx.recv().unwrap();
 /// ```
-/// [`new`]: crate::raw::Mutex::new
-/// [`lock`]: crate::raw::Mutex::lock
-/// [`try_lock`]: crate::raw::Mutex::try_lock
+/// [`new`]: Mutex::new
+/// [`lock`]: Mutex::lock
+/// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R = Spin> {
     tail: AtomicPtr<MutexNodeInit>,
     marker: PhantomData<R>,
@@ -498,6 +516,16 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
 ///
 /// The data protected by the mutex can be access through this guard via its
 /// [`Deref`] and [`DerefMut`] implementations.
+///
+/// This structure is returned by [`lock`] and [`try_lock`] methods on [`Mutex`].
+/// It is also given as closure argument by [`lock_with`] and [`try_lock_with`]
+/// methods.
+///
+/// [`lock`]: Mutex::lock
+/// [`try_lock`]: Mutex::lock
+/// [`lock_with`]: Mutex::lock_with
+/// [`try_lock_with`]: Mutex::try_lock_with
+#[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
     lock: &'a Mutex<T, R>,
     node: &'a MutexNodeInit,
@@ -606,9 +634,9 @@ mod test {
     use std::thread;
 
     use super::{Mutex as GenMutex, MutexNode};
-    use crate::relax::Spin;
+    use crate::relax::Yield;
 
-    type Mutex<T> = GenMutex<T, Spin>;
+    type Mutex<T> = GenMutex<T, Yield>;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -788,9 +816,13 @@ mod test {
 
 #[cfg(all(loom, test))]
 mod test {
-    use super::{Mutex, MutexNode};
-    use crate::loom::Guard;
     use loom::{model, thread};
+
+    use super::{Mutex as GenMutex, MutexNode};
+    use crate::loom::Guard;
+    use crate::relax::Yield;
+
+    type Mutex<T> = GenMutex<T, Yield>;
 
     #[test]
     fn threads_join() {

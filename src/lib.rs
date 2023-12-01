@@ -17,7 +17,7 @@
 //! ## Raw locking APIs
 //!
 //! Raw locking APIs require exclusive access to a local queue node. This node is
-//! represented by the `MutexNode` type. The `raw` module provides an implmentation
+//! represented by the `MutexNode` type. The `raw` module provides an implementation
 //! that is `no_std` compatible, but also requires that queue nodes must be
 //! instantiated by the callers.
 //!
@@ -160,10 +160,10 @@
 pub mod raw;
 pub mod relax;
 
-#[cfg(all(loom, test))]
-pub(crate) mod loom;
-
 // The `thread_local` feature requires linking with std.
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;
+
+#[cfg(all(loom, test))]
+pub(crate) mod loom;

@@ -14,6 +14,8 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
+#![allow(clippy::inline_always)]
+
 mod sealed {
     /// A trait implemented by spinning relax strategies.
     pub trait Relax {
@@ -32,7 +34,7 @@ pub use sealed::Relax;
 ///
 /// Note that spinning is a 'dumb' strategy and most schedulers cannot correctly
 /// differentiate it from useful work, thereby misallocating even more CPU time
-/// to the spinning process. This is known as ['priority inversion'].
+/// to the spinning process. This is known as [priority inversion].
 ///
 /// If you see signs that priority inversion is occurring, consider switching to
 /// [`Yield`] or, even better, not using a spinlock at all and opting for a proper
@@ -42,7 +44,7 @@ pub use sealed::Relax;
 /// tests does not mean that it will not occur. Use a scheduler-aware lock if at
 /// all possible.
 ///
-/// [`priority inversion`]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
+/// [priority inversion]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 pub struct Spin;
 
 impl Relax for Spin {
@@ -64,9 +66,22 @@ impl Relax for Spin {
 /// priority inversion on targets that have a standard library available. Note
 /// that such targets have scheduler-integrated concurrency primitives available,
 /// and you should generally use these instead, except in rare circumstances.
-#[cfg(any(feature = "yield", all(loom, test)))]
+#[cfg(any(feature = "yield", loom, test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct Yield;
+
+#[cfg(all(feature = "yield", not(all(loom, test))))]
+impl Relax for Yield {
+    #[inline(always)]
+    fn init() -> Self {
+        Self
+    }
+
+    #[inline]
+    fn relax(&mut self) {
+        std::thread::yield_now();
+    }
+}
 
 /// When running Loom models, we must call Loom's `yield_now` to tell Loom that
 /// another thread needs to be scheduled in order for the current one to make
@@ -105,34 +120,23 @@ impl Relax for Loop {
 // Exponential backoff is based on the crossbeam-utils implementation.
 // link to most recent change (as the time of writing):
 // https://github.com/crossbeam-rs/crossbeam/blob/371de8c2d304db07662450995848f3dc9598ac99/crossbeam-utils/src/backoff.rs
+//
+// Copyright (c) 2019 The Crossbeam Project Developers
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 
-/// Keeps count of the number of steps taken.
-struct Step(u32);
-
-impl Step {
-    /// Unbounded backoff spinning.
-    fn spin(&self) {
-        for _ in 0..1 << self.0 {
-            core::hint::spin_loop();
-        }
-    }
-
-    /// Bounded backoff spinning.
-    fn spin_to(&self, max: u32) {
-        for _ in 0..1 << self.0.min(max) {
-            core::hint::spin_loop();
-        }
-    }
-
-    /// Bounded step increment.
-    fn step_to(&mut self, end: u32) {
-        if self.0 <= end {
-            self.0 += 1;
-        }
-    }
-}
-
-/// Performs exponential backoff in spin loops.
+/// A strategy that, as [`Spin`], will run a busy-wait spin-loop, except this
+/// implementation will perform exponential backoff.
+///
+/// Backing off in spin loops can reduce contention and improve overall
+/// performance for some use cases. Further profiling is important to measure
+/// any significant improvement. As with [`Spin`], this implementation is
+/// subject to priority inversion problems, you may want to consider a yielding
+/// strategy or using a scheduler-aware lock.
 pub struct SpinBackoff {
     step: Step,
 }
@@ -154,19 +158,28 @@ impl Relax for SpinBackoff {
     }
 }
 
-/// Performs exponential backoff in spin loops, yielding to the OS scheduler
-/// after a certain limit has been reached.
+/// A strategy that, as [`Yield`], will yield back to the OS scheduler, but only
+/// after performing exponential backoff in a spin loop within a threshold.
+///
+/// Backing off in spin loops can reduce contention and improve overall
+/// performance for some use cases. Further profiling is important to measure
+/// any significant improvement. Just like [`Yield`], this is an strategy for
+/// minimising power consumption and priority inversion on targets that have
+/// a standard library available. Note that you should prefer scheduler-aware
+/// locks if you have access to the standard library.
 #[cfg(feature = "yield")]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct YieldBackoff {
     step: Step,
 }
 
+#[cfg(feature = "yield")]
 impl YieldBackoff {
     const SPIN_LIMIT: u32 = SpinBackoff::SPIN_LIMIT;
     const YIELD_LIMIT: u32 = 10;
 }
 
+#[cfg(feature = "yield")]
 impl Relax for YieldBackoff {
     #[inline(always)]
     fn init() -> Self {
@@ -181,5 +194,32 @@ impl Relax for YieldBackoff {
             std::thread::yield_now();
         }
         self.step.step_to(Self::YIELD_LIMIT);
+    }
+}
+
+/// Keeps count of the number of steps taken.
+struct Step(u32);
+
+impl Step {
+    /// Unbounded backoff spinning.
+    #[cfg(feature = "yield")]
+    fn spin(&self) {
+        for _ in 0..1 << self.0 {
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Bounded backoff spinning.
+    fn spin_to(&self, max: u32) {
+        for _ in 0..1 << self.0.min(max) {
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Bounded step increment.
+    fn step_to(&mut self, end: u32) {
+        if self.0 <= end {
+            self.0 += 1;
+        }
     }
 }
