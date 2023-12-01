@@ -9,7 +9,7 @@ use core::ops::{Deref, DerefMut};
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
-use crate::relax::{Relax, Spin};
+use crate::relax::Relax;
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -74,7 +74,7 @@ use crate::relax::{Relax, Spin};
 /// [`new`]: Mutex::new
 /// [`lock_with`]: Mutex::lock_with
 /// [`try_lock_with`]: Mutex::try_lock_with
-pub struct Mutex<T: ?Sized, R = Spin>(RawMutex<T, R>);
+pub struct Mutex<T: ?Sized, R>(RawMutex<T, R>);
 
 impl<T, R> Mutex<T, R> {
     /// Creates a new mutex in an unlocked state ready for use.
