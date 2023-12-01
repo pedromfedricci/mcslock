@@ -36,7 +36,7 @@ instantiated by the callers.
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::raw::{Mutex, MutexNode};
+use mcslock::raw::spins::{Mutex, MutexNode};
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -67,7 +67,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `thread_local` feature.
-use mcslock::thread_local::Mutex;
+use mcslock::thread_local::spins::Mutex;
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));

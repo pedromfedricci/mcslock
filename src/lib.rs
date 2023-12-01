@@ -25,7 +25,7 @@
 //! use std::sync::Arc;
 //! use std::thread;
 //!
-//! use mcslock::raw::{Mutex, MutexNode};
+//! use mcslock::raw::spins::{Mutex, MutexNode};
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
@@ -56,7 +56,7 @@
 //! use std::thread;
 //!
 //! // Requires `thread_local` feature.
-//! use mcslock::thread_local::Mutex;
+//! use mcslock::thread_local::spins::Mutex;
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
@@ -155,12 +155,13 @@
     no_std
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::inline_always)]
 #![warn(missing_docs)]
 
 pub mod raw;
 pub mod relax;
 
-// The `thread_local` feature requires linking with std.
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;

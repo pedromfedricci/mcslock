@@ -1,3 +1,6 @@
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::redundant_pub_crate)]
+
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
@@ -7,7 +10,7 @@ use loom::cell::{ConstPtr, MutPtr};
 use loom::sync::Arc as LoomArc;
 use loom::{model, thread};
 
-/// A trait for guard types pointing to data backed by Loom's UnsafeCell.
+/// A trait for guard types pointing to data backed by Loom's `UnsafeCell`.
 ///
 /// # Safety
 ///

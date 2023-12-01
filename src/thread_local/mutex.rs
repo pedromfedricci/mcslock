@@ -1,31 +1,3 @@
-//! A MCS lock implementation that stores queue nodes in the thread local
-//! storage of the waiting threads.
-//!
-//! This module provide MCS locking APIs that do not require user-side node
-//! instantiation, by managing the queue's nodes allocations internally. Queue
-//! nodes are stored in the thread local storage, therefore this implementation
-//! requires support from the standard library. Critical sections must be
-//! provided to [`lock_with`] and [`try_lock_with`] as closures. Closure arguments
-//! provide a RAII guard that has exclusive over the data. The mutex guard will
-//! be dropped at the end of the call, freeing the mutex.
-//!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
-//! See their documentation for more information.
-//!
-//! # Panics
-//!
-//! The `thread_local` [`Mutex`] implementation does not allow recursive locking,
-//! doing so will cause a panic. See [`lock_with`] and [`try_lock_with`] functions
-//! for more information.
-//!
-//! [`lock_with`]: Mutex::lock_with
-//! [`try_lock_with`]: Mutex::try_lock_with
-//! [`relax`]: crate::relax
-//! [`Relax`]: crate::relax::Relax
-//! [`Spin`]: crate::relax::Spin
-
 use core::cell::RefCell;
 use core::fmt;
 use core::marker::PhantomData;
@@ -62,6 +34,9 @@ use crate::relax::{Relax, Spin};
 /// use std::sync::mpsc::channel;
 ///
 /// use mcslock::thread_local::Mutex;
+/// use mcslock::relax::Spin;
+///
+/// type SpinMutex<T> = Mutex<T, Spin>;
 ///
 /// const N: usize = 10;
 ///
@@ -70,7 +45,7 @@ use crate::relax::{Relax, Spin};
 /// //
 /// // Here we're using an Arc to share memory among threads, and the data inside
 /// // the Arc is protected with a mutex.
-/// let data = Arc::new(Mutex::new(0));
+/// let data = Arc::new(SpinMutex::new(0));
 ///
 /// let (tx, rx) = channel();
 /// for _ in 0..N {
@@ -108,9 +83,12 @@ impl<T, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// const MUTEX: Mutex<i32> = Mutex::new(0);
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// const MUTEX: SpinMutex<i32> = SpinMutex::new(0);
+    /// let mutex = SpinMutex::new(0);
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
@@ -130,8 +108,11 @@ impl<T, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
     /// ```
     #[inline]
@@ -163,8 +144,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -181,11 +165,14 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// ```should_panic
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     ///
     /// mutex.try_lock_with(|_guard| {
-    ///     let mutex = Mutex::new(());
+    ///     let mutex = SpinMutex::new(());
     ///     // Recursive locking a thread_local::Mutex
     ///     // is not allowed, this will panic.
     ///     mutex.lock_with(|_guard| ());
@@ -220,8 +207,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -236,11 +226,14 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// ```should_panic
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     ///
     /// mutex.lock_with(|_guard| {
-    ///     let mutex = Mutex::new(());
+    ///     let mutex = SpinMutex::new(());
     ///     // Recursive locking a thread_local::Mutex
     ///     // is not allowed, this will panic.
     ///     mutex.try_lock_with(|_guard| ());
@@ -264,8 +257,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     ///
     /// mutex.lock_with(|mut guard| *guard = 1);
     ///
@@ -285,8 +281,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mut mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mut mutex = SpinMutex::new(0);
     /// *mutex.get_mut() = 10;
     ///
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
@@ -327,14 +326,14 @@ impl<T: ?Sized, R> Mutex<T, R> {
 }
 
 impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
-    /// Creates a `Mutex<T>`, with the `Default` value for `T`.
+    /// Creates a `Mutex<T, R>` with the `Default` value for `T`.
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
 impl<T, R> From<T> for Mutex<T, R> {
-    /// Creates a `Mutex<T>` from a instance of `T`.
+    /// Creates a `Mutex<T, R>` from a instance of `T`.
     fn from(data: T) -> Self {
         Self::new(data)
     }
@@ -443,10 +442,7 @@ mod test {
     use std::sync::Arc;
     use std::thread;
 
-    use super::Mutex as GenMutex;
-    use crate::relax::Yield;
-
-    type Mutex<T> = GenMutex<T, Yield>;
+    use crate::thread_local::yields::Mutex;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -622,11 +618,8 @@ mod test {
 mod test {
     use loom::{model, thread};
 
-    use super::Mutex as GenMutex;
     use crate::loom::Guard;
-    use crate::relax::Yield;
-
-    type Mutex<T> = GenMutex<T, Yield>;
+    use crate::thread_local::yields::Mutex;
 
     #[test]
     fn threads_join() {

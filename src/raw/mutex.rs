@@ -1,27 +1,3 @@
-//! A MCS lock implementation that requires instantiation and exclusive access
-//! to a queue node.
-//!
-//! The `raw` module provides an implementation that is `no_std` compatible, but
-//! also requires that queue nodes must be instantiated by the callers. Queue
-//! nodes are represented by the [`MutexNode`] type. The lock is hold for as
-//! long as its associated RAII guard is in scope. Once the guard is dropped,
-//! the mutex is freed. Mutex guards are returned by [`lock`] and [`try_lock`].
-//! Guards are also accessible as the closure argument for [`lock_with`] and
-//! [`try_lock_with`] methods.
-//!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
-//! See their documentation for more information.
-//!
-//! [`lock`]: Mutex::lock
-//! [`try_lock`]: Mutex::try_lock
-//! [`lock_with`]: Mutex::lock_with
-//! [`try_lock_with`]: Mutex::try_lock_with
-//! [`relax`]: crate::relax
-//! [`Relax`]: crate::relax::Relax
-//! [`Spin`]: crate::relax::Spin
-
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
@@ -43,7 +19,7 @@ use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 #[cfg(all(loom, test))]
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
 
-use crate::relax::{Relax, Spin};
+use crate::relax::Relax;
 
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
 /// state.
@@ -131,6 +107,9 @@ impl MutexNode {
 /// use std::sync::mpsc::channel;
 ///
 /// use mcslock::raw::{Mutex, MutexNode};
+/// use mcslock::relax::Spin;
+///
+/// type SpinMutex<T> = Mutex<T, Spin>;
 ///
 /// const N: usize = 10;
 ///
@@ -139,7 +118,7 @@ impl MutexNode {
 /// //
 /// // Here we're using an Arc to share memory among threads, and the data inside
 /// // the Arc is protected with a mutex.
-/// let data = Arc::new(Mutex::new(0));
+/// let data = Arc::new(SpinMutex::new(0));
 ///
 /// let (tx, rx) = channel();
 /// for _ in 0..N {
@@ -167,7 +146,7 @@ impl MutexNode {
 /// [`new`]: Mutex::new
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
-pub struct Mutex<T: ?Sized, R = Spin> {
+pub struct Mutex<T: ?Sized, R> {
     tail: AtomicPtr<MutexNodeInit>,
     marker: PhantomData<R>,
     data: UnsafeCell<T>,
@@ -184,9 +163,12 @@ impl<T, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::raw::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// const MUTEX: Mutex<i32> = Mutex::new(0);
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// const MUTEX: SpinMutex<i32> = SpinMutex::new(0);
+    /// let mutex = SpinMutex::new(0);
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
@@ -210,8 +192,11 @@ impl<T, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::raw::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
     /// ```
     #[inline]
@@ -238,8 +223,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::raw::{Mutex, MutexNode};
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -280,8 +268,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::raw::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -319,8 +310,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::raw::{Mutex, MutexNode};
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -339,7 +333,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         if !pred.is_null() {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
-            let mut relax = R::init();
+            let mut relax = R::new();
             while node.locked.load(Relaxed) {
                 relax.relax();
             }
@@ -364,8 +358,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::thread;
     ///
     /// use mcslock::raw::Mutex;
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -393,7 +390,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            let mut relax = R::init();
+            let mut relax = R::new();
             loop {
                 next = node.next.load(Relaxed);
                 let true = next.is_null() else { break };
@@ -416,8 +413,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::raw::{Mutex, MutexNode};
+    /// use mcslock::relax::Spin;
     ///
-    /// let mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
     /// let mut node = MutexNode::new();
     ///
     /// let guard = mutex.lock(&mut node);
@@ -440,8 +440,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// ```
     /// use mcslock::raw::{Mutex, MutexNode};
+    /// use mcslock::relax::Spin;
     ///
-    /// let mut mutex = Mutex::new(0);
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mut mutex = SpinMutex::new(0);
     /// *mutex.get_mut() = 10;
     ///
     /// let mut node = MutexNode::new();
@@ -485,14 +488,14 @@ impl<T: ?Sized, R> Mutex<T, R> {
 }
 
 impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
-    /// Creates a `Mutex<T>`, with the `Default` value for `T`.
+    /// Creates a `Mutex<T, R>`, with the `Default` value for `T`.
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
 impl<T, R> From<T> for Mutex<T, R> {
-    /// Creates a `Mutex<T>` from a instance of `T`.
+    /// Creates a `Mutex<T, R>` from a instance of `T`.
     fn from(data: T) -> Self {
         Self::new(data)
     }
@@ -633,10 +636,7 @@ mod test {
     use std::sync::Arc;
     use std::thread;
 
-    use super::{Mutex as GenMutex, MutexNode};
-    use crate::relax::Yield;
-
-    type Mutex<T> = GenMutex<T, Yield>;
+    use crate::raw::yields::{Mutex, MutexNode};
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -818,11 +818,8 @@ mod test {
 mod test {
     use loom::{model, thread};
 
-    use super::{Mutex as GenMutex, MutexNode};
     use crate::loom::Guard;
-    use crate::relax::Yield;
-
-    type Mutex<T> = GenMutex<T, Yield>;
+    use crate::raw::yields::{Mutex, MutexNode};
 
     #[test]
     fn threads_join() {

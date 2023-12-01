@@ -14,20 +14,14 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
-#![allow(clippy::inline_always)]
+/// A trait implemented by spinning relax strategies.
+pub trait Relax {
+    /// Initialize the state for the relaxing operation, if any.
+    fn new() -> Self;
 
-mod sealed {
-    /// A trait implemented by spinning relax strategies.
-    pub trait Relax {
-        /// Initialize the state for the relaxing operation, if any.
-        fn init() -> Self;
-
-        /// Perform the relaxing operation during a period of contention.
-        fn relax(&mut self);
-    }
+    /// Perform the relaxing operation during a period of contention.
+    fn relax(&mut self);
 }
-
-pub use sealed::Relax;
 
 /// A strategy that rapidly spins while informing the CPU that it should power
 /// down non-essential components via [`core::hint::spin_loop`].
@@ -49,7 +43,7 @@ pub struct Spin;
 
 impl Relax for Spin {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self
     }
 
@@ -70,10 +64,10 @@ impl Relax for Spin {
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct Yield;
 
-#[cfg(all(feature = "yield", not(all(loom, test))))]
+#[cfg(any(feature = "yield", all(test, not(loom))))]
 impl Relax for Yield {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self
     }
 
@@ -89,7 +83,7 @@ impl Relax for Yield {
 #[cfg(all(loom, test))]
 impl Relax for Yield {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self
     }
 
@@ -109,7 +103,7 @@ pub struct Loop;
 
 impl Relax for Loop {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self
     }
 
@@ -147,7 +141,7 @@ impl SpinBackoff {
 
 impl Relax for SpinBackoff {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self { step: Step(0) }
     }
 
@@ -182,7 +176,7 @@ impl YieldBackoff {
 #[cfg(feature = "yield")]
 impl Relax for YieldBackoff {
     #[inline(always)]
-    fn init() -> Self {
+    fn new() -> Self {
         Self { step: Step(0) }
     }
 
