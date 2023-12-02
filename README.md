@@ -28,7 +28,7 @@ mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ## Raw locking APIs
 
 Raw locking APIs require exclusive access to a local queue node. This node is
-represented by the `MutexNode` type. The `raw` module provides an implmentation
+represented by the `MutexNode` type. The `raw` module provides an implementation
 that is `no_std` compatible, but also requires that queue nodes must be
 instantiated by the callers.
 
@@ -36,7 +36,7 @@ instantiated by the callers.
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::raw::{Mutex, MutexNode};
+use mcslock::raw::spins::{Mutex, MutexNode};
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -67,7 +67,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `thread_local` feature.
-use mcslock::thread_local::Mutex;
+use mcslock::thread_local::spins::Mutex;
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -156,8 +156,8 @@ repositories:
 
 Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-APACHE] or <http://apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT] or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 ## Contribution
 
