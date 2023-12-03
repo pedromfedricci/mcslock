@@ -1,4 +1,3 @@
-#![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::redundant_pub_crate)]
 
 use core::marker::PhantomData;

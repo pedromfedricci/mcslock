@@ -1,3 +1,6 @@
+[env]
+CFG_LOOM = "--cfg loom"
+
 # Don't run these tasks for all crates in the workspace.
 [config]
 default_to_workspace = false
@@ -25,19 +28,19 @@ args = ["clippy", "--all-features", "--", "-D", "clippy::pedantic", "-D", "clipp
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
 command = "cargo"
-args = ["miri", "test", "--features", "thread_local"]
+args = ["miri", "test", "--all-features"]
 
 # Run Loom tests.
 [tasks.loom-test]
 command = "cargo"
-env = { "RUSTFLAGS" = "--cfg loom" }
-args = ["test", "--lib", "--release", "--features", "thread_local"]
+env = { "RUSTFLAGS" = "${CFG_LOOM}" }
+args = ["test", "--lib", "--release", "--all-features"]
 
 # Lint Loom cfg.
 [tasks.loom-lint]
 command = "cargo"
-env = { "RUSTFLAGS" = "--cfg loom" }
-args = ["clippy", "--profile", "test", "--features", "thread_local"]
+env = { "RUSTFLAGS" = "${CFG_LOOM}" }
+args = ["clippy", "--profile", "test", "--all-features", "--", "-D", "clippy::pedantic", "-D", "clippy::nursery"]
 
 # Run busy loop bench.
 [tasks.bench-busy]

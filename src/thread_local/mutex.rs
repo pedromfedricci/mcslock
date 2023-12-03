@@ -161,6 +161,15 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::thread_local::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = mutex.try_lock_with(|guard| &*guard.unwrap());
+    /// ```
+    ///
     /// An example of panic:
     ///
     /// ```should_panic
@@ -220,6 +229,15 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// .join().expect("thread::spawn failed");
     ///
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
+    /// ```
+    ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::thread_local::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = mutex.lock_with(|guard| &*guard);
     /// ```
     ///
     /// An example of panic:
@@ -456,19 +474,6 @@ mod test {
         let data = m.lock_with(|guard| *guard);
         assert_eq!(data, 2);
     }
-
-    // #[test]
-    // fn must_not_compile() {
-    //     let m = Mutex::new(1);
-    //     let guard = m.lock_with(|guard| guard);
-    //     let _value = *guard;
-
-    //     let m = Mutex::new(1);
-    //     let _val = m.lock_with(|guard| &mut *guard);
-
-    //     let m = Mutex::new(1);
-    //     let _val = m.lock_with(|guard| &*guard);
-    // }
 
     #[test]
     fn lots_and_lots() {

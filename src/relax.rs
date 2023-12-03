@@ -64,7 +64,7 @@ impl Relax for Spin {
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct Yield;
 
-#[cfg(any(feature = "yield", all(test, not(loom))))]
+#[cfg(any(all(feature = "yield", not(loom)), all(test, not(loom))))]
 impl Relax for Yield {
     #[inline(always)]
     fn new() -> Self {
