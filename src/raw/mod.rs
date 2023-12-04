@@ -11,9 +11,9 @@
 //!
 //! The Mutex is generic over the relax strategy. User may choose a strategy
 //! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
-//! Each module in `raw` provides type aliases for [`Mutex`] and [`MutexGuard`]
-//! associated with one relax strategy. See their documentation for more information.
+//! provided by the [`relax`] module. Each module in `raw` provides type aliases
+//! for [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See
+//! their documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
@@ -21,7 +21,6 @@
 //! [`try_lock_with`]: Mutex::try_lock_with
 //! [`relax`]: crate::relax
 //! [`Relax`]: crate::relax::Relax
-//! [`Spin`]: crate::relax::Spin
 
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};

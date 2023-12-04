@@ -42,3 +42,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[example]]
 name = "thread_local"
 required-features = ["thread_local"]
+
+[[example]]
+name = "lock_api"
+required-features = ["lock_api"]

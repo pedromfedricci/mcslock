@@ -3,7 +3,7 @@
 //! This module exports [`lock_api::Mutex`] and [`lock_api::MutexGuard`] aliases
 //! with a `test-and-set` MCS lock and guard as their inner types.
 //!
-//! [`mcslock::Mutex`] implements both [`RawMutex`] and [`RawMutexFair`].
+//! [`mcslock::Mutex`] implements the [`RawMutex`] trait.
 //!
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
@@ -39,7 +39,8 @@ pub mod spins {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Spin>;
 
-    /// A `test-and-set` MCS guard that implements the [`Spin`] relax strategy.
+    /// A `test-and-set` MCS guard that implements the [`Spin`] relax strategy
+    /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Spin>;
 }
 
@@ -64,7 +65,8 @@ pub mod yields {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Yield>;
 
-    /// A `test-and-set` MCS guard that implements the [`Yield`] relax strategy.
+    /// A `test-and-set` MCS guard that implements the [`Yield`] relax strategy
+    /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Yield>;
 }
 
@@ -87,7 +89,8 @@ pub mod loops {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Loop>;
 
-    /// A `test-and-set` MCS guard that implements the [`Loop`] relax strategy.
+    /// A `test-and-set` MCS guard that implements the [`Loop`] relax strategy
+    /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Loop>;
 }
 
@@ -112,7 +115,7 @@ pub mod spins_backoff {
     pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
 
     /// A `test-and-set` MCS guard that implements the [`SpinBackoff`] relax
-    /// strategy.
+    /// strategy and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, SpinBackoff>;
 }
 
@@ -139,6 +142,6 @@ pub mod yields_backoff {
     pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
 
     /// A `test-and-set` MCS guard that implements the [`YieldBackoff`] relax
-    /// strategy.
+    /// strategy and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, YieldBackoff>;
 }

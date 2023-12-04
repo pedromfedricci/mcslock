@@ -143,6 +143,12 @@ implementation handles the queue's nodes transparently, by storing them in
 the thread local storage of the waiting threads. These locking implementations
 will panic if recursively acquired. Not `no_std` compatible.
 
+### lock_api
+
+This feature implements the [`RawMutex`] trait from the [lock_api]
+crate for `mcslock::Mutex`. Aliases are provided by the `lock_api` module.
+This features is `no_std` compatible.
+
 ## Related projects
 
 These projects provide MCS lock implementations with slightly different APIs,

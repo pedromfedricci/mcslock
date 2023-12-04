@@ -2,12 +2,19 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
-// Requires that the `thread_local` feature is enabled.
-use mcslock::thread_local::spins::Mutex;
-
-const N: usize = 10;
+// Requires that the `lock_api` features is enabled.
+//
+// You may export these types to your callers, change the inner mutex type
+// (as long as it implements the same raw mutex interfaces), without breaking
+// their code.
+//
+// Maybe spin::lock_api::{Mutex, MutexGuard} is better for your use case? Switch it!
+pub type Mutex<T> = mcslock::lock_api::spins::Mutex<T>;
+pub type MutexGuard<'a, T> = mcslock::lock_api::spins::MutexGuard<'a, T>;
 
 fn main() {
+    const N: usize = 10;
+
     // Spawn a few threads to increment a shared variable (non-atomically), and
     // let the main thread know once all increments are done.
     //
@@ -25,19 +32,17 @@ fn main() {
             //
             // We unwrap() the return value to assert that we are not expecting
             // threads to ever fail while holding the lock.
-            //
-            // Data is exclusively accessed by the guard argument.
-            data.lock_with(|mut data| {
-                *data += 1;
-                if *data == N {
-                    tx.send(()).unwrap();
-                }
-                // the lock is unlocked here when `data` goes out of scope.
-            })
+            let mut data = data.lock();
+            *data += 1;
+            if *data == N {
+                tx.send(()).unwrap();
+            }
+            // the lock is unlocked here when `data` goes out of scope.
         });
     }
-    let _message = rx.recv().unwrap();
+    let _message = rx.recv();
 
-    let count = data.lock_with(|guard| *guard);
-    assert_eq!(count, N);
+    let count = data.lock();
+    assert_eq!(*count, N);
+    // lock is unlock here when `count` goes out of scope.
 }
