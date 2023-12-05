@@ -155,8 +155,8 @@
 //! implementation details or compiler requirements, you can check their
 //! repositories:
 //!
-//! - `mcs-rs`: <https://github.com/gereeter/mcs-rs>
-//! - `libmcs`: <https://github.com/topecongiro/libmcs>
+//! - mcs-rs: <https://github.com/gereeter/mcs-rs>
+//! - libmcs: <https://github.com/topecongiro/libmcs>
 //!
 //! [`MutexNode`]: raw::MutexNode
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html

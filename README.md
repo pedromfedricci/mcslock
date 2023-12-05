@@ -175,8 +175,8 @@ These projects provide MCS lock implementations with slightly different APIs,
 implementation details or compiler requirements, you can check their
 repositories:
 
-- `mcs-rs`: <https://github.com/gereeter/mcs-rs>
-- `libmcs`: <https://github.com/topecongiro/libmcs>
+- mcs-rs: <https://github.com/gereeter/mcs-rs>
+- libmcs: <https://github.com/topecongiro/libmcs>
 
 ## License
 
