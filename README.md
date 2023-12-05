@@ -37,7 +37,7 @@ Include the following under the `[dependencies]` section in your `Cargo.toml` fi
 # Cargo.toml
 
 [dependencies]
-# Avaliable features: `yield`, `thread_local`.
+# Avaliable features: `yield`, `thread_local` and `lock_api`.
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
