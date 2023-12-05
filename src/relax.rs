@@ -15,10 +15,7 @@
 //! Strategies that determine the behaviour of locks when encountering contention.
 
 /// A trait implemented by spinning relax strategies.
-pub trait Relax {
-    /// Initialize the state for the relaxing operation, if any.
-    fn new() -> Self;
-
+pub trait Relax: Default {
     /// Perform the relaxing operation during a period of contention.
     fn relax(&mut self);
 }
@@ -39,14 +36,10 @@ pub trait Relax {
 /// all possible.
 ///
 /// [priority inversion]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
+#[derive(Default)]
 pub struct Spin;
 
 impl Relax for Spin {
-    #[inline(always)]
-    fn new() -> Self {
-        Self
-    }
-
     #[inline(always)]
     fn relax(&mut self) {
         core::hint::spin_loop();
@@ -62,15 +55,11 @@ impl Relax for Spin {
 /// and you should generally use these instead, except in rare circumstances.
 #[cfg(any(feature = "yield", loom, test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
+#[derive(Default)]
 pub struct Yield;
 
 #[cfg(any(all(feature = "yield", not(loom)), all(test, not(loom))))]
 impl Relax for Yield {
-    #[inline(always)]
-    fn new() -> Self {
-        Self
-    }
-
     #[inline]
     fn relax(&mut self) {
         std::thread::yield_now();
@@ -83,11 +72,6 @@ impl Relax for Yield {
 #[cfg(all(loom, test))]
 impl Relax for Yield {
     #[inline(always)]
-    fn new() -> Self {
-        Self
-    }
-
-    #[inline(always)]
     fn relax(&mut self) {
         loom::thread::yield_now();
     }
@@ -99,14 +83,10 @@ impl Relax for Yield {
 /// for completeness and for targets that, for some reason, miscompile or do not
 /// support spin hint intrinsics despite attempting to generate code for them
 /// (i.e: this is a workaround for possible compiler bugs).
+#[derive(Default)]
 pub struct Loop;
 
 impl Relax for Loop {
-    #[inline(always)]
-    fn new() -> Self {
-        Self
-    }
-
     #[inline(always)]
     fn relax(&mut self) {}
 }
@@ -131,6 +111,7 @@ impl Relax for Loop {
 /// any significant improvement. As with [`Spin`], this implementation is
 /// subject to priority inversion problems, you may want to consider a yielding
 /// strategy or using a scheduler-aware lock.
+#[derive(Default)]
 pub struct SpinBackoff {
     step: Step,
 }
@@ -140,11 +121,6 @@ impl SpinBackoff {
 }
 
 impl Relax for SpinBackoff {
-    #[inline(always)]
-    fn new() -> Self {
-        Self { step: Step(0) }
-    }
-
     #[inline(always)]
     fn relax(&mut self) {
         self.step.spin_to(Self::SPIN_LIMIT);
@@ -163,6 +139,7 @@ impl Relax for SpinBackoff {
 /// locks if you have access to the standard library.
 #[cfg(feature = "yield")]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
+#[derive(Default)]
 pub struct YieldBackoff {
     step: Step,
 }
@@ -176,11 +153,6 @@ impl YieldBackoff {
 #[cfg(feature = "yield")]
 impl Relax for YieldBackoff {
     #[inline(always)]
-    fn new() -> Self {
-        Self { step: Step(0) }
-    }
-
-    #[inline(always)]
     fn relax(&mut self) {
         if self.step.0 <= Self::SPIN_LIMIT {
             self.step.spin();
@@ -192,6 +164,7 @@ impl Relax for YieldBackoff {
 }
 
 /// Keeps count of the number of steps taken.
+#[derive(Default)]
 struct Step(u32);
 
 impl Step {

@@ -1,23 +1,3 @@
-//! A MCS lock implementation that is compliant with the `lock_api` crate.
-//!
-//! The lock is hold for as long as its associated RAII guard is in scope. Once
-//! the guard is dropped, the mutex is freed. Mutex guards are returned by
-//! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
-//! for [`lock_with`] and [`try_lock_with`] methods.
-//!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. Each submodule provides type aliases for
-//! [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See their
-//! documentation for more information.
-//!
-//! [`lock`]: Mutex::lock
-//! [`try_lock`]: Mutex::try_lock
-//! [`lock_with`]: Mutex::lock_with
-//! [`try_lock_with`]: Mutex::try_lock_with
-//! [`relax`]: crate::relax
-//! [`Relax`]: crate::relax::Relax
-
 use core::fmt;
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
@@ -54,7 +34,7 @@ use crate::relax::Relax;
 /// use std::thread;
 /// use std::sync::mpsc::channel;
 ///
-/// use mcslock::Mutex;
+/// use mcslock::barging::Mutex;
 /// use mcslock::relax::Spin;
 ///
 /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -104,7 +84,7 @@ impl<T, R> Mutex<T, R> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -133,7 +113,7 @@ impl<T, R> Mutex<T, R> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -165,7 +145,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -187,7 +167,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         let mut node = MutexNode::new();
         let guard = self.inner.lock(&mut node);
         while !self.try_lock_fast() {
-            let mut relax = R::new();
+            let mut relax = R::default();
             while self.locked.load(Relaxed) {
                 relax.relax();
             }
@@ -211,7 +191,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -260,7 +240,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -302,7 +282,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -343,7 +323,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// # Example
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -368,7 +348,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::Mutex;
+    /// use mcslock::barging::Mutex;
     /// use mcslock::relax::Spin;
     ///
     /// type SpinMutex<T> = Mutex<T, Spin>;
@@ -580,7 +560,7 @@ mod test {
     use std::sync::Arc;
     use std::thread;
 
-    use crate::yields::Mutex;
+    use crate::barging::yields::Mutex;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);
@@ -737,8 +717,8 @@ mod test {
 mod test {
     use loom::{model, thread};
 
+    use crate::barging::yields::Mutex;
     use crate::loom::Guard;
-    use crate::yields::Mutex;
 
     #[test]
     fn threads_join() {

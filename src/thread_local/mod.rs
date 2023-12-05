@@ -1,6 +1,11 @@
 //! A MCS lock implementation that stores queue nodes in the thread local
 //! storage of the waiting threads.
 //!
+//! The `thread_local` implementation of MCS lock is fair, that is, it
+//! guarantees that thread that have waited for longer will be scheduled first
+//! (FIFO). Each waiting thread will spin against its own, thread local atomic
+//! lock state, which then avoids the network contention of the state access.
+//!
 //! This module provide MCS locking APIs that do not require user-side node
 //! instantiation, by managing the queue's nodes allocations internally. Queue
 //! nodes are stored in the thread local storage, therefore this implementation

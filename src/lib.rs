@@ -11,15 +11,57 @@
 //! - works equally well (requiring only O(1) network transactions per lock
 //!   acquisition) on machines with and without coherent caches.
 //!
-//! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
-//! And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
+//! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott]
+//! paper. And a simpler correctness proof of the MCS lock was proposed by
+//! [Johnson and Harathi].
 //!
-//! ## Raw locking APIs
+//! ## Use cases
 //!
-//! Raw locking APIs require exclusive access to a local queue node. This node is
-//! represented by the `MutexNode` type. The `raw` module provides an implementation
-//! that is `no_std` compatible, but also requires that queue nodes must be
-//! instantiated by the callers.
+//! [Spinlocks are usually not what you want]. The majority of use cases are well
+//! covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
+//! These implementations will notify the system that the waiting thread should
+//! be parked, freeing the processor to work on something else.
+//!
+//! Spinlocks are only efficient in very few circunstances where the overhead
+//! of context switching or process rescheduling are greater than busy waiting
+//! for very short periods. Spinlocks can be useful inside operating-system kernels,
+//! on embedded systems or even complement other locking designs. As a reference
+//! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
+//! tailored for optimistic spinning during contention before actually sleeping.
+//! This implementation is `no_std` by default, so it's useful in those environments.
+//!
+//! ## Barging MCS lock
+//!
+//! This implementation will have non-waiting threads race for the lock against
+//! the front of the waiting queue thread, which means this it is an unfair lock.
+//! This implementation is suitable for `no_std` environments, and the locking
+//! APIs are compatible with the `lock_api` crate. See [`mod@barging`] and
+//! [`mod@lock_api`] modules for more information.
+//!
+//! ```
+//! use std::sync::Arc;
+//! use std::thread;
+//!
+//! use mcslock::barging::spins::Mutex;
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let c_mutex = Arc::clone(&mutex);
+//!
+//! thread::spawn(move || {
+//!     *c_mutex.lock() = 10;
+//! })
+//! .join().expect("thread::spawn failed");
+//!
+//! assert_eq!(*mutex.try_lock().unwrap(), 10);
+//! ```
+//!
+//! ## Raw MCS lock
+//!
+//! This implementation operates under FIFO. Raw locking APIs require exclusive
+//! access to a locally accessible queue node. This node is represented by the
+//! [`MutexNode`] type. Callers are responsible for instantiating the queue nodes
+//! themselves. This implementation is `no_std` compatible. See [`mod@raw`]
+//! module for more information.
 //!
 //! ```
 //! use std::sync::Arc;
@@ -42,12 +84,14 @@
 //! assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
 //! ```
 //!
-//! ## Thread local locking APIs
+//! ## Thread local MCS lock
 //!
-//! This crate also provides locking APIs that do not require user-side node
-//! instantiation, by enabling the `thread_local` feature. These APIs require
-//! that critical sections must be provided as closures, and are not compatible
-//! with `no_std` environments as they require thread local storage.
+//! This implementation also operates under FIFO. The locking APIs provided
+//! by this module do not require user-side node instantiation, critical
+//! sections must be provided as closures and at most one lock can be held at
+//! any time within a thread. It is not `no_std` compatible and can be enabled
+//! through the `thread_local` feature. See [`mod@thread_local`] module for
+//! more information.
 //!
 //! ```
 //! # #[cfg(feature = "thread_local")]
@@ -62,43 +106,17 @@
 //! let c_mutex = Arc::clone(&mutex);
 //!
 //! thread::spawn(move || {
-//!     // Node instantiation is not required.
 //!     // Critical section must be defined as closure.
 //!     c_mutex.lock_with(|mut guard| *guard = 10);
 //! })
 //! .join().expect("thread::spawn failed");
 //!
-//! // Node instantiation is not required.
 //! // Critical section must be defined as closure.
 //! assert_eq!(mutex.try_lock_with(|guard| *guard.unwrap()), 10);
 //! # }
 //! # #[cfg(not(feature = "thread_local"))]
 //! # fn main() {}
 //! ```
-//!
-//! ## Use cases
-//!
-//! [Spinlocks are usually not what you want]. The majority of use cases are well
-//! covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
-//! These implementations will notify the system that the waiting thread should
-//! be parked, freeing the processor to work on something else.
-//!
-//! Spinlocks are only efficient in very few circunstances where the overhead
-//! of context switching or process rescheduling are greater than busy waiting
-//! for very short periods. Spinlocks can be useful inside operating-system kernels,
-//! on embedded systems or even complement other locking designs. As a reference
-//! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
-//! tailored for optimistic spinning during contention before actually sleeping.
-//! This implementation is `no_std` by default, so it's useful in those environments.
-//!
-//! ## API for `no_std` environments
-//!
-//! The [`raw`] locking interface of a MCS lock is not quite the same as other
-//! mutexes. To acquire a raw MCS lock, a queue node must be exclusively borrowed for
-//! the lifetime of the guard returned by [`lock`] or [`try_lock`]. This node is exposed
-//! as the [`MutexNode`] type. See their documentation for more information. If you
-//! are looking for spin-based primitives that implement the [lock_api] interface
-//! and also compatible with `no_std`, consider using [spin-rs].
 //!
 //! ## Features
 //!
@@ -124,11 +142,11 @@
 //! the thread local storage of the waiting threads. Thes locking implementations
 //! will panic if recursively acquired. Not `no_std` compatible.
 //!
-//! ### lock_api
+//! ### `lock_api`
 //!
 //! This feature implements the [`RawMutex`] trait from the [lock_api]
-//! crate for [`mcslock::Mutex`]. Aliases are provided by the `lock_api` module.
-//! This features is `no_std` compatible.
+//! crate for [`mcslock::Mutex`]. Aliases are provided by the [`mod@lock_api`]
+//! module. This features is `no_std` compatible.
 //!
 //! ## Related projects
 //!
@@ -166,6 +184,7 @@
 #![allow(clippy::inline_always)]
 #![warn(missing_docs)]
 
+pub mod barging;
 pub mod raw;
 pub mod relax;
 
@@ -179,126 +198,3 @@ pub mod thread_local;
 
 #[cfg(all(loom, test))]
 pub(crate) mod loom;
-
-mod mutex;
-pub use mutex::{Mutex, MutexGuard};
-
-/// A `test-and-set` MCS lock alias that signals the processor that it is running
-/// a busy-wait spin-loop during lock contention.
-pub mod spins {
-    use crate::relax::Spin;
-
-    /// A `test-and-set` MCS lock that implements the [`Spin`] relax strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::spins::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, Spin>;
-
-    /// A `test-and-set` MCS guard that implements the [`Spin`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Spin>;
-}
-
-/// A `test-and-set` MCS lock alias that yields the current time slice to the
-/// OS scheduler during lock contention.
-#[cfg(any(feature = "yield", loom, test))]
-#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-pub mod yields {
-    use crate::relax::Yield;
-
-    /// A `test-and-set` MCS lock that implements the [`Yield`] relax strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::yields::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, Yield>;
-
-    /// A `test-and-set` MCS guard that implements the [`Yield`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Yield>;
-}
-
-/// A `test-and-set` MCS lock alias that rapidly spins without telling the CPU
-/// to do any power down during lock contention.
-pub mod loops {
-    use crate::relax::Loop;
-
-    /// A `test-and-set` MCS lock that implements the [`Loop`] relax strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::loops::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, Loop>;
-
-    /// A `test-and-set` MCS guard that implements the [`Loop`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Loop>;
-}
-
-/// A `test-and-set` MCS lock alias that, during lock contention, will perform
-/// exponential backoff while signaling the processor that it is running a
-/// busy-wait spin-loop.
-pub mod spins_backoff {
-    use crate::relax::SpinBackoff;
-
-    /// A `test-and-set` MCS lock that implements the [`SpinBackoff`] relax
-    /// strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::spins_backoff::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
-
-    /// A `test-and-set` MCS guard that implements the [`SpinBackoff`] relax
-    /// strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, SpinBackoff>;
-}
-
-/// A `test-and-set` MCS lock alias that, during lock contention, will perform
-/// exponential backoff while spinning up to a threshold, then yields back to
-/// the OS scheduler.
-#[cfg(feature = "yield")]
-#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-pub mod yields_backoff {
-    use crate::relax::YieldBackoff;
-
-    /// A `test-and-set` MCS lock that implements the [`YieldBackoff`] relax
-    /// strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::yields_backoff::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
-
-    /// A `test-and-set` MCS guard that implements the [`YieldBackoff`] relax
-    /// strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, YieldBackoff>;
-}
