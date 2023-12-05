@@ -165,7 +165,7 @@ will panic if recursively acquired. Not `no_std` compatible.
 
 ### lock_api
 
-This feature implements the `RawMutex` trait from the [lock_api] crate for
+This feature implements the [`RawMutex`] trait from the [lock_api] crate for
 `barging::Mutex`. Aliases are provided by the `lock_api` module. This feature
 is `no_std` compatible.
 
