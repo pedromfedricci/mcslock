@@ -55,7 +55,7 @@ cargo doc --all-features --open
 This implementation will have non-waiting threads race for the lock against
 the front of the waiting queue thread, which means this it is an unfair lock.
 This implementation is suitable for `no_std` environments, and the locking
-APIs are compatible with the `lock_api` crate. See `barging` and `lock_api`
+APIs are compatible with the [lock_api] crate. See `barging` and `lock_api`
 modules for more information.
 
 ```rust
