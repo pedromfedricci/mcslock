@@ -1,7 +1,7 @@
 //! Locking interfaces for MCS lock that are compatible with [lock_api].
 //!
 //! This module exports [`lock_api::Mutex`] and [`lock_api::MutexGuard`] aliases
-//! with a `test-and-set` MCS lock and guard as their inner types.
+//! with a `barging` MCS lock and guard as their inner types.
 //!
 //! [`mcslock::Mutex`] implements the [`RawMutex`] trait.
 //!
@@ -14,18 +14,18 @@
 
 /// A lock that provides mutually exclusive data access that is compatible with
 /// [`lock_api`](https://crates.io/crates/lock_api).
-pub type Mutex<T, R> = lock_api::Mutex<crate::Mutex<(), R>, T>;
+pub type Mutex<T, R> = lock_api::Mutex<crate::barging::Mutex<(), R>, T>;
 
 /// A guard that provides mutable data access that is compatible with
 /// [`lock_api`](https://crates.io/crates/lock_api).
-pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, crate::Mutex<(), R>, T>;
+pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, crate::barging::Mutex<(), R>, T>;
 
-/// A `test-and-set` MCS lock alias that signals the processor that it is running
+/// A `barging` MCS lock alias that signals the processor that it is running
 /// a busy-wait spin-loop during lock contention.
 pub mod spins {
     use crate::relax::Spin;
 
-    /// A `test-and-set` MCS lock that implements the [`Spin`] relax strategy
+    /// A `barging` MCS lock that implements the [`Spin`] relax strategy
     /// and compatible with the `lock_api` crate.
     ///
     /// # Example
@@ -39,19 +39,19 @@ pub mod spins {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Spin>;
 
-    /// A `test-and-set` MCS guard that implements the [`Spin`] relax strategy
+    /// A `barging` MCS guard that implements the [`Spin`] relax strategy
     /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Spin>;
 }
 
-/// A `test-and-set` MCS lock alias that yields the current time slice to the
+/// A `barging` MCS lock alias that yields the current time slice to the
 /// OS scheduler during lock contention.
 #[cfg(any(feature = "yield", loom, test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub mod yields {
     use crate::relax::Yield;
 
-    /// A `test-and-set` MCS lock that implements the [`Yield`] relax strategy
+    /// A `barging` MCS lock that implements the [`Yield`] relax strategy
     /// and compatible with the `lock_api` crate.
     ///
     /// # Example
@@ -65,17 +65,17 @@ pub mod yields {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Yield>;
 
-    /// A `test-and-set` MCS guard that implements the [`Yield`] relax strategy
+    /// A `barging` MCS guard that implements the [`Yield`] relax strategy
     /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Yield>;
 }
 
-/// A `test-and-set` MCS lock alias that rapidly spins without telling the CPU
+/// A `barging` MCS lock alias that rapidly spins without telling the CPU
 /// to do any power down during lock contention.
 pub mod loops {
     use crate::relax::Loop;
 
-    /// A `test-and-set` MCS lock that implements the [`Loop`] relax strategy
+    /// A `barging` MCS lock that implements the [`Loop`] relax strategy
     /// and compatible with the `lock_api` crate.
     ///
     /// # Example
@@ -89,18 +89,18 @@ pub mod loops {
     /// ```
     pub type Mutex<T> = super::Mutex<T, Loop>;
 
-    /// A `test-and-set` MCS guard that implements the [`Loop`] relax strategy
+    /// A `barging` MCS guard that implements the [`Loop`] relax strategy
     /// and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Loop>;
 }
 
-/// A `test-and-set` MCS lock alias that, during lock contention, will perform
+/// A `barging` MCS lock alias that, during lock contention, will perform
 /// exponential backoff while signaling the processor that it is running a
 /// busy-wait spin-loop.
 pub mod spins_backoff {
     use crate::relax::SpinBackoff;
 
-    /// A `test-and-set` MCS lock that implements the [`SpinBackoff`] relax
+    /// A `barging` MCS lock that implements the [`SpinBackoff`] relax
     /// strategy and compatible with the `lock_api` crate.
     ///
     /// # Example
@@ -114,12 +114,12 @@ pub mod spins_backoff {
     /// ```
     pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
 
-    /// A `test-and-set` MCS guard that implements the [`SpinBackoff`] relax
+    /// A `barging` MCS guard that implements the [`SpinBackoff`] relax
     /// strategy and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, SpinBackoff>;
 }
 
-/// A `test-and-set` MCS lock alias that, during lock contention, will perform
+/// A `barging` MCS lock alias that, during lock contention, will perform
 /// exponential backoff while spinning up to a threshold, then yields back to
 /// the OS scheduler.
 #[cfg(feature = "yield")]
@@ -127,7 +127,7 @@ pub mod spins_backoff {
 pub mod yields_backoff {
     use crate::relax::YieldBackoff;
 
-    /// A `test-and-set` MCS lock that implements the [`YieldBackoff`] relax
+    /// A `barging` MCS lock that implements the [`YieldBackoff`] relax
     /// strategy and compatible with the `lock_api` crate.
     ///
     /// # Example
@@ -141,7 +141,7 @@ pub mod yields_backoff {
     /// ```
     pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
 
-    /// A `test-and-set` MCS guard that implements the [`YieldBackoff`] relax
+    /// A `barging` MCS guard that implements the [`YieldBackoff`] relax
     /// strategy and compatible with the `lock_api` crate.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, YieldBackoff>;
 }
