@@ -144,7 +144,7 @@ fn main() {
 This crate dos not provide any default features. Features that can be enabled
 are:
 
-### `yield`
+### yield
 
 The `yield` feature requires linking to the standard library, so it is not
 suitable for `no_std` environments. By enabling the `yield` feature, instead
@@ -155,7 +155,7 @@ this feature if your intention is to to actually do optimistic spinning. The
 default implementation calls [`core::hint::spin_loop`], which does in fact
 just simply busy-waits.
 
-### `thread_local`
+### thread_local
 
 The `thread_local` feature provides locking APIs that do not require user-side
 node instantiation, but critical sections must be provided as closures. This
@@ -163,7 +163,7 @@ implementation handles the queue's nodes transparently, by storing them in
 the thread local storage of the waiting threads. These locking implementations
 will panic if recursively acquired. Not `no_std` compatible.
 
-### `lock_api`
+### lock_api
 
 This feature implements the `RawMutex` trait from the [lock_api] crate for
 `barging::Mutex`. Aliases are provided by the `lock_api` module. This feature

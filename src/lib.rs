@@ -124,7 +124,7 @@
 //! This crate dos not provide any default features. Features that can be enabled
 //! are:
 //!
-//! ### `yield`
+//! ### yield
 //!
 //! The `yield` feature requires linking to the standard library, so it is not
 //! suitable for `no_std` environments. By enabling the `yield` feature, instead
@@ -135,7 +135,7 @@
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
 //!
-//! ### `thread_local`
+//! ### thread_local
 //!
 //! The `thread_local` feature provides locking APIs that do not require user-side
 //! node instantiation, but critical sections must be provided as closures. This
@@ -143,7 +143,7 @@
 //! the thread local storage of the waiting threads. Thes locking implementations
 //! will panic if recursively acquired. Not `no_std` compatible.
 //!
-//! ### `lock_api`
+//! ### lock_api
 //!
 //! This feature implements the [`RawMutex`] trait from the [lock_api]
 //! crate for [`barging::Mutex`]. Aliases are provided by the
@@ -180,6 +180,7 @@
 #![cfg_attr(test, allow(clippy::needless_pass_by_value))]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::inline_always)]
+#![allow(clippy::doc_markdown)]
 #![warn(missing_docs)]
 
 pub mod barging;
