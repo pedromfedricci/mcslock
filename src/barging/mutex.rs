@@ -210,7 +210,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// Borrows of the guard or its data cannot escape the given closure.
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::spins::Mutex;
+    /// use mcslock::barging::spins::Mutex;
     ///
     /// let mutex = Mutex::new(1);
     /// let data = mutex.lock_with(|guard| &*guard);
@@ -303,7 +303,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// Borrows of the guard or its data cannot escape the given closure.
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::spins::Mutex;
+    /// use mcslock::barging::spins::Mutex;
     ///
     /// let mutex = Mutex::new(1);
     /// let data = mutex.try_lock_with(|guard| &*guard.unwrap());

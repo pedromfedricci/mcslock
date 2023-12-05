@@ -1,12 +1,12 @@
-//! A barging MCS lock implementation that is compliant with the `lock_api` crate.
+//! A barging MCS lock implementation that is compliant with the [lock_api] crate.
 //!
 //! This implementation will have non-waiting threads race for the lock against
 //! the front of the waiting queue thread. If the front of the queue thread
 //! looses the race, it will simply keep spinning, while holding its position
 //! in the queue. By allowing barging instead of forcing FIFO, a higher throughput
 //! can be achieved when the lock is heavily contended. This implementation is
-//! suitable for `no_std` environments, and the locking API is compatible with
-//! the `lock_api` crate (see `lock_api` feature).
+//! suitable for `no_std` environments, and the locking APIs are compatible with
+//! the [lock_api] crate (see `lock_api` feature).
 //!
 //! The lock is hold for as long as its associated RAII guard is in scope. Once
 //! the guard is dropped, the mutex is freed. Mutex guards are returned by
@@ -19,6 +19,7 @@
 //! [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See their
 //! documentation for more information.
 //!
+//! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
 //! [`lock_with`]: Mutex::lock_with

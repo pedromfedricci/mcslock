@@ -1,15 +1,23 @@
 //! Locking interfaces for MCS lock that are compatible with [lock_api].
 //!
-//! This module exports [`lock_api::Mutex`] and [`lock_api::MutexGuard`] aliases
-//! with a `barging` MCS lock and guard as their inner types.
+//! This module exports [`lock_api::Mutex`] and [`lock_api::MutexGuard`] type
+//! aliases with a `barging` MCS lock and guard as their inner types. The
+//! [`barging::Mutex`] type will implement the [`lock_api::RawMutex`] trait when
+//! this feature is enabled.
 //!
-//! [`mcslock::Mutex`] implements the [`RawMutex`] trait.
+//! The Mutex is generic over the relax strategy. User may choose a strategy
+//! as long as it implements the [`Relax`] trait. There is a number of strategies
+//! provided by the [`relax`] module. The following modules provide type aliases
+//! for [`lock_api::Mutex`] and [`lock_api::MutexGuard`] associated with one
+//! relax strategy. See their documentation for more information.
 //!
+//! [`relax`]: crate::relax
+//! [`Relax`]: crate::relax::Relax
+//! [`barging::Mutex`]: crate::barging::Mutex
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 //! [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
-//! [`mcslock::Mutex`]: crate::Mutex
-//! [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
+//! [`lock_api::RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
 //! [`RawMutexFair`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutexFair.html
 
 /// A lock that provides mutually exclusive data access that is compatible with

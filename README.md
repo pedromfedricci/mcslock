@@ -15,10 +15,11 @@ And a simpler correctness proof of the MCS lock was proposed by [Johnson and Har
 
 ## Use cases
 
-[Spinlocks are usually not what you want]. The majority of use cases are well
-covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
-These implementations will notify the system that the waiting thread should
-be parked, freeing the processor to work on something else.
+It is noteworthy to mention that [spinlocks are usually not what you want]. The
+majority of use cases are well covered by OS-based mutexes like
+[`std::sync::Mutex`] or [`parking_lot::Mutex`]. These implementations will notify
+the system that the waiting thread should be parked, freeing the processor to
+work on something else.
 
 Spinlocks are only efficient in very few circunstances where the overhead
 of context switching or process rescheduling are greater than busy waiting
@@ -162,11 +163,11 @@ implementation handles the queue's nodes transparently, by storing them in
 the thread local storage of the waiting threads. These locking implementations
 will panic if recursively acquired. Not `no_std` compatible.
 
-### lock_api
+### `lock_api`
 
-This feature implements the [`RawMutex`] trait from the [lock_api]
-crate for `mcslock::Mutex`. Aliases are provided by the `lock_api` module.
-This features is `no_std` compatible.
+This feature implements the `RawMutex` trait from the [lock_api] crate for
+`barging::Mutex`. Aliases are provided by the `lock_api` module. This feature
+is `no_std` compatible.
 
 ## Related projects
 
@@ -205,7 +206,7 @@ each of your dependencies, including this one.
 [spin-rs]: https://docs.rs/spin/latest/spin
 [lock_api]: https://docs.rs/lock_api/latest/lock_api
 [Linux kernel mutexes]: https://www.kernel.org/doc/html/latest/locking/mutex-design.html
-[Spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
+[spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 [cargo-crev]: https://github.com/crev-dev/cargo-crev
