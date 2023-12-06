@@ -39,11 +39,11 @@ pub mod spins {
     /// # Example
     ///
     /// ```
-    /// use mcslock::spins::Mutex;
+    /// use mcslock::lock_api::spins::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Spin>;
 
@@ -65,11 +65,11 @@ pub mod yields {
     /// # Example
     ///
     /// ```
-    /// use mcslock::yields::Mutex;
+    /// use mcslock::lock_api::yields::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Yield>;
 
@@ -89,11 +89,11 @@ pub mod loops {
     /// # Example
     ///
     /// ```
-    /// use mcslock::loops::Mutex;
+    /// use mcslock::lock_api::loops::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Loop>;
 
@@ -114,11 +114,11 @@ pub mod spins_backoff {
     /// # Example
     ///
     /// ```
-    /// use mcslock::spins_backoff::Mutex;
+    /// use mcslock::lock_api::spins_backoff::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
 
@@ -141,11 +141,11 @@ pub mod yields_backoff {
     /// # Example
     ///
     /// ```
-    /// use mcslock::yields_backoff::Mutex;
+    /// use mcslock::lock_api::yields_backoff::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
 

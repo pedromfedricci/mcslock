@@ -39,6 +39,10 @@ loom = { version = "0.7" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[[test]]
+name = "lock_api"
+required-features = ["lock_api", "yield"]
+
 [[example]]
 name = "thread_local"
 required-features = ["thread_local"]

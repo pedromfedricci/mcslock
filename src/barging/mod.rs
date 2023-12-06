@@ -43,8 +43,8 @@ pub mod spins {
     /// use mcslock::barging::spins::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Spin>;
 
@@ -67,8 +67,8 @@ pub mod yields {
     /// use mcslock::barging::yields::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Yield>;
 
@@ -89,8 +89,8 @@ pub mod loops {
     /// use mcslock::barging::loops::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, Loop>;
 
@@ -113,8 +113,8 @@ pub mod spins_backoff {
     /// use mcslock::barging::spins_backoff::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
 
@@ -140,8 +140,8 @@ pub mod yields_backoff {
     /// use mcslock::barging::yields_backoff::Mutex;
     ///
     /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
+    /// let guard = mutex.lock();
+    /// assert_eq!(*guard, 0);
     /// ```
     pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
 

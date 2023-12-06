@@ -1,5 +1,5 @@
-//! A MCS lock implementation that requires instantiation and exclusive access
-//! to a queue node.
+//! A MCS lock implementation that requires exclusive access to a locally
+//! accessible queue node.
 //!
 //! The `raw` implementation of MCS lock is fair, that is, it guarantees that
 //! thread that have waited for longer will be scheduled first (FIFO). Each
@@ -7,7 +7,7 @@
 //! state, which then avoids the network contention of the state access.
 //!
 //! This module provides an implementation that is `no_std` compatible, but
-//! also requires that queue nodes must be instantiated by the callers. Queue
+//! also requires that queue nodes must be allocated by the callers. Queue
 //! nodes are represented by the [`MutexNode`] type.
 //!
 //! The lock is hold for as long as its associated RAII guard is in scope. Once

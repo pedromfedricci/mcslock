@@ -111,7 +111,7 @@ fn main() {
 ## Thread local MCS lock
 
 This implementation also operates under FIFO. The locking APIs provided
-by this module do not require user-side node instantiation, critical
+by this module do not require user-side node allocation, critical
 sections must be provided as closures and at most one lock can be held at
 any time within a thread. It is not `no_std` compatible and can be enabled
 through the `thread_local` feature. See `thread_local` module for more
@@ -158,7 +158,7 @@ just simply busy-waits.
 ### thread_local
 
 The `thread_local` feature provides locking APIs that do not require user-side
-node instantiation, but critical sections must be provided as closures. This
+node allocation, but critical sections must be provided as closures. This
 implementation handles the queue's nodes transparently, by storing them in
 the thread local storage of the waiting threads. These locking implementations
 will panic if recursively acquired. Not `no_std` compatible.

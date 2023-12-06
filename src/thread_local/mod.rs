@@ -7,7 +7,7 @@
 //! lock state, which then avoids the network contention of the state access.
 //!
 //! This module provide MCS locking APIs that do not require user-side node
-//! instantiation, by managing the queue's nodes allocations internally. Queue
+//! allocation, by managing the queue's node allocations internally. Queue
 //! nodes are stored in the thread local storage, therefore this implementation
 //! requires support from the standard library. Critical sections must be
 //! provided to [`lock_with`] and [`try_lock_with`] as closures. Closure arguments
@@ -22,9 +22,10 @@
 //!
 //! # Panics
 //!
-//! The `thread_local` [`Mutex`] implementation does not allow recursive locking,
-//! doing so will cause a panic. See [`lock_with`] and [`try_lock_with`] functions
-//! for more information.
+//! The `thread_local` [`Mutex`] implementation only allows at most on lock held
+//! within a single thread at any time. Trying to acquire a second lock while a
+//! guard is alive will cause a panic. See [`lock_with`] and [`try_lock_with`]
+//! functions for more information.
 //!
 //! [`lock_with`]: Mutex::lock_with
 //! [`try_lock_with`]: Mutex::try_lock_with

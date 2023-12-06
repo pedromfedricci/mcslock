@@ -20,12 +20,6 @@ use crate::relax::Relax;
 /// provided as closure arguments from [`lock_with`] and [`try_lock_with`], which
 /// guarantees that the data is only ever accessed when the mutex is locked.
 ///
-/// # Panics
-///
-/// The `thread_local` [`Mutex`] implementation does not allow recursive locking,
-/// doing so will cause a panic. See [`lock_with`] and [`try_lock_with`] functions
-/// for more information.
-///
 /// # Examples
 ///
 /// ```
@@ -133,9 +127,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Panics
     ///
-    /// This lock implementation cannot be recursively acquired, doing so it
-    /// result in a panic. That is the case for both `lock_with` and
-    /// `try_lock_with`.
+    /// At most one lock of this implementation might be held within a single
+    /// thread at any time. Trying to acquire a second lock while a guard is
+    /// still alive will cause a panic.
     ///
     /// # Examples
     ///
@@ -205,9 +199,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Panics
     ///
-    /// This lock implementation cannot be recursively acquired, doing so it
-    /// result in a panic. That is the case for both `lock_with` and
-    /// `try_lock_with`.
+    /// At most one lock of this implementation might be held within a single
+    /// thread at any time. Trying to acquire a second lock while a guard is
+    /// still alive will cause a panic.
     ///
     /// # Examples
     ///
