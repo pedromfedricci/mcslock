@@ -34,6 +34,7 @@ pub use mutex::{Mutex, MutexGuard, MutexNode};
 /// A `raw` MCS lock alias that signals the processor that it is running a
 /// busy-wait spin-loop during lock contention.
 pub mod spins {
+    use super::{Mutex as RawMutex, MutexGuard as RawMutexGuard};
     use crate::relax::Spin;
 
     pub use super::MutexNode;
@@ -50,17 +51,45 @@ pub mod spins {
     /// let guard = mutex.lock(&mut node);
     /// assert_eq!(*guard, 0);
     /// ```
-    pub type Mutex<T> = super::Mutex<T, Spin>;
+    pub type Mutex<T> = RawMutex<T, Spin>;
 
     /// A `raw` MCS guard that implements the [`Spin`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Spin>;
+    pub type MutexGuard<'a, T> = RawMutexGuard<'a, T, Spin>;
+
+    /// A `raw` MCS lock alias that, during lock contention, will perform
+    /// exponential backoff while signaling the processor that it is running a
+    /// busy-wait spin-loop.
+    pub mod backoff {
+        use super::{RawMutex, RawMutexGuard};
+        use crate::relax::SpinBackoff;
+
+        pub use crate::raw::MutexNode;
+
+        /// A `raw` MCS lock that implements the [`SpinBackoff`] relax strategy.
+        ///
+        /// # Example
+        ///
+        /// ```
+        /// use mcslock::raw::spins::backoff::{Mutex, MutexNode};
+        ///
+        /// let mutex = Mutex::new(0);
+        /// let mut node = MutexNode::new();
+        /// let guard = mutex.lock(&mut node);
+        /// assert_eq!(*guard, 0);
+        /// ```
+        pub type Mutex<T> = RawMutex<T, SpinBackoff>;
+
+        /// A `raw` MCS guard that implements the [`SpinBackoff`] relax strategy.
+        pub type MutexGuard<'a, T> = RawMutexGuard<'a, T, SpinBackoff>;
+    }
 }
 
-/// A `raw` MCS lock alias that yields the current time slice to the
-/// OS scheduler during lock contention.
+/// A `raw` MCS lock alias that yields the current time slice to the OS scheduler
+/// during lock contention.
 #[cfg(any(feature = "yield", loom, test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub mod yields {
+    use super::{Mutex as RawMutex, MutexGuard as RawMutexGuard};
     use crate::relax::Yield;
 
     pub use super::MutexNode;
@@ -77,10 +106,38 @@ pub mod yields {
     /// let guard = mutex.lock(&mut node);
     /// assert_eq!(*guard, 0);
     /// ```
-    pub type Mutex<T> = super::Mutex<T, Yield>;
+    pub type Mutex<T> = RawMutex<T, Yield>;
 
     /// A `raw` MCS guard that implements the [`Yield`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Yield>;
+    pub type MutexGuard<'a, T> = RawMutexGuard<'a, T, Yield>;
+
+    /// A `raw` MCS lock alias that, during lock contention, will perform
+    /// exponential backoff while spinning up to a threshold, then yields
+    /// back to the OS scheduler.
+    #[cfg(feature = "yield")]
+    pub mod backoff {
+        use super::{RawMutex, RawMutexGuard};
+        use crate::relax::YieldBackoff;
+
+        pub use super::MutexNode;
+
+        /// A `raw` MCS lock that implements the [`YieldBackoff`] relax strategy.
+        ///
+        /// # Example
+        ///
+        /// ```
+        /// use mcslock::raw::yields::backoff::{Mutex, MutexNode};
+        ///
+        /// let mutex = Mutex::new(0);
+        /// let mut node = MutexNode::new();
+        /// let guard = mutex.lock(&mut node);
+        /// assert_eq!(*guard, 0);
+        /// ```
+        pub type Mutex<T> = RawMutex<T, YieldBackoff>;
+
+        /// A `raw` MCS guard that implements the [`YieldBackoff`] relax strategy.
+        pub type MutexGuard<'a, T> = RawMutexGuard<'a, T, YieldBackoff>;
+    }
 }
 
 /// A `raw` MCS lock alias that rapidly spins without telling the CPU to do any
@@ -106,56 +163,4 @@ pub mod loops {
 
     /// A `raw` MCS guard that implements the [`Loop`] relax strategy.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Loop>;
-}
-
-/// A `raw` MCS lock alias that, during lock contention, will perform exponential
-/// backoff while signaling the processor that it is running a busy-wait spin-loop.
-pub mod spins_backoff {
-    use crate::relax::SpinBackoff;
-
-    pub use super::MutexNode;
-
-    /// A `raw` MCS lock that implements the [`SpinBackoff`] relax strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::raw::spins_backoff::{Mutex, MutexNode};
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let mut node = MutexNode::new();
-    /// let guard = mutex.lock(&mut node);
-    /// assert_eq!(*guard, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
-
-    /// A `raw` MCS guard that implements the [`SpinBackoff`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, SpinBackoff>;
-}
-
-/// A `raw` MCS lock alias that, during lock contention, will perform exponential
-/// backoff while spinning up to a threshold, then yields back to the OS scheduler.
-#[cfg(feature = "yield")]
-#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-pub mod yields_backoff {
-    use crate::relax::YieldBackoff;
-
-    pub use super::MutexNode;
-
-    /// A `raw` MCS lock that implements the [`YieldBackoff`] relax strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::raw::yields_backoff::{Mutex, MutexNode};
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let mut node = MutexNode::new();
-    /// let guard = mutex.lock(&mut node);
-    /// assert_eq!(*guard, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
-
-    /// A `raw` MCS guard that implements the [`YieldBackoff`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, YieldBackoff>;
 }

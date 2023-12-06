@@ -38,6 +38,7 @@ pub use mutex::{Mutex, MutexGuard};
 /// A `thread_local` MCS lock alias that signals the processor that it is running
 /// a busy-wait spin-loop during lock contention.
 pub mod spins {
+    use super::{Mutex as ThreadLocalMutex, MutexGuard as ThreadLocalMutexGuard};
     use crate::relax::Spin;
 
     /// A `thread_local` MCS lock that implements the [`Spin`] relax strategy.
@@ -51,10 +52,36 @@ pub mod spins {
     /// let data = mutex.lock_with(|guard| *guard);
     /// assert_eq!(data, 0);
     /// ```
-    pub type Mutex<T> = super::Mutex<T, Spin>;
+    pub type Mutex<T> = ThreadLocalMutex<T, Spin>;
 
     /// A `thread_local` MCS guard that implements the [`Spin`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Spin>;
+    pub type MutexGuard<'a, T> = ThreadLocalMutexGuard<'a, T, Spin>;
+
+    /// A `thread_local` MCS lock alias that, during lock contention, will perform
+    /// exponential backoff while signaling the processor that it is running a
+    /// busy-wait spin-loop.
+    pub mod backoff {
+        use super::{ThreadLocalMutex, ThreadLocalMutexGuard};
+        use crate::relax::SpinBackoff;
+
+        /// A `thread_local` MCS lock that implements the [`SpinBackoff`] relax
+        /// strategy.
+        ///
+        /// # Example
+        ///
+        /// ```
+        /// use mcslock::thread_local::spins::backoff::Mutex;
+        ///
+        /// let mutex = Mutex::new(0);
+        /// let data = mutex.lock_with(|guard| *guard);
+        /// assert_eq!(data, 0);
+        /// ```
+        pub type Mutex<T> = ThreadLocalMutex<T, SpinBackoff>;
+
+        /// A `thread_local` MCS guard that implements the [`SpinBackoff`] relax
+        /// strategy.
+        pub type MutexGuard<'a, T> = ThreadLocalMutexGuard<'a, T, SpinBackoff>;
+    }
 }
 
 /// A `thread_local` MCS lock alias that yields the current time slice to the
@@ -62,6 +89,7 @@ pub mod spins {
 #[cfg(any(feature = "yield", loom, test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub mod yields {
+    use super::{Mutex as ThreadLocalMutex, MutexGuard as ThreadLocalMutexGuard};
     use crate::relax::Yield;
 
     /// A `thread_local` MCS lock that implements the [`Yield`] relax strategy.
@@ -75,10 +103,37 @@ pub mod yields {
     /// let data = mutex.lock_with(|guard| *guard);
     /// assert_eq!(data, 0);
     /// ```
-    pub type Mutex<T> = super::Mutex<T, Yield>;
+    pub type Mutex<T> = ThreadLocalMutex<T, Yield>;
 
     /// A `thread_local` MCS guard that implements the [`Yield`] relax strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Yield>;
+    pub type MutexGuard<'a, T> = ThreadLocalMutexGuard<'a, T, Yield>;
+
+    /// A `thread_local` MCS lock alias that, during lock contention, will perform
+    /// exponential backoff while spinning up to a threshold, then yields back to
+    /// the OS scheduler.
+    #[cfg(feature = "yield")]
+    pub mod backoff {
+        use super::{ThreadLocalMutex, ThreadLocalMutexGuard};
+        use crate::relax::YieldBackoff;
+
+        /// A `thread_local` MCS lock that implements the [`YieldBackoff`] relax
+        /// strategy.
+        ///
+        /// # Example
+        ///
+        /// ```
+        /// use mcslock::thread_local::yields::backoff::Mutex;
+        ///
+        /// let mutex = Mutex::new(0);
+        /// let data = mutex.lock_with(|guard| *guard);
+        /// assert_eq!(data, 0);
+        /// ```
+        pub type Mutex<T> = ThreadLocalMutex<T, YieldBackoff>;
+
+        /// A `thread_local` MCS guard that implements the [`YieldBackoff`] relax
+        /// strategy.
+        pub type MutexGuard<'a, T> = ThreadLocalMutexGuard<'a, T, YieldBackoff>;
+    }
 }
 
 /// A `thread_local` MCS lock alias that rapidly spins without telling the CPU
@@ -101,56 +156,4 @@ pub mod loops {
 
     /// A `thread_local` MCS guard that implements the [`Loop`] relax strategy.
     pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, Loop>;
-}
-
-/// A `thread_local` MCS lock alias that, during lock contention, will perform
-/// exponential backoff while signaling the processor that it is running a
-/// busy-wait spin-loop.
-pub mod spins_backoff {
-    use crate::relax::SpinBackoff;
-
-    /// A `thread_local` MCS lock that implements the [`SpinBackoff`] relax
-    /// strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::thread_local::spins_backoff::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, SpinBackoff>;
-
-    /// A `thread_local` MCS guard that implements the [`SpinBackoff`] relax
-    /// strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, SpinBackoff>;
-}
-
-/// A `thread_local` MCS lock alias that, during lock contention, will perform
-/// exponential backoff while spinning up to a threshold, then yields back to
-/// the OS scheduler.
-#[cfg(feature = "yield")]
-#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-pub mod yields_backoff {
-    use crate::relax::YieldBackoff;
-
-    /// A `thread_local` MCS lock that implements the [`YieldBackoff`] relax
-    /// strategy.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mcslock::thread_local::yields_backoff::Mutex;
-    ///
-    /// let mutex = Mutex::new(0);
-    /// let data = mutex.lock_with(|guard| *guard);
-    /// assert_eq!(data, 0);
-    /// ```
-    pub type Mutex<T> = super::Mutex<T, YieldBackoff>;
-
-    /// A `thread_local` MCS guard that implements the [`YieldBackoff`] relax
-    /// strategy.
-    pub type MutexGuard<'a, T> = super::MutexGuard<'a, T, YieldBackoff>;
 }
