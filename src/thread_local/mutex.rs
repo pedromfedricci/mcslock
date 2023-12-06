@@ -1,3 +1,5 @@
+#![allow(clippy::option_if_let_else)]
+
 use core::cell::RefCell;
 use core::fmt;
 use core::marker::PhantomData;
@@ -10,6 +12,13 @@ use crate::loom::{Guard, GuardDeref, GuardDerefMut};
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 use crate::relax::Relax;
+
+/// The panic message as a string literal.
+macro_rules! literal_panic_msg {
+    () => {
+        "At most one thread_local MCS lock can be held at any time within a thread"
+    };
+}
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -309,6 +318,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     }
 
     /// Runs `f` over the inner mutex and the thread local node.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the thread local [`MutexNode`] is already in use by a held
+    /// lock from this thread.
     #[cfg(not(all(loom, test)))]
     fn node_with<F, Ret>(&self, f: F) -> Ret
     where
@@ -319,10 +333,18 @@ impl<T: ?Sized, R> Mutex<T, R> {
                 RefCell::new(MutexNode::new())
             }
         }
-        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
+        NODE.with(|node| match node.try_borrow_mut() {
+            Ok(mut node) => f(&self.0, &mut node),
+            Err(_) => Self::panic_already_held(),
+        })
     }
 
     /// Runs `f` over the inner mutex and the thread local node.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if the thread local [`MutexNode`] is already in use by a held
+    /// lock from this thread.
     #[cfg(all(loom, test))]
     fn node_with<F, Ret>(&self, f: F) -> Ret
     where
@@ -333,7 +355,18 @@ impl<T: ?Sized, R> Mutex<T, R> {
                 RefCell::new(MutexNode::new())
             }
         }
-        NODE.with(|node| f(&self.0, &mut node.borrow_mut()))
+        NODE.with(|node| match node.try_borrow_mut() {
+            Ok(mut node) => f(&self.0, &mut node),
+            Err(_) => Self::panic_already_held(),
+        })
+    }
+
+    /// Panics the thread with an appropiate message.
+    #[inline(never)]
+    #[track_caller]
+    #[cold]
+    fn panic_already_held() -> ! {
+        panic!("{}", literal_panic_msg!())
     }
 }
 
@@ -543,7 +576,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = literal_panic_msg!()]
     fn test_lock_arc_nested() {
         // Tests nested locks are not allowed and
         // will panic, else this would be UB.
@@ -559,7 +592,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = literal_panic_msg!()]
     fn test_recursive_lock() {
         let arc = Arc::new(Mutex::new(1));
         let (tx, rx) = channel();
