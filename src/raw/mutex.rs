@@ -48,7 +48,7 @@ impl MutexNodeInit {
 
     /// Returns a raw mutable pointer of this node.
     const fn as_ptr(&self) -> *mut Self {
-        self as *const _ as *mut _
+        (self as *const Self).cast_mut()
     }
 }
 
@@ -284,6 +284,15 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
+    ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = mutex.try_lock_with(|guard| &*guard.unwrap());
+    /// ```
     pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
@@ -333,7 +342,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         if !pred.is_null() {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
-            let mut relax = R::new();
+            let mut relax = R::default();
             while node.locked.load(Relaxed) {
                 relax.relax();
             }
@@ -372,6 +381,15 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
+    ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = mutex.lock_with(|guard| &*guard);
+    /// ```
     pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
@@ -390,7 +408,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            let mut relax = R::new();
+            let mut relax = R::default();
             loop {
                 next = node.next.load(Relaxed);
                 let true = next.is_null() else { break };
@@ -648,19 +666,6 @@ mod test {
         drop(m.lock(&mut node));
         drop(m.lock(&mut node));
     }
-
-    // #[test]
-    // fn must_not_compile() {
-    //     let m = Mutex::new(1);
-    //     let guard = m.lock_with(|guard| guard);
-    //     let _value = *guard;
-
-    //     let m = Mutex::new(1);
-    //     let _val = m.lock_with(|guard| &mut *guard);
-
-    //     let m = Mutex::new(1);
-    //     let _val = m.lock_with(|guard| &*guard);
-    // }
 
     #[test]
     fn lots_and_lots() {

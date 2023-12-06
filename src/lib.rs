@@ -11,15 +11,58 @@
 //! - works equally well (requiring only O(1) network transactions per lock
 //!   acquisition) on machines with and without coherent caches.
 //!
-//! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
-//! And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
+//! This algorithm and serveral others were introduced by [Mellor-Crummey and Scott]
+//! paper. And a simpler correctness proof of the MCS lock was proposed by
+//! [Johnson and Harathi].
 //!
-//! ## Raw locking APIs
+//! ## Use cases
 //!
-//! Raw locking APIs require exclusive access to a local queue node. This node is
-//! represented by the `MutexNode` type. The `raw` module provides an implementation
-//! that is `no_std` compatible, but also requires that queue nodes must be
-//! instantiated by the callers.
+//! It is noteworthy to mention that [spinlocks are usually not what you want].
+//! The majority of use cases are well covered by OS-based mutexes like
+//! [`std::sync::Mutex`] or [`parking_lot::Mutex`]. These implementations will
+//! notify the system that the waiting thread should be parked, freeing the
+//! processor to work on something else.
+//!
+//! Spinlocks are only efficient in very few circunstances where the overhead
+//! of context switching or process rescheduling are greater than busy waiting
+//! for very short periods. Spinlocks can be useful inside operating-system kernels,
+//! on embedded systems or even complement other locking designs. As a reference
+//! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
+//! tailored for optimistic spinning during contention before actually sleeping.
+//! This implementation is `no_std` by default, so it's useful in those environments.
+//!
+//! ## Barging MCS lock
+//!
+//! This implementation will have non-waiting threads race for the lock against
+//! the front of the waiting queue thread, which means this it is an unfair lock.
+//! This implementation is suitable for `no_std` environments, and the locking
+//! APIs are compatible with the `lock_api` crate. See [`mod@barging`] and
+//! [`mod@lock_api`] modules for more information.
+//!
+//! ```
+//! use std::sync::Arc;
+//! use std::thread;
+//!
+//! use mcslock::barging::spins::Mutex;
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let c_mutex = Arc::clone(&mutex);
+//!
+//! thread::spawn(move || {
+//!     *c_mutex.lock() = 10;
+//! })
+//! .join().expect("thread::spawn failed");
+//!
+//! assert_eq!(*mutex.try_lock().unwrap(), 10);
+//! ```
+//!
+//! ## Raw MCS lock
+//!
+//! This implementation operates under FIFO. Raw locking APIs require exclusive
+//! access to a locally accessible queue node. This node is represented by the
+//! [`MutexNode`] type. Callers are responsible for instantiating the queue nodes
+//! themselves. This implementation is `no_std` compatible. See [`mod@raw`]
+//! module for more information.
 //!
 //! ```
 //! use std::sync::Arc;
@@ -42,12 +85,14 @@
 //! assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
 //! ```
 //!
-//! ## Thread local locking APIs
+//! ## Thread local MCS lock
 //!
-//! This crate also provides locking APIs that do not require user-side node
-//! instantiation, by enabling the `thread_local` feature. These APIs require
-//! that critical sections must be provided as closures, and are not compatible
-//! with `no_std` environments as they require thread local storage.
+//! This implementation also operates under FIFO. The locking APIs provided
+//! by this module do not require user-side node allocation, critical sections
+//! must be provided as closures and at most one lock can be held at any time
+//! within a thread. It is not `no_std` compatible and can be enabled through
+//! the `thread_local` feature. See [`mod@thread_local`] module for more
+//! information.
 //!
 //! ```
 //! # #[cfg(feature = "thread_local")]
@@ -62,13 +107,11 @@
 //! let c_mutex = Arc::clone(&mutex);
 //!
 //! thread::spawn(move || {
-//!     // Node instantiation is not required.
 //!     // Critical section must be defined as closure.
 //!     c_mutex.lock_with(|mut guard| *guard = 10);
 //! })
 //! .join().expect("thread::spawn failed");
 //!
-//! // Node instantiation is not required.
 //! // Critical section must be defined as closure.
 //! assert_eq!(mutex.try_lock_with(|guard| *guard.unwrap()), 10);
 //! # }
@@ -76,36 +119,12 @@
 //! # fn main() {}
 //! ```
 //!
-//! ## Use cases
-//!
-//! [Spinlocks are usually not what you want]. The majority of use cases are well
-//! covered by OS-based mutexes like [`std::sync::Mutex`] or [`parking_lot::Mutex`].
-//! These implementations will notify the system that the waiting thread should
-//! be parked, freeing the processor to work on something else.
-//!
-//! Spinlocks are only efficient in very few circunstances where the overhead
-//! of context switching or process rescheduling are greater than busy waiting
-//! for very short periods. Spinlocks can be useful inside operating-system kernels,
-//! on embedded systems or even complement other locking designs. As a reference
-//! use case, some [Linux kernel mutexes] run an customized MCS lock specifically
-//! tailored for optimistic spinning during contention before actually sleeping.
-//! This implementation is `no_std` by default, so it's useful in those environments.
-//!
-//! ## API for `no_std` environments
-//!
-//! The [`raw`] locking interface of a MCS lock is not quite the same as other
-//! mutexes. To acquire a raw MCS lock, a queue node must be exclusively borrowed for
-//! the lifetime of the guard returned by [`lock`] or [`try_lock`]. This node is exposed
-//! as the [`MutexNode`] type. See their documentation for more information. If you
-//! are looking for spin-based primitives that implement the [lock_api] interface
-//! and also compatible with `no_std`, consider using [spin-rs].
-//!
 //! ## Features
 //!
 //! This crate dos not provide any default features. Features that can be enabled
 //! are:
 //!
-//! ### `yield`
+//! ### yield
 //!
 //! The `yield` feature requires linking to the standard library, so it is not
 //! suitable for `no_std` environments. By enabling the `yield` feature, instead
@@ -116,13 +135,19 @@
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
 //!
-//! ### `thread_local`
+//! ### thread_local
 //!
 //! The `thread_local` feature provides locking APIs that do not require user-side
-//! node instantiation, but critical sections must be provided as closures. This
+//! node allocation, but critical sections must be provided as closures. This
 //! implementation handles the queue's nodes transparently, by storing them in
 //! the thread local storage of the waiting threads. Thes locking implementations
 //! will panic if recursively acquired. Not `no_std` compatible.
+//!
+//! ### lock_api
+//!
+//! This feature implements the [`RawMutex`] trait from the [lock_api]
+//! crate for [`barging::Mutex`]. Aliases are provided by the
+//! [`mod@lock_api`] module. This feature is `no_std` compatible.
 //!
 //! ## Related projects
 //!
@@ -130,15 +155,12 @@
 //! implementation details or compiler requirements, you can check their
 //! repositories:
 //!
-//! - `mcs-rs`: <https://github.com/gereeter/mcs-rs>
-//! - `libmcs`: <https://github.com/topecongiro/libmcs>
+//! - mcs-rs: <https://github.com/gereeter/mcs-rs>
+//! - libmcs: <https://github.com/topecongiro/libmcs>
 //!
 //! [`MutexNode`]: raw::MutexNode
-//! [`lock`]: raw::Mutex::lock
-//! [`try_lock`]: raw::Mutex::try_lock
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 //! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
-//! [`mcslock::Mutex`]: crate::Mutex
 //! [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
 //! [`RawMutexFair`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutexFair.html
 //! [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
@@ -146,7 +168,7 @@
 //! [spin-rs]: https://docs.rs/spin/latest/spin
 //! [lock_api]: https://docs.rs/lock_api/latest/lock_api
 //! [Linux kernel mutexes]: https://www.kernel.org/doc/html/latest/locking/mutex-design.html
-//! [Spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
+//! [spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 //! [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 //! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 
@@ -155,12 +177,19 @@
     no_std
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(test, allow(clippy::needless_pass_by_value))]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::inline_always)]
+#![allow(clippy::doc_markdown)]
 #![warn(missing_docs)]
 
+pub mod barging;
 pub mod raw;
 pub mod relax;
+
+#[cfg(feature = "lock_api")]
+#[cfg_attr(docsrs, doc(cfg(feature = "lock_api")))]
+pub mod lock_api;
 
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]

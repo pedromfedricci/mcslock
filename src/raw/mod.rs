@@ -1,19 +1,25 @@
-//! A MCS lock implementation that requires instantiation and exclusive access
-//! to a queue node.
+//! A MCS lock implementation that requires exclusive access to a locally
+//! accessible queue node.
 //!
-//! The `raw` module provides an implementation that is `no_std` compatible, but
-//! also requires that queue nodes must be instantiated by the callers. Queue
-//! nodes are represented by the [`MutexNode`] type. The lock is hold for as
-//! long as its associated RAII guard is in scope. Once the guard is dropped,
-//! the mutex is freed. Mutex guards are returned by [`lock`] and [`try_lock`].
-//! Guards are also accessible as the closure argument for [`lock_with`] and
-//! [`try_lock_with`] methods.
+//! The `raw` implementation of MCS lock is fair, that is, it guarantees that
+//! thread that have waited for longer will be scheduled first (FIFO). Each
+//! waiting thread will spin against its own, locally-accessible atomic lock
+//! state, which then avoids the network contention of the state access.
+//!
+//! This module provides an implementation that is `no_std` compatible, but
+//! also requires that queue nodes must be allocated by the callers. Queue
+//! nodes are represented by the [`MutexNode`] type.
+//!
+//! The lock is hold for as long as its associated RAII guard is in scope. Once
+//! the guard is dropped, the mutex is freed. Mutex guards are returned by
+//! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
+//! for [`lock_with`] and [`try_lock_with`] methods.
 //!
 //! The Mutex is generic over the relax strategy. User may choose a strategy
 //! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. The default relax strategy is [`Spin`].
-//! Each module in `raw` provides type aliases for [`Mutex`] and [`MutexGuard`]
-//! associated with one relax strategy. See their documentation for more information.
+//! provided by the [`relax`] module. Each module in `raw` provides type aliases
+//! for [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See
+//! their documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
@@ -21,7 +27,6 @@
 //! [`try_lock_with`]: Mutex::try_lock_with
 //! [`relax`]: crate::relax
 //! [`Relax`]: crate::relax::Relax
-//! [`Spin`]: crate::relax::Spin
 
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};

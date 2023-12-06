@@ -6,22 +6,31 @@ spin-lock for mutual exclusion, referred to as MCS lock.
 name = "mcslock"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.60.0"
+# NOTE: Rust 1.65 is required for GATs and let-else statements.
+rust-version = "1.65.0"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 # documentation = "https://docs.rs/mcslock"
 # homepage = "https://crates.io/mcslock"
 repository = "https://github.com/pedromfedricci/mcslock"
 authors = ["Pedro de Matos Fedricci <pedromfedricci@gmail.com>"]
-categories = ["no-std", "no-std::no-alloc", "concurrency"]
+categories = ["no-std", "concurrency"]
 keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
 [workspace]
 members = [".", "benches"]
 
 [features]
+# NOTE: Features `yield` and `thread_local` require std.
 yield = []
 thread_local = []
+# NOTE: The `dep:` syntax requires Rust 1.60.
+lock_api = ["dep:lock_api"]
+
+[dependencies.lock_api]
+version = "0.4"
+default-features = false
+optional = true
 
 [target.'cfg(loom)'.dev-dependencies]
 loom = { version = "0.7" }
@@ -30,6 +39,14 @@ loom = { version = "0.7" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[[test]]
+name = "lock_api"
+required-features = ["lock_api", "yield"]
+
 [[example]]
 name = "thread_local"
 required-features = ["thread_local"]
+
+[[example]]
+name = "lock_api"
+required-features = ["lock_api"]
