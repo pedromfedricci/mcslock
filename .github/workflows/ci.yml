@@ -7,12 +7,9 @@ on:
     branches: [ main ]
 
   workflow_dispatch:
-  
+
 env:
   CARGO_TERM_COLOR: always
-  LOOM_RUSTFLAGS: --cfg loom
-  DOCSRS_RUSTDOCFLAGS: --cfg docsrs
-  NO_STD_TARGET: thumbv7m-none-eabi
 
 jobs:
   format:
@@ -29,6 +26,8 @@ jobs:
   no-std:
     name: No std
     runs-on: ubuntu-latest
+    env:
+      NO_STD_TARGET: thumbv7m-none-eabi
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -36,8 +35,10 @@ jobs:
         run: rustup toolchain install stable
       - name: Add no_std target
         run: rustup target add ${{ env.NO_STD_TARGET }}
-      - name: Build on no_std
+      - name: Build with no default features
         run: cargo build --target ${{ env.NO_STD_TARGET }}
+      - name: Build with lock_api feature
+        run: cargo build --target ${{ env.NO_STD_TARGET }} --features lock_api
 
   docs:
     name: Docs
@@ -51,7 +52,7 @@ jobs:
         run: rustup default nightly
       - name: Build docs
         env:
-          RUSTDOCFLAGS: ${{ env.DOCSRS_RUSTDOCFLAGS }}
+          RUSTDOCFLAGS: --cfg docsrs
         run: cargo doc --all-features
 
   examples:
@@ -74,22 +75,20 @@ jobs:
   linter:
     name: Linter
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings -D clippy::pedantic -D clippy::nursery
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Rust stable
         run: rustup toolchain install stable
-      - name: Lint no default
-        run: cargo clippy --no-default-features
-      - name: Lint yield
-        run: cargo clippy --features yield
-      - name: Lint thread_local
-        run: cargo clippy --features thread_local
-      - name: Lint lock_api
-        run: cargo clippy --features lock_api
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      - name: Lint feature powerset
+        run: cargo hack clippy --feature-powerset --no-dev-deps
       - name: Lint loom
         env:
-          RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
+          RUSTFLAGS: --cfg loom
         run: cargo clippy --profile test --all-features
 
   miri:
@@ -116,5 +115,5 @@ jobs:
         run: rustup toolchain install stable
       - name: Loom test
         env:
-          RUSTFLAGS: ${{ env.LOOM_RUSTFLAGS }}
+          RUSTFLAGS: --cfg loom
         run: cargo test --lib --release --all-features

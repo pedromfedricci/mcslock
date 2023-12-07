@@ -1,14 +1,16 @@
 [env]
 CFG_LOOM = "--cfg loom"
+CLIPPY_FLAGS = "-D clippy::pedantic -D clippy::nursery"
+CLIPPY_FLAGS_LOOM = "${CFG_LOOM} ${CLIPPY_FLAGS}"
 
 # Don't run these tasks for all crates in the workspace.
 [config]
 default_to_workspace = false
 
-# Build package in no_std environment.
+# Build package for no_std environment.
 [tasks.no-std]
 command = "cargo"
-args = ["build", "--target", "thumbv7m-none-eabi"]
+args = ["build", "--target", "thumbv7m-none-eabi", "--features", "lock_api"]
 
 # Build docs for docs.rs.
 [tasks.docsrs]
@@ -17,10 +19,11 @@ command = "cargo"
 env = { "RUSTDOCFLAGS" = "--cfg docsrs" }
 args = ["doc", "--all-features", "--open"]
 
-# Lint all features.
+# Lint all feature combinations with cargo-hack.
 [tasks.lint]
 command = "cargo"
-args = ["clippy", "--all-features", "--", "-D", "clippy::pedantic", "-D", "clippy::nursery"]
+env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
+args = ["hack", "clippy", "--feature-powerset", "--no-dev-deps"]
 
 # Run tests under miri.
 # NOTE: must run as: cargo +nightly make miri
@@ -39,8 +42,8 @@ args = ["test", "--lib", "--release", "--all-features"]
 # Lint Loom cfg.
 [tasks.loom-lint]
 command = "cargo"
-env = { "RUSTFLAGS" = "${CFG_LOOM}" }
-args = ["clippy", "--profile", "test", "--all-features", "--", "-D", "clippy::pedantic", "-D", "clippy::nursery"]
+env = { "RUSTFLAGS" = "${CLIPPY_FLAGS_LOOM}" }
+args = ["clippy", "--profile", "test", "--all-features"]
 
 # Run busy loop bench.
 [tasks.bench-busy]
