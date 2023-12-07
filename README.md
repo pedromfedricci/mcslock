@@ -37,7 +37,7 @@ Include the following under the `[dependencies]` section in your `Cargo.toml` fi
 # Cargo.toml
 
 [dependencies]
-# Avaliable features: `yield`, `thread_local` and `lock_api`.
+# Avaliable features: `yield`, `barging`, `thread_local` and `lock_api`.
 mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
 ```
 
@@ -48,33 +48,6 @@ the documentation by cloning this repository and then run:
 
 ```bash
 cargo doc --all-features --open
-```
-
-## Barging MCS lock
-
-This implementation will have non-waiting threads race for the lock against
-the front of the waiting queue thread, which means this it is an unfair lock.
-This implementation is suitable for `no_std` environments, and the locking
-APIs are compatible with the [lock_api] crate. See `barging` and `lock_api`
-modules for more information.
-
-```rust
-use std::sync::Arc;
-use std::thread;
-
-use mcslock::barging::spins::Mutex;
-
-fn main() {
-    let mutex = Arc::new(Mutex::new(0));
-    let c_mutex = Arc::clone(&mutex);
-
-    thread::spawn(move || {
-        *c_mutex.lock() = 10;
-    })
-    .join().expect("thread::spawn failed");
-
-    assert_eq!(*mutex.try_lock().unwrap(), 10);
-}
 ```
 
 ## Raw MCS lock
@@ -105,6 +78,33 @@ fn main() {
     // A queue node must be mutably accessible.
     let mut node = MutexNode::new();
     assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
+}
+```
+
+## Barging MCS lock
+
+This implementation will have non-waiting threads race for the lock against
+the front of the waiting queue thread, which means this it is an unfair lock.
+This implementation is suitable for `no_std` environments, and the locking
+APIs are compatible with the [lock_api] crate. See `barging` and `lock_api`
+modules for more information.
+
+```rust
+use std::sync::Arc;
+use std::thread;
+
+use mcslock::barging::spins::Mutex;
+
+fn main() {
+    let mutex = Arc::new(Mutex::new(0));
+    let c_mutex = Arc::clone(&mutex);
+
+    thread::spawn(move || {
+        *c_mutex.lock() = 10;
+    })
+    .join().expect("thread::spawn failed");
+
+    assert_eq!(*mutex.try_lock().unwrap(), 10);
 }
 ```
 
@@ -154,6 +154,14 @@ OS scheduler. This may cause a context switch, so you may not want to enable
 this feature if your intention is to to actually do optimistic spinning. The
 default implementation calls [`core::hint::spin_loop`], which does in fact
 just simply busy-waits.
+
+### barging
+
+The `barging` feature provides locking APIs that are compatible with the
+[lock_api] crate. It does not require node allocations from the caller,
+and it is suitable for `no_std` environments. This implementation is not
+fair (does not guarantee FIFO), but can improve throughput when the lock
+is heavily contended.
 
 ### thread_local
 

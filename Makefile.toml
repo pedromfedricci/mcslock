@@ -10,7 +10,8 @@ default_to_workspace = false
 # Build package for no_std environment.
 [tasks.no-std]
 command = "cargo"
-args = ["build", "--target", "thumbv7m-none-eabi", "--features", "lock_api"]
+args = ["hack", "build", "--target", "thumbv7m-none-eabi", "--no-dev-deps",
+        "--feature-powerset", "--skip", "yield,thread_local"]
 
 # Build docs for docs.rs.
 [tasks.docsrs]

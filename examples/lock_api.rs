@@ -2,7 +2,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
-// Requires that the `lock_api` features is enabled.
+// Requires that both `lock_api` and `barging` features are enabled.
 //
 // You may export these types to your callers, change the inner mutex type
 // (as long as it implements the same raw mutex interfaces), without breaking

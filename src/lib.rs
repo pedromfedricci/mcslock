@@ -31,31 +31,6 @@
 //! tailored for optimistic spinning during contention before actually sleeping.
 //! This implementation is `no_std` by default, so it's useful in those environments.
 //!
-//! ## Barging MCS lock
-//!
-//! This implementation will have non-waiting threads race for the lock against
-//! the front of the waiting queue thread, which means this it is an unfair lock.
-//! This implementation is suitable for `no_std` environments, and the locking
-//! APIs are compatible with the `lock_api` crate. See [`mod@barging`] and
-//! [`mod@lock_api`] modules for more information.
-//!
-//! ```
-//! use std::sync::Arc;
-//! use std::thread;
-//!
-//! use mcslock::barging::spins::Mutex;
-//!
-//! let mutex = Arc::new(Mutex::new(0));
-//! let c_mutex = Arc::clone(&mutex);
-//!
-//! thread::spawn(move || {
-//!     *c_mutex.lock() = 10;
-//! })
-//! .join().expect("thread::spawn failed");
-//!
-//! assert_eq!(*mutex.try_lock().unwrap(), 10);
-//! ```
-//!
 //! ## Raw MCS lock
 //!
 //! This implementation operates under FIFO. Raw locking APIs require exclusive
@@ -83,6 +58,32 @@
 //! // A queue node must be mutably accessible.
 //! let mut node = MutexNode::new();
 //! assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
+//! ```
+//!
+//! ## Barging MCS lock
+//!
+//! This implementation will have non-waiting threads race for the lock against
+//! the front of the waiting queue thread, which means this it is an unfair lock.
+//! This implementation can be enabled through the `barging` feature, it is
+//! suitable for `no_std` environments, and the locking APIs are compatible with
+//! the `lock_api` crate. See [`mod@barging`] and [`mod@lock_api`] modules for
+//! more information.
+//!
+//! ```
+//! use std::sync::Arc;
+//! use std::thread;
+//!
+//! use mcslock::barging::spins::Mutex;
+//!
+//! let mutex = Arc::new(Mutex::new(0));
+//! let c_mutex = Arc::clone(&mutex);
+//!
+//! thread::spawn(move || {
+//!     *c_mutex.lock() = 10;
+//! })
+//! .join().expect("thread::spawn failed");
+//!
+//! assert_eq!(*mutex.try_lock().unwrap(), 10);
 //! ```
 //!
 //! ## Thread local MCS lock
@@ -135,6 +136,14 @@
 //! default implementation calls [`core::hint::spin_loop`], which does in fact
 //! just simply busy-waits.
 //!
+//! ### barging
+//!
+//! The `barging` feature provides locking APIs that are compatible with the
+//! [lock_api] crate. It does not require node allocations from the caller,
+//! and it is suitable for `no_std` environments. This implementation is not
+//! fair (does not guarantee FIFO), but can improve throughput when the lock
+//! is heavily contended.
+//!
 //! ### thread_local
 //!
 //! The `thread_local` feature provides locking APIs that do not require user-side
@@ -183,12 +192,15 @@
 #![allow(clippy::doc_markdown)]
 #![warn(missing_docs)]
 
-pub mod barging;
 pub mod raw;
 pub mod relax;
 
-#[cfg(feature = "lock_api")]
-#[cfg_attr(docsrs, doc(cfg(feature = "lock_api")))]
+#[cfg(feature = "barging")]
+#[cfg_attr(docsrs, doc(cfg(feature = "barging")))]
+pub mod barging;
+
+#[cfg(all(feature = "lock_api", feature = "barging"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
 pub mod lock_api;
 
 #[cfg(feature = "thread_local")]

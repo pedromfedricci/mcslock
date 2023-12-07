@@ -2,6 +2,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
+// Requires that the `barging` feature is enabled.
 use mcslock::barging::spins::Mutex;
 
 fn main() {

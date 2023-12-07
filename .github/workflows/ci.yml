@@ -35,10 +35,14 @@ jobs:
         run: rustup toolchain install stable
       - name: Add no_std target
         run: rustup target add ${{ env.NO_STD_TARGET }}
-      - name: Build with no default features
-        run: cargo build --target ${{ env.NO_STD_TARGET }}
-      - name: Build with lock_api feature
-        run: cargo build --target ${{ env.NO_STD_TARGET }} --features lock_api
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      - name: Build with no_std compatible features
+        run: >
+          cargo hack build --target ${{ env.NO_STD_TARGET }}
+          --no-dev-deps
+          --feature-powerset
+          --skip yield,thread_local
 
   docs:
     name: Docs
@@ -66,11 +70,11 @@ jobs:
       - name: Run raw example
         run: cargo run --example raw
       - name: Run barging example
-        run: cargo run --example barging
+        run: cargo run --example barging --features barging
       - name: Run thread_local example
         run: cargo run --example thread_local --features thread_local
       - name: Run lock_api example
-        run: cargo run --example lock_api --features lock_api
+        run: cargo run --example lock_api --features lock_api,barging
 
   linter:
     name: Linter
