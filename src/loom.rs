@@ -2,7 +2,6 @@
 
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-
 use std::sync::Arc as StdArc;
 
 use loom::cell::{ConstPtr, MutPtr};
@@ -15,31 +14,32 @@ use loom::{model, thread};
 ///
 /// Must guarantee that an instance of the guard holds exclusive access to its
 /// underlying data through all its lifetime.
-pub(crate) unsafe trait Guard<'a, T: ?Sized + 'a> {
+#[rustfmt::skip]
+pub(crate) unsafe trait Guard<T: ?Sized> {
     /// The target guard type. Could be `Self` or a wrapped guard type
     /// that `Self` can refer to.
-    type Guard: Guard<'a, T>;
+    type Guard<'a>: Guard<T> where T: 'a, Self: 'a;
 
     /// Get a Loom immutable pointer bounded by this guard lifetime.
-    fn deref(&'a self) -> GuardDeref<'a, T, Self::Guard>;
+    fn deref(&self) -> GuardDeref<'_, T, Self::Guard<'_>>;
 
     /// Get a Loom mutable pointer bounded by this guard lifetime.
-    fn deref_mut(&'a self) -> GuardDerefMut<'a, T, Self::Guard>;
+    fn deref_mut(&self) -> GuardDerefMut<'_, T, Self::Guard<'_>>;
 }
 
 /// A Loom immutable pointer borrowed from a guard instance.
-pub(crate) struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<'a, T>> {
+pub(crate) struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
     ptr: ConstPtr<T>,
     marker: PhantomData<&'a G>,
 }
 
-impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> GuardDeref<'a, T, G> {
+impl<T: ?Sized, G: Guard<T>> GuardDeref<'_, T, G> {
     pub(crate) const fn new(ptr: ConstPtr<T>) -> Self {
         Self { ptr, marker: PhantomData }
     }
 }
 
-impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> Deref for GuardDeref<'a, T, G> {
+impl<T: ?Sized, G: Guard<T>> Deref for GuardDeref<'_, T, G> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -49,87 +49,70 @@ impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> Deref for GuardDeref<'a, T, G> {
 }
 
 /// A Loom mutable pointer borrowed from a guard instance.
-pub(crate) struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<'a, T>> {
+pub(crate) struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<T>> {
     ptr: MutPtr<T>,
-    marker: PhantomData<&'a mut G>,
+    marker: PhantomData<&'a G>,
 }
 
-impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> GuardDerefMut<'a, T, G> {
-    pub(crate) fn new(ptr: MutPtr<T>) -> Self {
+impl<T: ?Sized, G: Guard<T>> GuardDerefMut<'_, T, G> {
+    pub(crate) const fn new(ptr: MutPtr<T>) -> Self {
         Self { ptr, marker: PhantomData }
     }
 }
 
-impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> Deref for GuardDerefMut<'a, T, G> {
+impl<T: ?Sized, G: Guard<T>> Deref for GuardDerefMut<'_, T, G> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: Our lifetime is bounded by the guard's borrow.
+        // SAFETY: Our lifetime is bounded by the guard borrow.
         unsafe { self.ptr.deref() }
     }
 }
 
-impl<'a, T: ?Sized + 'a, G: Guard<'a, T>> DerefMut for GuardDerefMut<'a, T, G> {
+impl<T: ?Sized, G: Guard<T>> DerefMut for GuardDerefMut<'_, T, G> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: Our lifetime is bounded by the guard's borrow.
+        // SAFETY: Our lifetime is bounded by the guard borrow.
         unsafe { self.ptr.deref() }
     }
 }
 
 /// A trait for lock types that can run closures against the guard.
-//
-// It would be nice to use GATs here but unfortunately we've hit a known limitation,
-// so currently we define loom models for each MCS lock implementation.
-// link: https://blog.rust-lang.org/2022/10/28/gats-stabilization.html#the-borrow-checker-isnt-perfect-and-it-shows
-#[allow(unused)]
 #[rustfmt::skip]
-pub(crate) trait LockWith<T: ?Sized> {
-    type Guard<'a>: Guard<'a, T> where T: 'a, Self: 'a;
+pub(crate) trait LockWith<T: ?Sized>: Send + Sync + 'static {
+    type Guard<'a>: Guard<T> where T: 'a, Self: 'a;
 
     /// Creates a new mutex in an unlocked state ready for use.
     fn new(value: T) -> Self where T: Sized;
 
     // Attempts to acquire this lock and then runs the closure against its
     // guard.
-    fn try_lock_with<F, R>(&self, f: F) -> R
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<Self::Guard<'_>>) -> R;
+        F: FnOnce(Option<Self::Guard<'_>>) -> Ret;
 
     /// Acquires a mutex and then runs the closure against its guard.
-    fn lock_with<F, R>(&self, f: F) -> R
+    fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Self::Guard<'_>) -> R;
+        F: FnOnce(Self::Guard<'_>) -> Ret;
 }
 
-/// Increments a shared i32 value.
-#[allow(unused_variables)]
-fn inc_std<L: LockWith<i32>>(lock: StdArc<L>) {
-    // TODO: This does not compile on today's GAT, it hits some limitations
-    // with borrow checker, see link above.
-    // lock.lock_with(|g: L::Guard<'_>| *g.deref_mut() += 1);
-    todo!();
+/// Increments a shared u32 value.
+fn inc_std<L: LockWith<u32>>(lock: StdArc<L>) {
+    lock.lock_with(|g| g.deref_mut().wrapping_add(1));
 }
 
-/// Increments a shared i32 value.
-#[allow(unused_variables)]
-fn inc_loom<L: LockWith<i32>>(lock: LoomArc<L>) {
-    // TODO: This does not compile on today's GAT, it hits some limitations
-    // with borrow checker, see link above.
-    // lock.lock_with(|g: L::Guard<'_>| *g.deref_mut() += 1);
-    todo!();
+/// Increments a shared u32 value.
+fn inc_loom<L: LockWith<u32>>(lock: LoomArc<L>) {
+    lock.lock_with(|guard| guard.deref_mut().wrapping_add(1));
 }
 
-/// Get the shared i32 value.
-#[allow(unused_variables)]
-fn get_loom<L: LockWith<i32>>(lock: LoomArc<L>) -> i32 {
-    // TODO: This does not compile on today's GAT, it hits some limitations
-    // with borrow checker, see link above.
-    // lock.lock_with(|g: L::Guard<'_>| *g.deref())
-    todo!();
+/// Get the shared u32 value.
+fn get_loom<L: LockWith<u32>>(lock: LoomArc<L>) -> u32 {
+    lock.lock_with(|guard| *guard.deref())
 }
 
 #[allow(unused)]
-pub(crate) fn threads_join<L: LockWith<i32> + 'static>() {
+pub(crate) fn threads_join<L: LockWith<u32>>() {
     use loom::sync::Arc;
     model(|| {
         let data = Arc::new(L::new(0));
@@ -148,7 +131,7 @@ pub(crate) fn threads_join<L: LockWith<i32> + 'static>() {
 }
 
 #[allow(unused)]
-pub(crate) fn threads_fork<L: LockWith<i32> + 'static>() {
+pub(crate) fn threads_fork<L: LockWith<u32>>() {
     // Using std's Arc or else this model takes to long to run.
     use std::sync::Arc;
     model(|| {

@@ -529,14 +529,14 @@ impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<'a, T: ?Sized, R> Guard<'a, T> for MutexGuard<'a, T, R> {
-    type Guard = Self;
+unsafe impl<T: ?Sized, R> Guard<T> for MutexGuard<'_, T, R> {
+    type Guard<'a> = Self where T: 'a, Self: 'a;
 
-    fn deref(&'a self) -> GuardDeref<'a, T, Self::Guard> {
+    fn deref(&self) -> GuardDeref<'_, T, Self::Guard<'_>> {
         GuardDeref::new(self.lock.data_get())
     }
 
-    fn deref_mut(&'a self) -> GuardDerefMut<'a, T, Self::Guard> {
+    fn deref_mut(&self) -> GuardDerefMut<'_, T, Self::Guard<'_>> {
         GuardDerefMut::new(self.lock.data_get_mut())
     }
 }
