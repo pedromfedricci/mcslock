@@ -207,5 +207,7 @@ pub mod lock_api;
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;
 
+pub(crate) mod cfg;
+
 #[cfg(all(loom, test))]
 pub(crate) mod loom;

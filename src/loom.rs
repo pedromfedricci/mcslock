@@ -1,40 +1,47 @@
-#![allow(clippy::redundant_pub_crate)]
-
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use std::sync::Arc as StdArc;
 
-use loom::cell::{ConstPtr, MutPtr};
+use loom::cell::{ConstPtr, MutPtr, UnsafeCell};
 use loom::sync::Arc as LoomArc;
 use loom::{model, thread};
 
-/// A trait for guard types pointing to data backed by Loom's `UnsafeCell`.
+/// A trait for guard types that hold exclusive access to the underlying data
+/// behind Loom's `UnsafeCell`.
 ///
 /// # Safety
 ///
 /// Must guarantee that an instance of the guard holds exclusive access to its
 /// underlying data through all its lifetime.
-#[rustfmt::skip]
-pub(crate) unsafe trait Guard<T: ?Sized> {
-    /// The target guard type. Could be `Self` or a wrapped guard type
-    /// that `Self` can refer to.
-    type Guard<'a>: Guard<T> where T: 'a, Self: 'a;
-
-    /// Get a Loom immutable pointer bounded by this guard lifetime.
-    fn deref(&self) -> GuardDeref<'_, T, Self::Guard<'_>>;
-
-    /// Get a Loom mutable pointer bounded by this guard lifetime.
-    fn deref_mut(&self) -> GuardDerefMut<'_, T, Self::Guard<'_>>;
+pub unsafe trait GetUnsafeCell<T: ?Sized> {
+    fn get(&self) -> &UnsafeCell<T>;
 }
 
+/// A trait for guard types that return `GuardDeref` and `GuardDerefMut`.
+pub trait Guard<T: ?Sized>: GetUnsafeCell<T> + Sized {
+    /// Get a Loom immutable pointer bounded by this guard lifetime.
+    fn deref(&self) -> GuardDeref<'_, T, Self> {
+        GuardDeref::new(self.get())
+    }
+
+    /// Get a Loom mutable pointer bounded by this guard lifetime.
+    fn deref_mut(&self) -> GuardDerefMut<'_, T, Self> {
+        GuardDerefMut::new(self.get())
+    }
+}
+
+// Implements `Guard` for all types that implement `GetUnsafeCell`.
+impl<T: ?Sized, U: GetUnsafeCell<T>> Guard<T> for U {}
+
 /// A Loom immutable pointer borrowed from a guard instance.
-pub(crate) struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
+pub struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
     ptr: ConstPtr<T>,
     marker: PhantomData<&'a G>,
 }
 
-impl<T: ?Sized, G: Guard<T>> GuardDeref<'_, T, G> {
-    pub(crate) const fn new(ptr: ConstPtr<T>) -> Self {
+impl<'a, T: ?Sized, G: Guard<T>> GuardDeref<'a, T, G> {
+    fn new(data: &'a UnsafeCell<T>) -> Self {
+        let ptr = data.get();
         Self { ptr, marker: PhantomData }
     }
 }
@@ -49,13 +56,14 @@ impl<T: ?Sized, G: Guard<T>> Deref for GuardDeref<'_, T, G> {
 }
 
 /// A Loom mutable pointer borrowed from a guard instance.
-pub(crate) struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<T>> {
+pub struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<T>> {
     ptr: MutPtr<T>,
     marker: PhantomData<&'a G>,
 }
 
-impl<T: ?Sized, G: Guard<T>> GuardDerefMut<'_, T, G> {
-    pub(crate) const fn new(ptr: MutPtr<T>) -> Self {
+impl<'a, T: ?Sized, G: Guard<T>> GuardDerefMut<'a, T, G> {
+    fn new(data: &'a UnsafeCell<T>) -> Self {
+        let ptr = data.get_mut();
         Self { ptr, marker: PhantomData }
     }
 }
@@ -78,7 +86,7 @@ impl<T: ?Sized, G: Guard<T>> DerefMut for GuardDerefMut<'_, T, G> {
 
 /// A trait for lock types that can run closures against the guard.
 #[rustfmt::skip]
-pub(crate) trait LockWith<T: ?Sized>: Send + Sync + 'static {
+pub trait LockWith<T: ?Sized> {
     type Guard<'a>: Guard<T> where T: 'a, Self: 'a;
 
     /// Creates a new mutex in an unlocked state ready for use.
@@ -112,7 +120,7 @@ fn get_loom<L: LockWith<u32>>(lock: LoomArc<L>) -> u32 {
 }
 
 #[allow(unused)]
-pub(crate) fn threads_join<L: LockWith<u32>>() {
+fn threads_join<L: LockWith<u32> + 'static>() {
     use loom::sync::Arc;
     model(|| {
         let data = Arc::new(L::new(0));
@@ -131,7 +139,7 @@ pub(crate) fn threads_join<L: LockWith<u32>>() {
 }
 
 #[allow(unused)]
-pub(crate) fn threads_fork<L: LockWith<u32>>() {
+fn threads_fork<L: LockWith<u32> + 'static>() {
     // Using std's Arc or else this model takes to long to run.
     use std::sync::Arc;
     model(|| {
