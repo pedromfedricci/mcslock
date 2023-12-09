@@ -53,3 +53,20 @@ pub mod atomic {
     #[cfg(all(loom, test))]
     pub use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 }
+
+pub mod hint {
+    #[cfg(not(all(loom, test)))]
+    pub use core::hint::spin_loop;
+
+    #[cfg(all(loom, test))]
+    pub use loom::hint::spin_loop;
+}
+
+#[cfg(feature = "yield")]
+pub mod thread {
+    #[cfg(not(all(loom, test)))]
+    pub use std::thread::yield_now;
+
+    #[cfg(all(loom, test))]
+    pub use loom::thread::yield_now;
+}

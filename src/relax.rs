@@ -42,7 +42,7 @@ pub struct Spin;
 impl Relax for Spin {
     #[inline(always)]
     fn relax(&mut self) {
-        core::hint::spin_loop();
+        crate::cfg::hint::spin_loop();
     }
 }
 
@@ -58,22 +58,11 @@ impl Relax for Spin {
 #[derive(Default)]
 pub struct Yield;
 
-#[cfg(any(all(feature = "yield", not(loom)), all(test, not(loom))))]
+#[cfg(any(feature = "yield", loom, test))]
 impl Relax for Yield {
     #[inline]
     fn relax(&mut self) {
-        std::thread::yield_now();
-    }
-}
-
-/// When running Loom models, we must call Loom's `yield_now` to tell Loom that
-/// another thread needs to be scheduled in order for the current one to make
-/// progress.
-#[cfg(all(loom, test))]
-impl Relax for Yield {
-    #[inline(always)]
-    fn relax(&mut self) {
-        loom::thread::yield_now();
+        crate::cfg::thread::yield_now();
     }
 }
 
