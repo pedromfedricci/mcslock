@@ -337,11 +337,11 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// Will panic if the thread local [`MutexNode`] is already in use by a held
     /// lock from this thread.
-    #[allow(clippy::option_if_let_else)]
     fn node_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&RawMutex<T, R>, &mut MutexNode) -> Ret,
     {
+        #[allow(clippy::option_if_let_else)]
         NODE.with(|node| match node.try_borrow_mut() {
             Ok(mut node) => f(&self.0, &mut node),
             Err(_) => Self::panic_already_held(),
@@ -375,7 +375,7 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
         self.try_lock_with(|guard| match guard {
-            Some(guard) => guard.inner.data_with(|data| d.field("data", &data)),
+            Some(guard) => guard.inner.with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         });
         d.field("tail", self.0.tail_debug());
@@ -467,7 +467,7 @@ impl<'a, T: ?Sized + fmt::Display, R: Relax> fmt::Display for MutexGuard<'a, T, 
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<T: ?Sized, R: Relax> crate::loom::GetUnsafeCell<T> for MutexGuard<'_, T, R> {
+unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard<T> for MutexGuard<'_, T, R> {
     fn get(&self) -> &loom::cell::UnsafeCell<T> {
         self.inner.get()
     }

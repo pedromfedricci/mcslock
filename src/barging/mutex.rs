@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
-use crate::cfg::cell::DataWith;
+use crate::cfg::cell::WithUnchecked;
 use crate::raw::{Mutex as RawMutex, MutexNode};
 use crate::relax::Relax;
 
@@ -462,13 +462,13 @@ impl<'a, T: ?Sized, R> MutexGuard<'a, T, R> {
         Self { lock }
     }
 
-    /// Runs `f` with an immutable reference to the wrapped value.
-    fn data_with<F, Ret>(&self, f: F) -> Ret
+    /// Runs `f` against an shared reference pointing to the underlying data.
+    fn with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&T) -> Ret,
     {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { self.lock.inner.data.data_with(f) }
+        unsafe { self.lock.inner.data.with_unchecked(f) }
     }
 }
 
@@ -500,20 +500,20 @@ impl<'a, T: ?Sized, R> core::ops::DerefMut for MutexGuard<'a, T, R> {
 
 impl<'a, T: ?Sized + fmt::Debug, R> fmt::Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Debug::fmt(data, f))
+        self.with(|data| fmt::Debug::fmt(data, f))
     }
 }
 
 impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Display::fmt(data, f))
+        self.with(|data| fmt::Display::fmt(data, f))
     }
 }
 
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<T: ?Sized, R: Relax> crate::loom::GetUnsafeCell<T> for MutexGuard<'_, T, R> {
+unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard<T> for MutexGuard<'_, T, R> {
     fn get(&self) -> &loom::cell::UnsafeCell<T> {
         &self.lock.inner.data
     }

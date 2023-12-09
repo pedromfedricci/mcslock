@@ -1,5 +1,13 @@
+pub mod atomic {
+    #[cfg(not(all(loom, test)))]
+    pub use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
+
+    #[cfg(all(loom, test))]
+    pub use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
+}
+
 pub mod cell {
-    pub use sealed::DataWith;
+    pub use sealed::WithUnchecked;
 
     #[cfg(not(all(loom, test)))]
     pub use core::cell::UnsafeCell;
@@ -8,8 +16,8 @@ pub mod cell {
     pub use loom::cell::UnsafeCell;
 
     #[cfg(not(all(loom, test)))]
-    impl<T: ?Sized> DataWith<T> for UnsafeCell<T> {
-        unsafe fn data_with<F, Ret>(&self, f: F) -> Ret
+    impl<T: ?Sized> WithUnchecked<T> for UnsafeCell<T> {
+        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&T) -> Ret,
         {
@@ -19,8 +27,8 @@ pub mod cell {
     }
 
     #[cfg(all(loom, test))]
-    impl<T: ?Sized> DataWith<T> for UnsafeCell<T> {
-        unsafe fn data_with<F, Ret>(&self, f: F) -> Ret
+    impl<T: ?Sized> WithUnchecked<T> for UnsafeCell<T> {
+        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&T) -> Ret,
         {
@@ -30,28 +38,20 @@ pub mod cell {
     }
 
     mod sealed {
-        /// A trait that extends `UnsafeCell` to allow running closures against
+        /// A trait that extends [`UnsafeCell`] to allow running closures against
         /// its underlying data.
-        pub trait DataWith<T: ?Sized> {
-            /// Runs `f` against a shared reference borrowed from a `UnsafeCell`.
+        pub trait WithUnchecked<T: ?Sized> {
+            /// Runs `f` against a shared reference borrowed from a [`UnsafeCell`].
             ///
             /// # Safety
             ///
             /// Caller must guarantee there are no mutable aliases to the
             /// underlying data.
-            unsafe fn data_with<F, Ret>(&self, f: F) -> Ret
+            unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
             where
                 F: FnOnce(&T) -> Ret;
         }
     }
-}
-
-pub mod atomic {
-    #[cfg(not(all(loom, test)))]
-    pub use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
-
-    #[cfg(all(loom, test))]
-    pub use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
 }
 
 pub mod hint {

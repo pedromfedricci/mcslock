@@ -5,7 +5,7 @@ use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::{fence, AtomicBool, AtomicPtr};
-use crate::cfg::cell::{DataWith, UnsafeCell};
+use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::relax::Relax;
 
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
@@ -493,7 +493,7 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
         let mut node = MutexNode::new();
         let mut d = f.debug_struct("Mutex");
         match self.try_lock(&mut node) {
-            Some(guard) => guard.data_with(|data| d.field("data", &data)),
+            Some(guard) => guard.with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         };
         d.field("tail", &self.tail);
@@ -554,13 +554,13 @@ impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
         Self { lock, node }
     }
 
-    /// Runs `f` with an immutable reference to the wrapped value.
-    pub(crate) fn data_with<F, Ret>(&self, f: F) -> Ret
+    /// Runs `f` against an shared reference pointing to the underlying data.
+    pub(crate) fn with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&T) -> Ret,
     {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { self.lock.data.data_with(f) }
+        unsafe { self.lock.data.with_unchecked(f) }
     }
 }
 
@@ -592,20 +592,20 @@ impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
 
 impl<'a, T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Debug::fmt(data, f))
+        self.with(|data| fmt::Debug::fmt(data, f))
     }
 }
 
 impl<'a, T: ?Sized + fmt::Display, R: Relax> fmt::Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Display::fmt(data, f))
+        self.with(|data| fmt::Display::fmt(data, f))
     }
 }
 
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<T: ?Sized, R: Relax> crate::loom::GetUnsafeCell<T> for MutexGuard<'_, T, R> {
+unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard<T> for MutexGuard<'_, T, R> {
     fn get(&self) -> &loom::cell::UnsafeCell<T> {
         &self.lock.data
     }

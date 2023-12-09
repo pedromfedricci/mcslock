@@ -14,6 +14,8 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
+use crate::cfg::{hint, thread};
+
 /// A trait implemented by spinning relax strategies.
 pub trait Relax: Default {
     /// Perform the relaxing operation during a period of contention.
@@ -42,7 +44,7 @@ pub struct Spin;
 impl Relax for Spin {
     #[inline(always)]
     fn relax(&mut self) {
-        crate::cfg::hint::spin_loop();
+        hint::spin_loop();
     }
 }
 
@@ -62,7 +64,7 @@ pub struct Yield;
 impl Relax for Yield {
     #[inline]
     fn relax(&mut self) {
-        crate::cfg::thread::yield_now();
+        thread::yield_now();
     }
 }
 
@@ -146,7 +148,7 @@ impl Relax for YieldBackoff {
         if self.step.0 <= Self::SPIN_LIMIT {
             self.step.spin();
         } else {
-            crate::cfg::thread::yield_now();
+            thread::yield_now();
         }
         self.step.step_to(Self::YIELD_LIMIT);
     }
@@ -161,14 +163,14 @@ impl Step {
     #[cfg(feature = "yield")]
     fn spin(&self) {
         for _ in 0..1 << self.0 {
-            crate::cfg::hint::spin_loop();
+            hint::spin_loop();
         }
     }
 
     /// Bounded backoff spinning.
     fn spin_to(&self, max: u32) {
         for _ in 0..1 << self.0.min(max) {
-            crate::cfg::hint::spin_loop();
+            hint::spin_loop();
         }
     }
 

@@ -7,31 +7,26 @@ use loom::sync::Arc as LoomArc;
 use loom::{model, thread};
 
 /// A trait for guard types that hold exclusive access to the underlying data
-/// behind Loom's `UnsafeCell`.
+/// behind Loom's [`UnsafeCell`].
 ///
 /// # Safety
 ///
 /// Must guarantee that an instance of the guard holds exclusive access to its
 /// underlying data through all its lifetime.
-pub unsafe trait GetUnsafeCell<T: ?Sized> {
+pub unsafe trait Guard<T: ?Sized>: Sized {
+    /// Get a shared reference from the [`UnsafeCell`] holding the data.
     fn get(&self) -> &UnsafeCell<T>;
-}
 
-/// A trait for guard types that return `GuardDeref` and `GuardDerefMut`.
-pub trait Guard<T: ?Sized>: GetUnsafeCell<T> + Sized {
     /// Get a Loom immutable pointer bounded by this guard lifetime.
     fn deref(&self) -> GuardDeref<'_, T, Self> {
-        GuardDeref::new(self.get())
+        GuardDeref::new(self)
     }
 
     /// Get a Loom mutable pointer bounded by this guard lifetime.
     fn deref_mut(&self) -> GuardDerefMut<'_, T, Self> {
-        GuardDerefMut::new(self.get())
+        GuardDerefMut::new(self)
     }
 }
-
-// Implements `Guard` for all types that implement `GetUnsafeCell`.
-impl<T: ?Sized, U: GetUnsafeCell<T>> Guard<T> for U {}
 
 /// A Loom immutable pointer borrowed from a guard instance.
 pub struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
@@ -40,8 +35,8 @@ pub struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
 }
 
 impl<'a, T: ?Sized, G: Guard<T>> GuardDeref<'a, T, G> {
-    fn new(data: &'a UnsafeCell<T>) -> Self {
-        let ptr = data.get();
+    fn new(guard: &'a G) -> Self {
+        let ptr = guard.get().get();
         Self { ptr, marker: PhantomData }
     }
 }
@@ -62,8 +57,8 @@ pub struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<T>> {
 }
 
 impl<'a, T: ?Sized, G: Guard<T>> GuardDerefMut<'a, T, G> {
-    fn new(data: &'a UnsafeCell<T>) -> Self {
-        let ptr = data.get_mut();
+    fn new(guard: &'a G) -> Self {
+        let ptr = guard.get().get_mut();
         Self { ptr, marker: PhantomData }
     }
 }
