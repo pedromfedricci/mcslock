@@ -146,7 +146,7 @@ impl Relax for YieldBackoff {
         if self.step.0 <= Self::SPIN_LIMIT {
             self.step.spin();
         } else {
-            std::thread::yield_now();
+            crate::cfg::thread::yield_now();
         }
         self.step.step_to(Self::YIELD_LIMIT);
     }
@@ -161,14 +161,14 @@ impl Step {
     #[cfg(feature = "yield")]
     fn spin(&self) {
         for _ in 0..1 << self.0 {
-            core::hint::spin_loop();
+            crate::cfg::hint::spin_loop();
         }
     }
 
     /// Bounded backoff spinning.
     fn spin_to(&self, max: u32) {
         for _ in 0..1 << self.0.min(max) {
-            core::hint::spin_loop();
+            crate::cfg::hint::spin_loop();
         }
     }
 
