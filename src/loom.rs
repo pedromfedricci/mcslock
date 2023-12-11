@@ -124,7 +124,7 @@ pub mod model {
     }
 
     /// Evaluates that concurrent `try_lock` calls will serialize all mutations
-    /// against the share data, therefore no data races.
+    /// against the shared data, therefore no data races.
     pub fn try_lock_join<L: LockWith<Int> + 'static>() {
         model(|| {
             let data = Arc::new(L::new(0));
@@ -143,7 +143,7 @@ pub mod model {
     }
 
     /// Evaluates that concurrent `lock` calls will serialize all mutations
-    /// against the share data, therefore no data races.
+    /// against the shared data, therefore no data races.
     pub fn lock_join<L: LockWith<Int> + 'static>() {
         model(|| {
             let data = Arc::new(L::new(0));
@@ -165,7 +165,7 @@ pub mod model {
     }
 
     /// Evaluates that concurrent `lock` and `try_lock` calls will serialize
-    /// all mutations against the share data, therefore no data races.
+    /// all mutations against the shared data, therefore no data races.
     pub fn mixed_lock_join<L: LockWith<Int> + 'static>() {
         model(|| {
             let data = Arc::new(L::new(0));
