@@ -62,7 +62,7 @@ pub mod hint {
     pub use loom::hint::spin_loop;
 }
 
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 pub mod thread {
     #[cfg(not(all(loom, test)))]
     pub use std::thread::yield_now;

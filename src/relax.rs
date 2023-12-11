@@ -14,7 +14,9 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
-use crate::cfg::{hint, thread};
+use crate::cfg::hint;
+#[cfg(any(feature = "yield", test))]
+use crate::cfg::thread;
 
 /// A trait implemented by spinning relax strategies.
 pub trait Relax: Default {
@@ -55,12 +57,12 @@ impl Relax for Spin {
 /// priority inversion on targets that have a standard library available. Note
 /// that such targets have scheduler-integrated concurrency primitives available,
 /// and you should generally use these instead, except in rare circumstances.
-#[cfg(any(feature = "yield", loom, test))]
+#[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 #[derive(Default)]
 pub struct Yield;
 
-#[cfg(any(feature = "yield", loom, test))]
+#[cfg(any(feature = "yield", test))]
 impl Relax for Yield {
     #[inline]
     fn relax(&mut self) {
@@ -128,20 +130,20 @@ impl Relax for SpinBackoff {
 /// minimising power consumption and priority inversion on targets that have
 /// a standard library available. Note that you should prefer scheduler-aware
 /// locks if you have access to the standard library.
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 #[derive(Default)]
 pub struct YieldBackoff {
     step: Step,
 }
 
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 impl YieldBackoff {
     const SPIN_LIMIT: u32 = SpinBackoff::SPIN_LIMIT;
     const YIELD_LIMIT: u32 = 10;
 }
 
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 impl Relax for YieldBackoff {
     #[inline(always)]
     fn relax(&mut self) {
@@ -160,7 +162,7 @@ struct Step(u32);
 
 impl Step {
     /// Unbounded backoff spinning.
-    #[cfg(feature = "yield")]
+    #[cfg(any(feature = "yield", test))]
     fn spin(&self) {
         for _ in 0..1 << self.0 {
             hint::spin_loop();

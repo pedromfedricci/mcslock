@@ -169,8 +169,12 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.try_lock_with(|mut guard| {
-    ///         *guard.unwrap() = 10;
+    ///     c_mutex.try_lock_with(|guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock failed");
+    ///         }
     ///     });
     /// })
     /// .join().expect("thread::spawn failed");
@@ -189,7 +193,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// An example of panic:
     ///
-    /// ```should_panic
+    #[doc = concat!("```should_panic,", literal_panic_msg!())]
     /// use mcslock::thread_local::Mutex;
     /// use mcslock::relax::Spin;
     ///
@@ -197,10 +201,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// let mutex = SpinMutex::new(0);
     ///
-    /// mutex.try_lock_with(|_guard| {
+    /// mutex.try_lock_with(|guard| {
+    ///     let _guard = guard.unwrap();
     ///     let mutex = SpinMutex::new(());
-    ///     // Recursive locking a thread_local::Mutex
-    ///     // is not allowed, this will panic.
+    ///     // Acquiring more than one thread_local::Mutex within a single
+    ///     // thread at the same time is not allowed, this will panic.
     ///     mutex.lock_with(|_guard| ());
     /// });
     /// ```
@@ -259,7 +264,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// An example of panic:
     ///
-    /// ```should_panic
+    #[doc = concat!("```should_panic,", literal_panic_msg!())]
     /// use mcslock::thread_local::Mutex;
     /// use mcslock::relax::Spin;
     ///
@@ -269,8 +274,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// mutex.lock_with(|_guard| {
     ///     let mutex = SpinMutex::new(());
-    ///     // Recursive locking a thread_local::Mutex
-    ///     // is not allowed, this will panic.
+    ///     // Acquiring more than one thread_local::Mutex within a single
+    ///     // thread at the same time is not allowed, this will panic.
     ///     mutex.try_lock_with(|_guard| ());
     /// });
     /// ```
@@ -651,57 +656,23 @@ mod test {
     }
 }
 
-// #[cfg(all(loom, test))]
-// mod test {
-//     use loom::{model, thread};
+#[cfg(all(loom, test))]
+mod test {
+    use crate::loom::model;
+    use crate::thread_local::yields::Mutex;
 
-//     use crate::loom::Guard;
-//     use crate::thread_local::yields::Mutex;
+    #[test]
+    fn try_lock_join() {
+        model::try_lock_join::<Mutex<_>>();
+    }
 
-//     #[test]
-//     fn threads_join() {
-//         use core::ops::Range;
-//         use loom::sync::Arc;
+    #[test]
+    fn lock_join() {
+        model::lock_join::<Mutex<_>>();
+    }
 
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             lock.lock_with(|guard| *guard.deref_mut() += 1);
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 3 or more threads make this model run for too long.
-//             let runs @ Range { end, .. } = 0..2;
-
-//             let handles = runs
-//                 .into_iter()
-//                 .map(|_| Arc::clone(&data))
-//                 .map(|data| thread::spawn(move || inc(data)))
-//                 .collect::<Vec<_>>();
-
-//             for handle in handles {
-//                 handle.join().unwrap();
-//             }
-
-//             assert_eq!(end, data.lock_with(|guard| *guard.deref()));
-//         });
-//     }
-
-//     #[test]
-//     fn threads_fork() {
-//         // Using std's Arc or else this model runs for loo long.
-//         use std::sync::Arc;
-
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             lock.lock_with(|guard| *guard.deref_mut() += 1);
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 4 or more threads make this model run for too long.
-//             for _ in 0..3 {
-//                 let data = Arc::clone(&data);
-//                 thread::spawn(move || inc(data));
-//             }
-//         });
-//     }
-// }
+    #[test]
+    fn mixed_lock_join() {
+        model::mixed_lock_join::<Mutex<_>>();
+    }
+}

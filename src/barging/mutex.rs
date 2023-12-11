@@ -238,9 +238,9 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     let mut lock = c_mutex.try_lock();
-    ///     if let Some(ref mut mutex) = lock {
-    ///         **mutex = 10;
+    ///     let mut guard = c_mutex.try_lock();
+    ///     if let Some(mut guard) = guard {
+    ///         *guard = 10;
     ///     } else {
     ///         println!("try_lock failed");
     ///     }
@@ -280,8 +280,12 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.try_lock_with(|mut guard| {
-    ///         *guard.unwrap() = 10;
+    ///     c_mutex.try_lock_with(|guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock failed");
+    ///         }
     ///     });
     /// })
     /// .join().expect("thread::spawn failed");
@@ -691,59 +695,23 @@ mod test {
     }
 }
 
-// #[cfg(all(loom, test))]
-// mod test {
-//     use loom::{model, thread};
+#[cfg(all(loom, test))]
+mod test {
+    use crate::barging::yields::Mutex;
+    use crate::loom::model;
 
-//     use crate::barging::yields::Mutex;
-//     use crate::loom::Guard;
+    #[test]
+    fn try_lock_join() {
+        model::try_lock_join::<Mutex<_>>();
+    }
 
-//     #[test]
-//     fn threads_join() {
-//         use core::ops::Range;
-//         use loom::sync::Arc;
+    #[test]
+    fn lock_join() {
+        model::lock_join::<Mutex<_>>();
+    }
 
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             let guard = lock.lock();
-//             *guard.deref_mut() += 1;
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 3 or more threads make this model run for too long.
-//             let runs @ Range { end, .. } = 0..2;
-
-//             let handles = runs
-//                 .into_iter()
-//                 .map(|_| Arc::clone(&data))
-//                 .map(|data| thread::spawn(move || inc(data)))
-//                 .collect::<Vec<_>>();
-
-//             for handle in handles {
-//                 handle.join().unwrap();
-//             }
-
-//             assert_eq!(end, *data.lock().deref());
-//         });
-//     }
-
-//     #[test]
-//     fn threads_fork() {
-//         // Using std's Arc or else this model runs for loo long.
-//         use std::sync::Arc;
-
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             let guard = lock.lock();
-//             *guard.deref_mut() += 1;
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 4 or more threads make this model run for too long.
-//             for _ in 0..3 {
-//                 let data = Arc::clone(&data);
-//                 thread::spawn(move || inc(data));
-//             }
-//         });
-//     }
-// }
+    #[test]
+    fn mixed_lock_join() {
+        model::mixed_lock_join::<Mutex<_>>();
+    }
+}

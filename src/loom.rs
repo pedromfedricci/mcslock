@@ -1,10 +1,7 @@
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-use std::sync::Arc as StdArc;
 
 use loom::cell::{ConstPtr, MutPtr, UnsafeCell};
-use loom::sync::Arc as LoomArc;
-use loom::{model, thread};
 
 /// A trait for guard types that hold exclusive access to the underlying data
 /// behind Loom's [`UnsafeCell`].
@@ -29,13 +26,13 @@ pub unsafe trait Guard<T: ?Sized>: Sized {
 }
 
 /// A Loom immutable pointer borrowed from a guard instance.
-pub struct GuardDeref<'a, T: ?Sized + 'a, G: Guard<T>> {
+pub struct GuardDeref<'a, T: ?Sized, G: Guard<T>> {
     ptr: ConstPtr<T>,
     marker: PhantomData<&'a G>,
 }
 
-impl<'a, T: ?Sized, G: Guard<T>> GuardDeref<'a, T, G> {
-    fn new(guard: &'a G) -> Self {
+impl<T: ?Sized, G: Guard<T>> GuardDeref<'_, T, G> {
+    fn new(guard: &G) -> Self {
         let ptr = guard.get().get();
         Self { ptr, marker: PhantomData }
     }
@@ -51,13 +48,13 @@ impl<T: ?Sized, G: Guard<T>> Deref for GuardDeref<'_, T, G> {
 }
 
 /// A Loom mutable pointer borrowed from a guard instance.
-pub struct GuardDerefMut<'a, T: ?Sized + 'a, G: Guard<T>> {
+pub struct GuardDerefMut<'a, T: ?Sized, G: Guard<T>> {
     ptr: MutPtr<T>,
     marker: PhantomData<&'a G>,
 }
 
-impl<'a, T: ?Sized, G: Guard<T>> GuardDerefMut<'a, T, G> {
-    fn new(guard: &'a G) -> Self {
+impl<T: ?Sized, G: Guard<T>> GuardDerefMut<'_, T, G> {
+    fn new(guard: &G) -> Self {
         let ptr = guard.get().get_mut();
         Self { ptr, marker: PhantomData }
     }
@@ -99,50 +96,97 @@ pub trait LockWith<T: ?Sized> {
         F: FnOnce(Self::Guard<'_>) -> Ret;
 }
 
-/// Increments a shared u32 value.
-fn inc_std<L: LockWith<u32>>(lock: StdArc<L>) {
-    lock.lock_with(|g| g.deref_mut().wrapping_add(1));
-}
+pub mod model {
+    use std::ops::Range;
 
-/// Increments a shared u32 value.
-fn inc_loom<L: LockWith<u32>>(lock: LoomArc<L>) {
-    lock.lock_with(|guard| guard.deref_mut().wrapping_add(1));
-}
-
-/// Get the shared u32 value.
-fn get_loom<L: LockWith<u32>>(lock: LoomArc<L>) -> u32 {
-    lock.lock_with(|guard| *guard.deref())
-}
-
-#[allow(unused)]
-fn threads_join<L: LockWith<u32> + 'static>() {
     use loom::sync::Arc;
-    model(|| {
-        let data = Arc::new(L::new(0));
-        // 3 or more threads make this model run for too long.
-        let runs @ core::ops::Range { end, .. } = 0..2;
-        let handles = runs
-            .into_iter()
-            .map(|_| Arc::clone(&data))
-            .map(|data| thread::spawn(move || inc_loom(data)))
-            .collect::<Vec<_>>();
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        assert_eq!(end, get_loom(data));
-    });
-}
+    use loom::{model, thread};
 
-#[allow(unused)]
-fn threads_fork<L: LockWith<u32> + 'static>() {
-    // Using std's Arc or else this model takes to long to run.
-    use std::sync::Arc;
-    model(|| {
-        let data = Arc::new(L::new(0));
-        // 4 or more threads make this model run for too long.
-        for _ in 0..3 {
-            let data = Arc::clone(&data);
-            thread::spawn(move || inc_std(data));
-        }
-    });
+    use super::{Guard, LockWith};
+
+    type Int = u32;
+    const RUN2: Range<Int> = Range { start: 0, end: 2 };
+    const RUN3: Range<Int> = Range { start: 0, end: 3 };
+
+    /// Increments a shared integer.
+    fn inc<L: LockWith<Int>>(lock: &Arc<L>) {
+        lock.lock_with(|guard| *guard.deref_mut() += 1);
+    }
+
+    /// Tries to increment a shared integer.
+    fn try_inc<L: LockWith<Int>>(lock: &Arc<L>) {
+        lock.try_lock_with(|opt| opt.map(|guard| *guard.deref_mut() += 1));
+    }
+
+    /// Get the shared integer.
+    fn get<L: LockWith<Int>>(lock: &Arc<L>) -> Int {
+        lock.lock_with(|guard| *guard.deref())
+    }
+
+    /// Evaluates that concurrent `try_lock` calls will serialize all mutations
+    /// against the share data, therefore no data races.
+    pub fn try_lock_join<L: LockWith<Int> + 'static>() {
+        model(|| {
+            let data = Arc::new(L::new(0));
+            let runs @ Range { end, .. } = RUN3;
+            let handles = runs
+                .into_iter()
+                .map(|_| Arc::clone(&data))
+                .map(|data| thread::spawn(move || try_inc(&data)))
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            let data = get(&data);
+            assert!(0 < data && data < end + 1);
+        });
+    }
+
+    /// Evaluates that concurrent `lock` calls will serialize all mutations
+    /// against the share data, therefore no data races.
+    pub fn lock_join<L: LockWith<Int> + 'static>() {
+        model(|| {
+            let data = Arc::new(L::new(0));
+            // TODO: Three or more threads make this model run for too long.
+            // It would be nice to run a model with at least three thread
+            // because that would cover a queue with head, tail and at least
+            // one more queue node instead of just head and tail.
+            let runs @ Range { end, .. } = RUN2;
+            let handles = runs
+                .into_iter()
+                .map(|_| Arc::clone(&data))
+                .map(|data| thread::spawn(move || inc(&data)))
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            assert_eq!(end, get(&data));
+        });
+    }
+
+    /// Evaluates that concurrent `lock` and `try_lock` calls will serialize
+    /// all mutations against the share data, therefore no data races.
+    pub fn mixed_lock_join<L: LockWith<Int> + 'static>() {
+        model(|| {
+            let data = Arc::new(L::new(0));
+            // TODO: Three or more threads make this model run for too long.
+            // It would be nice to run a model with at least three thread
+            // because that would cover a queue with head, tail and at least
+            // one more queue node instead of just head and tail.
+            let runs @ Range { end, .. } = RUN2;
+            let handles = runs
+                .into_iter()
+                .map(|run| (Arc::clone(&data), run))
+                .map(|(data, run)| {
+                    let f = if run % 2 == 0 { inc } else { try_inc };
+                    thread::spawn(move || f(&data))
+                })
+                .collect::<Vec<_>>();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            let data = get(&data);
+            assert!(0 < data && data < end + 1);
+        });
+    }
 }

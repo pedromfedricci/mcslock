@@ -10,8 +10,9 @@ default_to_workspace = false
 # Build package for no_std environment.
 [tasks.no-std]
 command = "cargo"
-args = ["hack", "build", "--target", "thumbv7m-none-eabi", "--no-dev-deps",
-        "--feature-powerset", "--skip", "yield,thread_local"]
+args = ["hack", "build", "--target", "thumbv7m-none-eabi",
+        "--feature-powerset", "--no-dev-deps", "--skip",
+        "yield,thread_local"]
 
 # Build docs for docs.rs.
 [tasks.docsrs]
@@ -26,25 +27,33 @@ command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
 args = ["hack", "clippy", "--feature-powerset", "--no-dev-deps"]
 
+# Lint all feature combinations with carg-hack on test profile.
+[tasks.lint-test]
+command = "cargo"
+env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
+args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
+        "--no-dev-deps"]
+
 # Run tests under miri.
 # NOTE: must run as: cargo +nightly make miri
 [tasks.miri-test]
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
 command = "cargo"
-args = ["miri", "test", "--all-features"]
+args = ["miri", "test", "--all-features", "${@}"]
 
 # Run Loom tests.
 [tasks.loom-test]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CFG_LOOM}" }
-args = ["test", "--lib", "--release", "--all-features"]
+args = ["test", "--lib", "--release", "--all-features", "${@}"]
 
 # Lint Loom cfg.
 [tasks.loom-lint]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS_LOOM}" }
-args = ["clippy", "--profile", "test", "--all-features"]
+# args = ["clippy", "--profile", "test", "--all-features"]
+args = ["hack", "clippy", "--profile", "test", "--feature-powerset"]
 
 # Run busy loop bench.
 [tasks.bench-busy]

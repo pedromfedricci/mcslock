@@ -219,9 +219,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// thread::spawn(move || {
     ///     let mut node = MutexNode::new();
-    ///     let mut lock = c_mutex.try_lock(&mut node);
-    ///     if let Some(ref mut mutex) = lock {
-    ///         **mutex = 10;
+    ///     let mut guard = c_mutex.try_lock(&mut node);
+    ///     if let Some(mut guard) = guard {
+    ///         *guard = 10;
     ///     } else {
     ///         println!("try_lock failed");
     ///     }
@@ -234,7 +234,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode) -> Option<MutexGuard<'a, T, R>> {
         let node = node.initialize();
         self.tail
-            .compare_exchange(ptr::null_mut(), node.as_ptr(), Acquire, Relaxed)
+            .compare_exchange(ptr::null_mut(), node.as_ptr(), AcqRel, Relaxed)
             .map(|_| MutexGuard::new(self, node))
             .ok()
     }
@@ -263,8 +263,12 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.try_lock_with(|mut guard| {
-    ///         *guard.unwrap() = 10;
+    ///     c_mutex.try_lock_with(|guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock failed");
+    ///         }
     ///     });
     /// })
     /// .join().expect("thread::spawn failed");
@@ -795,62 +799,23 @@ mod test {
     }
 }
 
-// #[cfg(all(loom, test))]
-// mod test {
-//     use loom::{model, thread};
+#[cfg(all(loom, test))]
+mod test {
+    use crate::loom::model;
+    use crate::raw::yields::Mutex;
 
-//     use crate::loom::Guard;
-//     use crate::raw::yields::{Mutex, MutexNode};
+    #[test]
+    fn try_lock_join() {
+        model::try_lock_join::<Mutex<_>>();
+    }
 
-//     #[test]
-//     fn threads_join() {
-//         use core::ops::Range;
-//         use loom::sync::Arc;
+    #[test]
+    fn lock_join() {
+        model::lock_join::<Mutex<_>>();
+    }
 
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             let mut node = MutexNode::new();
-//             let guard = lock.lock(&mut node);
-//             *guard.deref_mut() += 1;
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 3 or more threads make this model run for too long.
-//             let runs @ Range { end, .. } = 0..2;
-
-//             let handles = runs
-//                 .into_iter()
-//                 .map(|_| Arc::clone(&data))
-//                 .map(|data| thread::spawn(move || inc(data)))
-//                 .collect::<Vec<_>>();
-
-//             for handle in handles {
-//                 handle.join().unwrap();
-//             }
-
-//             let mut node = MutexNode::new();
-//             assert_eq!(end, *data.lock(&mut node).deref());
-//         });
-//     }
-
-//     #[test]
-//     fn threads_fork() {
-//         // Using std's Arc or else this model runs for loo long.
-//         use std::sync::Arc;
-
-//         fn inc(lock: Arc<Mutex<i32>>) {
-//             let mut node = MutexNode::new();
-//             let guard = lock.lock(&mut node);
-//             *guard.deref_mut() += 1;
-//         }
-
-//         model(|| {
-//             let data = Arc::new(Mutex::new(0));
-//             // 4 or more threads make this model run for too long.
-//             for _ in 0..3 {
-//                 let data = Arc::clone(&data);
-//                 thread::spawn(move || inc(data));
-//             }
-//         });
-//     }
-// }
+    #[test]
+    fn mixed_lock_join() {
+        model::mixed_lock_join::<Mutex<_>>();
+    }
+}
