@@ -186,7 +186,6 @@
     no_std
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(test, allow(clippy::needless_pass_by_value))]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::inline_always)]
 #![allow(clippy::doc_markdown)]
@@ -206,6 +205,8 @@ pub mod lock_api;
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;
+
+pub(crate) mod cfg;
 
 #[cfg(all(loom, test))]
 pub(crate) mod loom;

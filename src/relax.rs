@@ -14,6 +14,10 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
+use crate::cfg::hint;
+#[cfg(any(feature = "yield", test))]
+use crate::cfg::thread;
+
 /// A trait implemented by spinning relax strategies.
 pub trait Relax: Default {
     /// Perform the relaxing operation during a period of contention.
@@ -42,7 +46,7 @@ pub struct Spin;
 impl Relax for Spin {
     #[inline(always)]
     fn relax(&mut self) {
-        core::hint::spin_loop();
+        hint::spin_loop();
     }
 }
 
@@ -53,27 +57,16 @@ impl Relax for Spin {
 /// priority inversion on targets that have a standard library available. Note
 /// that such targets have scheduler-integrated concurrency primitives available,
 /// and you should generally use these instead, except in rare circumstances.
-#[cfg(any(feature = "yield", loom, test))]
+#[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 #[derive(Default)]
 pub struct Yield;
 
-#[cfg(any(all(feature = "yield", not(loom)), all(test, not(loom))))]
+#[cfg(any(feature = "yield", test))]
 impl Relax for Yield {
     #[inline]
     fn relax(&mut self) {
-        std::thread::yield_now();
-    }
-}
-
-/// When running Loom models, we must call Loom's `yield_now` to tell Loom that
-/// another thread needs to be scheduled in order for the current one to make
-/// progress.
-#[cfg(all(loom, test))]
-impl Relax for Yield {
-    #[inline(always)]
-    fn relax(&mut self) {
-        loom::thread::yield_now();
+        thread::yield_now();
     }
 }
 
@@ -137,27 +130,27 @@ impl Relax for SpinBackoff {
 /// minimising power consumption and priority inversion on targets that have
 /// a standard library available. Note that you should prefer scheduler-aware
 /// locks if you have access to the standard library.
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 #[derive(Default)]
 pub struct YieldBackoff {
     step: Step,
 }
 
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 impl YieldBackoff {
     const SPIN_LIMIT: u32 = SpinBackoff::SPIN_LIMIT;
     const YIELD_LIMIT: u32 = 10;
 }
 
-#[cfg(feature = "yield")]
+#[cfg(any(feature = "yield", test))]
 impl Relax for YieldBackoff {
     #[inline(always)]
     fn relax(&mut self) {
         if self.step.0 <= Self::SPIN_LIMIT {
             self.step.spin();
         } else {
-            std::thread::yield_now();
+            thread::yield_now();
         }
         self.step.step_to(Self::YIELD_LIMIT);
     }
@@ -169,17 +162,17 @@ struct Step(u32);
 
 impl Step {
     /// Unbounded backoff spinning.
-    #[cfg(feature = "yield")]
+    #[cfg(any(feature = "yield", test))]
     fn spin(&self) {
         for _ in 0..1 << self.0 {
-            core::hint::spin_loop();
+            hint::spin_loop();
         }
     }
 
     /// Bounded backoff spinning.
     fn spin_to(&self, max: u32) {
         for _ in 0..1 << self.0.min(max) {
-            core::hint::spin_loop();
+            hint::spin_loop();
         }
     }
 

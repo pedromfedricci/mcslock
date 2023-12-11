@@ -4,21 +4,8 @@ use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
-#[cfg(not(all(loom, test)))]
-use core::cell::UnsafeCell;
-#[cfg(not(all(loom, test)))]
-use core::ops::{Deref, DerefMut};
-#[cfg(not(all(loom, test)))]
-use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
-
-#[cfg(all(loom, test))]
-use loom::cell::{ConstPtr, MutPtr, UnsafeCell};
-#[cfg(all(loom, test))]
-use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
-
-#[cfg(all(loom, test))]
-use crate::loom::{Guard, GuardDeref, GuardDerefMut};
-
+use crate::cfg::atomic::{fence, AtomicBool, AtomicPtr};
+use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::relax::Relax;
 
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
@@ -149,7 +136,7 @@ impl MutexNode {
 pub struct Mutex<T: ?Sized, R> {
     tail: AtomicPtr<MutexNodeInit>,
     marker: PhantomData<R>,
-    data: UnsafeCell<T>,
+    pub(crate) data: UnsafeCell<T>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -232,9 +219,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// thread::spawn(move || {
     ///     let mut node = MutexNode::new();
-    ///     let mut lock = c_mutex.try_lock(&mut node);
-    ///     if let Some(ref mut mutex) = lock {
-    ///         **mutex = 10;
+    ///     let mut guard = c_mutex.try_lock(&mut node);
+    ///     if let Some(mut guard) = guard {
+    ///         *guard = 10;
     ///     } else {
     ///         println!("try_lock failed");
     ///     }
@@ -247,7 +234,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode) -> Option<MutexGuard<'a, T, R>> {
         let node = node.initialize();
         self.tail
-            .compare_exchange(ptr::null_mut(), node.as_ptr(), Acquire, Relaxed)
+            .compare_exchange(ptr::null_mut(), node.as_ptr(), AcqRel, Relaxed)
             .map(|_| MutexGuard::new(self, node))
             .ok()
     }
@@ -276,8 +263,12 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.try_lock_with(|mut guard| {
-    ///         *guard.unwrap() = 10;
+    ///     c_mutex.try_lock_with(|guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock failed");
+    ///         }
     ///     });
     /// })
     /// .join().expect("thread::spawn failed");
@@ -472,7 +463,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         // SAFETY: We hold exclusive access to the Mutex data.
-        unsafe { &mut *self.data_ptr() }
+        unsafe { &mut *self.data.get() }
     }
 
     /// Unlocks the lock if the candidate node is the queue's tail.
@@ -484,24 +475,6 @@ impl<T: ?Sized, R> Mutex<T, R> {
     #[cfg(feature = "thread_local")]
     pub(crate) fn tail_debug(&self) -> &impl fmt::Debug {
         &self.tail
-    }
-
-    #[cfg(not(all(loom, test)))]
-    /// Returns a raw mutable pointer to the underlying data.
-    pub(crate) const fn data_ptr(&self) -> *mut T {
-        self.data.get()
-    }
-
-    /// Get a Loom immutable raw pointer to the underlying data.
-    #[cfg(all(loom, test))]
-    pub(crate) fn data_get(&self) -> ConstPtr<T> {
-        self.data.get()
-    }
-
-    /// Get a Loom mutable raw pointer to the underlying data.
-    #[cfg(all(loom, test))]
-    pub(crate) fn data_get_mut(&self) -> MutPtr<T> {
-        self.data.get_mut()
     }
 }
 
@@ -524,11 +497,35 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
         let mut node = MutexNode::new();
         let mut d = f.debug_struct("Mutex");
         match self.try_lock(&mut node) {
-            Some(guard) => guard.data_with(|data| d.field("data", &data)),
+            Some(guard) => guard.with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         };
         d.field("tail", &self.tail);
         d.finish()
+    }
+}
+
+#[cfg(all(loom, test))]
+#[rustfmt::skip]
+impl<T: ?Sized, R: Relax> crate::loom::LockWith<T> for Mutex<T, R> {
+    type Guard<'a> = MutexGuard<'a, T, R> where T: 'a, Self: 'a;
+
+    fn new(value: T) -> Self where T: Sized {
+        Self::new(value)
+    }
+
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+    {
+        self.try_lock_with(f)
+    }
+
+    fn lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+    {
+        self.lock_with(f)
     }
 }
 
@@ -561,24 +558,13 @@ impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
         Self { lock, node }
     }
 
-    /// Runs `f` with an immutable reference to the wrapped value.
-    #[cfg(not(all(loom, test)))]
-    pub(crate) fn data_with<F, Ret>(&self, f: F) -> Ret
+    /// Runs `f` against an shared reference pointing to the underlying data.
+    pub(crate) fn with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&T) -> Ret,
     {
         // SAFETY: A guard instance holds the lock locked.
-        f(unsafe { &*self.lock.data_ptr() })
-    }
-
-    /// Runs `f` with an immutable reference to the wrapped value.
-    #[cfg(all(loom, test))]
-    pub(crate) fn data_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(&T) -> Ret,
-    {
-        // SAFETY: A guard instance holds the lock locked.
-        f(unsafe { self.lock.data_get().deref() })
+        unsafe { self.lock.data.with_unchecked(f) }
     }
 }
 
@@ -589,49 +575,43 @@ impl<'a, T: ?Sized, R: Relax> Drop for MutexGuard<'a, T, R> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R: Relax> Deref for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, R: Relax> core::ops::Deref for MutexGuard<'a, T, R> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
     fn deref(&self) -> &T {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { &*self.lock.data_ptr() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R: Relax> DerefMut for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { &mut *self.lock.data_ptr() }
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
 impl<'a, T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Debug::fmt(data, f))
+        self.with(|data| fmt::Debug::fmt(data, f))
     }
 }
 
 impl<'a, T: ?Sized + fmt::Display, R: Relax> fmt::Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.data_with(|data| fmt::Display::fmt(data, f))
+        self.with(|data| fmt::Display::fmt(data, f))
     }
 }
 
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<'a, T: ?Sized, R: Relax> Guard<'a, T> for MutexGuard<'a, T, R> {
-    type Guard = Self;
-
-    fn deref(&'a self) -> GuardDeref<'a, T, Self::Guard> {
-        GuardDeref::new(self.lock.data_get())
-    }
-
-    fn deref_mut(&'a self) -> GuardDerefMut<'a, T, Self::Guard> {
-        GuardDerefMut::new(self.lock.data_get_mut())
+unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard<T> for MutexGuard<'_, T, R> {
+    fn get(&self) -> &loom::cell::UnsafeCell<T> {
+        &self.lock.data
     }
 }
 
@@ -821,60 +801,21 @@ mod test {
 
 #[cfg(all(loom, test))]
 mod test {
-    use loom::{model, thread};
-
-    use crate::loom::Guard;
-    use crate::raw::yields::{Mutex, MutexNode};
+    use crate::loom::model;
+    use crate::raw::yields::Mutex;
 
     #[test]
-    fn threads_join() {
-        use core::ops::Range;
-        use loom::sync::Arc;
-
-        fn inc(lock: Arc<Mutex<i32>>) {
-            let mut node = MutexNode::new();
-            let guard = lock.lock(&mut node);
-            *guard.deref_mut() += 1;
-        }
-
-        model(|| {
-            let data = Arc::new(Mutex::new(0));
-            // 3 or more threads make this model run for too long.
-            let runs @ Range { end, .. } = 0..2;
-
-            let handles = runs
-                .into_iter()
-                .map(|_| Arc::clone(&data))
-                .map(|data| thread::spawn(move || inc(data)))
-                .collect::<Vec<_>>();
-
-            for handle in handles {
-                handle.join().unwrap();
-            }
-
-            let mut node = MutexNode::new();
-            assert_eq!(end, *data.lock(&mut node).deref());
-        });
+    fn try_lock_join() {
+        model::try_lock_join::<Mutex<_>>();
     }
 
     #[test]
-    fn threads_fork() {
-        // Using std's Arc or else this model runs for loo long.
-        use std::sync::Arc;
+    fn lock_join() {
+        model::lock_join::<Mutex<_>>();
+    }
 
-        fn inc(lock: Arc<Mutex<i32>>) {
-            let mut node = MutexNode::new();
-            let guard = lock.lock(&mut node);
-            *guard.deref_mut() += 1;
-        }
-
-        model(|| {
-            let data = Arc::new(Mutex::new(0));
-            // 4 or more threads make this model run for too long.
-            for _ in 0..3 {
-                let data = Arc::clone(&data);
-                thread::spawn(move || inc(data));
-            }
-        });
+    #[test]
+    fn mixed_lock_join() {
+        model::mixed_lock_join::<Mutex<_>>();
     }
 }
