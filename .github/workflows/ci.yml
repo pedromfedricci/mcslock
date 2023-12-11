@@ -79,8 +79,6 @@ jobs:
   linter:
     name: Linter
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -D warnings -D clippy::pedantic -D clippy::nursery
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -89,11 +87,13 @@ jobs:
       - name: Install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       - name: Lint feature powerset
+        env:
+          RUSTFLAGS: -D warnings -D clippy::pedantic -D clippy::nursery
         run: cargo hack clippy --feature-powerset --no-dev-deps
       - name: Lint loom
         env:
-          RUSTFLAGS: --cfg loom
-        run: cargo clippy --profile test --all-features
+          RUSTFLAGS: --cfg loom -D warnings -D clippy::pedantic -D clippy::nursery
+        run: cargo hack clippy --profile test --feature-powerset
 
   miri:
     name: Miri

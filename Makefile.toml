@@ -48,11 +48,10 @@ command = "cargo"
 env = { "RUSTFLAGS" = "${CFG_LOOM}" }
 args = ["test", "--lib", "--release", "--all-features", "${@}"]
 
-# Lint Loom cfg.
+# Lint all feature combinations with cargo-hack on test profile and Loom cfg.
 [tasks.loom-lint]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS_LOOM}" }
-# args = ["clippy", "--profile", "test", "--all-features"]
 args = ["hack", "clippy", "--profile", "test", "--feature-powerset"]
 
 # Run busy loop bench.
