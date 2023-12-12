@@ -388,12 +388,19 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
     }
 }
 
-#[cfg(all(loom, test))]
-#[rustfmt::skip]
-impl<T: ?Sized, R: Relax> crate::loom::LockWith<T> for Mutex<T, R> {
-    type Guard<'a> = MutexGuard<'a, T, R> where T: 'a, Self: 'a;
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+    type Target = T;
 
-    fn new(value: T) -> Self where T: Sized {
+    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+    where
+        Self: 'a,
+        Self::Target: 'a;
+
+    fn new(value: Self::Target) -> Self
+    where
+        Self::Target: Sized,
+    {
         Self::new(value)
     }
 
@@ -482,6 +489,18 @@ impl<T: ?Sized, R> Drop for MutexGuard<'_, T, R> {
     }
 }
 
+impl<'a, T: ?Sized + fmt::Debug, R> fmt::Debug for MutexGuard<'a, T, R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.with(|data| fmt::Debug::fmt(data, f))
+    }
+}
+
+impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.with(|data| fmt::Display::fmt(data, f))
+    }
+}
+
 #[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized, R> core::ops::Deref for MutexGuard<'a, T, R> {
     type Target = T;
@@ -502,23 +521,13 @@ impl<'a, T: ?Sized, R> core::ops::DerefMut for MutexGuard<'a, T, R> {
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug, R> fmt::Debug for MutexGuard<'a, T, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.with(|data| fmt::Debug::fmt(data, f))
-    }
-}
-
-impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.with(|data| fmt::Display::fmt(data, f))
-    }
-}
-
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
-unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard<T> for MutexGuard<'_, T, R> {
-    fn get(&self) -> &loom::cell::UnsafeCell<T> {
+unsafe impl<T: ?Sized, R> crate::loom::Guard for MutexGuard<'_, T, R> {
+    type Target = T;
+
+    fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
         &self.lock.inner.data
     }
 }

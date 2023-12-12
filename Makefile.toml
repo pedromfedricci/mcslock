@@ -35,7 +35,7 @@ args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
         "--no-dev-deps"]
 
 # Run tests under miri.
-# NOTE: must run as: cargo +nightly make miri
+# NOTE: must run as: `cargo +nightly make miri`.
 [tasks.miri-test]
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
@@ -47,6 +47,12 @@ args = ["miri", "test", "--all-features", "${@}"]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CFG_LOOM}" }
 args = ["test", "--lib", "--release", "--all-features", "${@}"]
+
+# Check Loom cfg (faster if using the same flags for rust-analyzer).
+[tasks.loom-check]
+command = "cargo"
+env = { "RUSTFLAGS" = "${CFG_LOOM}" }
+args = ["check", "--profile", "test", "--all-features", "${@}"]
 
 # Lint all feature combinations with cargo-hack on test profile and Loom cfg.
 [tasks.loom-lint]

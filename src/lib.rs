@@ -208,5 +208,8 @@ pub mod thread_local;
 
 pub(crate) mod cfg;
 
+#[cfg(test)]
+pub(crate) mod test;
+
 #[cfg(all(loom, test))]
 pub(crate) mod loom;

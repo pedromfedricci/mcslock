@@ -16,10 +16,12 @@ pub mod cell {
     pub use loom::cell::UnsafeCell;
 
     #[cfg(not(all(loom, test)))]
-    impl<T: ?Sized> WithUnchecked<T> for UnsafeCell<T> {
+    impl<T: ?Sized> WithUnchecked for UnsafeCell<T> {
+        type Target = T;
+
         unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
-            F: FnOnce(&T) -> Ret,
+            F: FnOnce(&Self::Target) -> Ret,
         {
             // SAFETY: Caller must guarantee there are no mutable aliases.
             f(unsafe { &*self.get() })
@@ -27,10 +29,12 @@ pub mod cell {
     }
 
     #[cfg(all(loom, test))]
-    impl<T: ?Sized> WithUnchecked<T> for UnsafeCell<T> {
+    impl<T: ?Sized> WithUnchecked for UnsafeCell<T> {
+        type Target = T;
+
         unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
-            F: FnOnce(&T) -> Ret,
+            F: FnOnce(&Self::Target) -> Ret,
         {
             // SAFETY: Caller must guarantee there are no mutable aliases.
             self.with(|ptr| f(unsafe { &*ptr }))
@@ -40,7 +44,10 @@ pub mod cell {
     mod sealed {
         /// A trait that extends [`UnsafeCell`] to allow running closures against
         /// its underlying data.
-        pub trait WithUnchecked<T: ?Sized> {
+        pub trait WithUnchecked {
+            /// The type of the underlying data.
+            type Target: ?Sized;
+
             /// Runs `f` against a shared reference borrowed from a [`UnsafeCell`].
             ///
             /// # Safety
@@ -49,7 +56,7 @@ pub mod cell {
             /// underlying data.
             unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
             where
-                F: FnOnce(&T) -> Ret;
+                F: FnOnce(&Self::Target) -> Ret;
         }
     }
 }
