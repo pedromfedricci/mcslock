@@ -626,185 +626,53 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    // Test suite from the Rust's Mutex implementation with minor modifications
-    // since the API is not compatible with this crate implementation and some
-    // new tests as well.
-    //
-    // Copyright 2014 The Rust Project Developers.
-    //
-    // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-    // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-    // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-    // option. This file may not be copied, modified, or distributed
-    // except according to those terms.
-
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::mpsc::channel;
-    use std::sync::Arc;
-    use std::thread;
-
-    use crate::raw::yields::{Mutex, MutexNode};
-
-    #[derive(Eq, PartialEq, Debug)]
-    struct NonCopy(i32);
+    use crate::raw::yields::Mutex;
+    use crate::test::tests;
 
     #[test]
     fn smoke() {
-        let mut node = MutexNode::new();
-        let m = Mutex::new(());
-        drop(m.lock(&mut node));
-        drop(m.lock(&mut node));
+        tests::smoke::<Mutex<_>>();
     }
 
     #[test]
     fn lots_and_lots() {
-        static LOCK: Mutex<u32> = Mutex::new(0);
-
-        const ITERS: u32 = 1000;
-        const CONCURRENCY: u32 = 3;
-
-        fn inc() {
-            let mut node = MutexNode::new();
-            for _ in 0..ITERS {
-                let mut g = LOCK.lock(&mut node);
-                *g += 1;
-            }
-        }
-
-        let (tx, rx) = channel();
-        for _ in 0..CONCURRENCY {
-            let tx2 = tx.clone();
-            thread::spawn(move || {
-                inc();
-                tx2.send(()).unwrap();
-            });
-            let tx2 = tx.clone();
-            thread::spawn(move || {
-                inc();
-                tx2.send(()).unwrap();
-            });
-        }
-
-        drop(tx);
-        for _ in 0..2 * CONCURRENCY {
-            rx.recv().unwrap();
-        }
-        let mut node = MutexNode::new();
-        assert_eq!(*LOCK.lock(&mut node), ITERS * CONCURRENCY * 2);
+        use std::sync::Arc;
+        let data = Arc::new(Mutex::new(0));
+        tests::lots_and_lots(&data);
     }
 
     #[test]
     fn try_lock() {
-        let mut node = MutexNode::new();
-        let m = Mutex::new(());
-        *m.try_lock(&mut node).unwrap() = ();
+        tests::test_try_lock::<Mutex<_>>();
     }
 
     #[test]
-    fn test_into_inner() {
-        let m = Mutex::new(NonCopy(10));
-        assert_eq!(m.into_inner(), NonCopy(10));
-    }
+    fn test_into_inner() {}
 
     #[test]
-    fn test_into_inner_drop() {
-        struct Foo(Arc<AtomicUsize>);
-        impl Drop for Foo {
-            fn drop(&mut self) {
-                self.0.fetch_add(1, Ordering::SeqCst);
-            }
-        }
-        let num_drops = Arc::new(AtomicUsize::new(0));
-        let m = Mutex::new(Foo(num_drops.clone()));
-        assert_eq!(num_drops.load(Ordering::SeqCst), 0);
-        {
-            let _inner = m.into_inner();
-            assert_eq!(num_drops.load(Ordering::SeqCst), 0);
-        }
-        assert_eq!(num_drops.load(Ordering::SeqCst), 1);
-    }
+    fn test_into_inner_drop() {}
 
     #[test]
-    fn test_get_mut() {
-        let mut m = Mutex::new(NonCopy(10));
-        *m.get_mut() = NonCopy(20);
-        assert_eq!(m.into_inner(), NonCopy(20));
-    }
+    fn test_get_mut() {}
 
     #[test]
     fn test_lock_arc_nested() {
-        // Tests nested locks and access
-        // to underlying data.
-        let arc = Arc::new(Mutex::new(1));
-        let arc2 = Arc::new(Mutex::new(arc));
-        let (tx, rx) = channel();
-        let _t = thread::spawn(move || {
-            let mut node1 = MutexNode::new();
-            let mut node2 = MutexNode::new();
-
-            let lock = arc2.lock(&mut node1);
-            let lock2 = lock.lock(&mut node2);
-            assert_eq!(*lock2, 1);
-            tx.send(()).unwrap();
-        });
-        rx.recv().unwrap();
+        tests::test_lock_arc_nested::<Mutex<_>, Mutex<_>>();
     }
 
     #[test]
-    fn test_recursive_lock() {
-        let arc = Arc::new(Mutex::new(1));
-        let (tx, rx) = channel();
-        for _ in 0..4 {
-            let tx2 = tx.clone();
-            let c_arc = Arc::clone(&arc);
-            let _t = thread::spawn(move || {
-                let mutex = Mutex::new(1);
-                let mut node1 = MutexNode::new();
-                let _lock = c_arc.lock(&mut node1);
-                let mut node2 = MutexNode::new();
-                let lock2 = mutex.lock(&mut node2);
-                assert_eq!(*lock2, 1);
-                tx2.send(()).unwrap();
-            });
-        }
-        drop(tx);
-        rx.recv().unwrap();
+    fn test_acquire_more_than_one_lock() {
+        tests::test_acquire_more_than_one_lock::<Mutex<_>>();
     }
 
     #[test]
     fn test_lock_arc_access_in_unwind() {
-        let arc = Arc::new(Mutex::new(1));
-        let arc2 = arc.clone();
-        let _ = thread::spawn(move || -> () {
-            struct Unwinder {
-                i: Arc<Mutex<i32>>,
-            }
-            impl Drop for Unwinder {
-                fn drop(&mut self) {
-                    let mut node = MutexNode::new();
-                    *self.i.lock(&mut node) += 1;
-                }
-            }
-            let _u = Unwinder { i: arc2 };
-            panic!();
-        })
-        .join();
-        let mut node = MutexNode::new();
-        let lock = arc.lock(&mut node);
-        assert_eq!(*lock, 2);
+        tests::test_lock_arc_access_in_unwind::<Mutex<_>>();
     }
 
     #[test]
     fn test_lock_unsized() {
-        let mut node = MutexNode::new();
-        let lock: &Mutex<[i32]> = &Mutex::new([1, 2, 3]);
-        {
-            let b = &mut *lock.lock(&mut node);
-            b[0] = 4;
-            b[2] = 5;
-        }
-        let comp: &[i32] = &[4, 2, 5];
-        assert_eq!(&*lock.lock(&mut node), comp);
+        tests::test_lock_unsized::<Mutex<_>>();
     }
 }
 
