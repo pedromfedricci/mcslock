@@ -506,13 +506,8 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
     type Target = T;
-
-    type Guard<'a> = MutexGuard<'a, Self::Target, R>
-    where
-        Self: 'a,
-        Self::Target: 'a;
 
     fn new(value: Self::Target) -> Self
     where
@@ -520,6 +515,14 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
     {
         Self::new(value)
     }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+    where
+        Self: 'a,
+        Self::Target: 'a;
 
     fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
@@ -533,6 +536,20 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
         self.lock_with(f)
+    }
+}
+
+#[cfg(all(not(loom), test))]
+impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
+    fn into_inner(self) -> Self::Target
+    where
+        Self::Target: Sized,
+    {
+        self.into_inner()
+    }
+
+    fn get_mut(&mut self) -> &mut Self::Target {
+        self.get_mut()
     }
 }
 
@@ -619,7 +636,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
 unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
     type Target = T;
 
-    fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
+    fn get(&self) -> &UnsafeCell<Self::Target> {
         &self.lock.data
     }
 }
@@ -647,13 +664,19 @@ mod test {
     }
 
     #[test]
-    fn test_into_inner() {}
+    fn test_into_inner() {
+        tests::test_into_inner::<Mutex<_>>();
+    }
 
     #[test]
-    fn test_into_inner_drop() {}
+    fn test_into_inner_drop() {
+        tests::test_into_inner_drop::<Mutex<_>>();
+    }
 
     #[test]
-    fn test_get_mut() {}
+    fn test_get_mut() {
+        tests::test_get_mut::<Mutex<_>>();
+    }
 
     #[test]
     fn test_lock_arc_nested() {
@@ -677,22 +700,22 @@ mod test {
 }
 
 #[cfg(all(loom, test))]
-mod test {
-    use crate::loom::model;
+mod model {
+    use crate::loom::models;
     use crate::raw::yields::Mutex;
 
     #[test]
     fn try_lock_join() {
-        model::try_lock_join::<Mutex<_>>();
+        models::try_lock_join::<Mutex<_>>();
     }
 
     #[test]
     fn lock_join() {
-        model::lock_join::<Mutex<_>>();
+        models::lock_join::<Mutex<_>>();
     }
 
     #[test]
     fn mixed_lock_join() {
-        model::mixed_lock_join::<Mutex<_>>();
+        models::mixed_lock_join::<Mutex<_>>();
     }
 }

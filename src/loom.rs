@@ -79,7 +79,7 @@ impl<G: Guard> DerefMut for GuardDerefMut<'_, G> {
     }
 }
 
-pub mod model {
+pub mod models {
     use core::array;
 
     use loom::sync::Arc;

@@ -4,21 +4,24 @@ pub use core::ops::DerefMut as Guard;
 #[cfg(all(loom, test))]
 pub use crate::loom::Guard;
 
-/// A trait for lock types that can run closures against the guard.
-pub trait LockWith {
-    /// The resulting type after dereferencing.
+/// A trait for lock types that can hold user defined values.
+pub trait LockNew {
+    /// The type of the value this lock holds.
     type Target: ?Sized;
-
-    /// The guard type that holds exclusive access to the underlying data.
-    type Guard<'a>: Guard<Target = Self::Target>
-    where
-        Self: 'a,
-        Self::Target: 'a;
 
     /// Creates a new mutex in an unlocked state ready for use.
     fn new(value: Self::Target) -> Self
     where
         Self::Target: Sized;
+}
+
+/// A trait for lock types that can run closures against the guard.
+pub trait LockWith: LockNew {
+    /// The guard type that holds exclusive access to the underlying data.
+    type Guard<'a>: Guard<Target = Self::Target>
+    where
+        Self: 'a,
+        Self::Target: 'a;
 
     // Attempts to acquire this lock and then runs the closure against its
     // guard.
@@ -32,10 +35,21 @@ pub trait LockWith {
         F: FnOnce(Self::Guard<'_>) -> Ret;
 }
 
+/// A trait for lock types that can return either the underlying value (by
+// consuming the mutex) or a exclusive reference to it.
+#[cfg(not(loom))]
+pub trait LockData: LockNew {
+    /// Consumes this mutex, returning the underlying data.
+    fn into_inner(self) -> Self::Target
+    where
+        Self::Target: Sized;
+
+    /// Returns a mutable reference to the underlying data.
+    fn get_mut(&mut self) -> &mut Self::Target;
+}
+
 #[cfg(all(not(loom), test))]
 pub mod tests {
-    use super::LockWith;
-
     // Test suite from the Rust's Mutex implementation with minor modifications
     // since the API is not compatible with this crate implementation and some
     // new tests as well.
@@ -48,15 +62,25 @@ pub mod tests {
     // option. This file may not be copied, modified, or distributed
     // except according to those terms.
 
-    // use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
     use std::sync::Arc;
     use std::thread;
 
+    use super::{LockData, LockWith};
+
     type Int = u32;
 
     #[derive(Eq, PartialEq, Debug)]
-    struct NonCopy(u32);
+    pub struct NonCopy(u32);
+
+    pub struct Foo(Arc<AtomicUsize>);
+
+    impl Drop for Foo {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
 
     pub fn smoke<L>()
     where
@@ -112,35 +136,37 @@ pub mod tests {
         mutex.try_lock_with(|guard| *guard.unwrap() = ());
     }
 
-    // fn test_into_inner<L: LockWith<Target = NonCopy>>() {
-    //     let m = L::new(NonCopy(10));
-    //     assert_eq!(m.into_inner(), NonCopy(10));
-    // }
+    pub fn test_into_inner<M>()
+    where
+        M: LockData<Target = NonCopy>,
+    {
+        let mutex = M::new(NonCopy(10));
+        assert_eq!(mutex.into_inner(), NonCopy(10));
+    }
 
-    // fn test_into_inner_drop() {
-    //     struct Foo(Arc<AtomicUsize>);
-    //     impl Drop for Foo {
-    //         fn drop(&mut self) {
-    //             self.0.fetch_add(1, Ordering::SeqCst);
-    //         }
-    //     }
-    //     let num_drops = Arc::new(AtomicUsize::new(0));
-    //     let m = Mutex::new(Foo(num_drops.clone()));
-    //     assert_eq!(num_drops.load(Ordering::SeqCst), 0);
-    //     {
-    //         let _inner = m.into_inner();
-    //         assert_eq!(num_drops.load(Ordering::SeqCst), 0);
-    //     }
-    //     assert_eq!(num_drops.load(Ordering::SeqCst), 1);
-    // }
+    pub fn test_into_inner_drop<M>()
+    where
+        M: LockData<Target = Foo>,
+    {
+        let num_drops = Arc::new(AtomicUsize::new(0));
+        let mutex = M::new(Foo(num_drops.clone()));
+        assert_eq!(num_drops.load(Ordering::SeqCst), 0);
+        {
+            let _inner = mutex.into_inner();
+            assert_eq!(num_drops.load(Ordering::SeqCst), 0);
+        }
+        assert_eq!(num_drops.load(Ordering::SeqCst), 1);
+    }
 
-    // fn test_get_mut() {
-    //     let mut m = Mutex::new(NonCopy(10));
-    //     *m.get_mut() = NonCopy(20);
-    //     assert_eq!(m.into_inner(), NonCopy(20));
-    // }
+    pub fn test_get_mut<M>()
+    where
+        M: LockData<Target = NonCopy>,
+    {
+        let mut mutex = M::new(NonCopy(10));
+        *mutex.get_mut() = NonCopy(20);
+        assert_eq!(mutex.into_inner(), NonCopy(20));
+    }
 
-    // #[should_panic = literal_panic_msg!()]
     pub fn test_lock_arc_nested<L1, L2>()
     where
         L1: LockWith<Target = Int>,
@@ -159,7 +185,6 @@ pub mod tests {
         rx.recv().unwrap();
     }
 
-    // #[should_panic = literal_panic_msg!()]
     pub fn test_acquire_more_than_one_lock<L>()
     where
         L: LockWith<Target = Int> + Send + Sync + 'static,
