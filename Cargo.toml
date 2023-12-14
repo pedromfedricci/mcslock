@@ -17,9 +17,6 @@ authors = ["Pedro de Matos Fedricci <pedromfedricci@gmail.com>"]
 categories = ["no-std", "concurrency"]
 keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
-[workspace]
-members = [".", "benches"]
-
 [features]
 # NOTE: Features `yield` and `thread_local` require std.
 yield = []

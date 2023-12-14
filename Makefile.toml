@@ -71,13 +71,3 @@ args = ["check", "--profile", "test", "--all-features"]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS_LOOM}" }
 args = ["hack", "clippy", "--profile", "test", "--feature-powerset"]
-
-# Run busy loop bench.
-[tasks.bench-busy]
-command = "cargo"
-args = ["bench", "--package", "benches", "--bench", "busy"]
-
-# Run yield loop bench.
-[tasks.bench-yield]
-command = "cargo"
-args = ["bench", "--package", "benches", "--bench", "yield", "--features", "mcslock/yield"]
