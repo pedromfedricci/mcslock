@@ -1,5 +1,13 @@
 # A simple and correct implementation of MCS lock
 
+[![MIT][mit-badge]][mit]
+[![Apache 2.0][apache2-badge]][apache2]
+[![Docs][docs-badge]][docs]
+[![Crates][crates-badge]][crates]
+[![CI][ci-badge]][ci]
+[![Codecov][codecov-badge]][codecov]
+![No_std][no_std-badge]
+
 MCS lock is a List-Based Queuing Lock that avoids network contention by
 having threads spin on local memory locations. The main properties of this
 mechanism are:
@@ -31,23 +39,29 @@ This implementation is `no_std` by default, so it's useful in those environments
 
 ## Install
 
-Include the following under the `[dependencies]` section in your `Cargo.toml` file.
+Run the following Cargo command in your project directory:
+
+```bash
+cargo add mcslock
+```
+
+Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 
 ```toml
 # Cargo.toml
 
 [dependencies]
 # Avaliable features: `yield`, `barging`, `thread_local` and `lock_api`.
-mcslock = { version = "0.1", git = "https://github.com/pedromfedricci/mcslock" }
+mcslock = { version = "0.1", features = ["barging"] }
 ```
 
 ## Documentation
 
-Currently this project documentation is not hosted anywhere, you can render
-the documentation by cloning this repository and then run:
+This project documentation is hosted at [docs.rs][docs]. Or you can build it
+locally with the following command:
 
 ```bash
-cargo doc --all-features --open
+RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --open
 ```
 
 ## Raw MCS lock
@@ -212,6 +226,22 @@ be dual licensed as above, without any additional terms or conditions.
 It is recommended to always use [cargo-crev] to verify the trustworthiness of
 each of your dependencies, including this one.
 
+[mit-badge]: https://img.shields.io/badge/License-MIT-blue.svg
+[apache2-badge]: https://img.shields.io/badge/License-Apache_2.0-yellow.svg
+[docs-badge]: https://img.shields.io/docsrs/mcslock
+[crates-badge]: https://img.shields.io/crates/v/mcslock
+[ci-badge]: https://github.com/pedromfedricci/mcslock/actions/workflows/ci.yml/badge.svg
+[codecov-badge]: https://codecov.io/gh/pedromfedricci/mcslock/graph/badge.svg?token=A54PAF1K74
+[no_std-badge]: https://img.shields.io/badge/no__std-compatible-success.svg
+
+[mit]: https://opensource.org/licenses/MIT
+[apache2]: https://opensource.org/licenses/Apache-2.0
+[docs]: https://docs.rs/mcslock
+[crates]: https://crates.io/crates/mcslock
+[ci]: https://github.com/pedromfedricci/mcslock/actions/workflows/ci.yml
+[codecov]: https://codecov.io/gh/pedromfedricci/mcslock
+[cargo-crev]: https://github.com/crev-dev/cargo-crev
+
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
 [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
@@ -225,4 +255,3 @@ each of your dependencies, including this one.
 [spinlocks are usually not what you want]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 [Mellor-Crummey and Scott]: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
 [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
-[cargo-crev]: https://github.com/crev-dev/cargo-crev
