@@ -238,7 +238,7 @@ each of your dependencies, including this one.
 [apache2]: https://opensource.org/licenses/Apache-2.0
 [docs]: https://docs.rs/mcslock
 [crates]: https://crates.io/crates/mcslock
-[ci]: https://github.com/pedromfedricci/mcslock/actions/workflows/ci.yaml
+[ci]: https://github.com/pedromfedricci/mcslock/actions/workflows/ci.yml
 [codecov]: https://codecov.io/gh/pedromfedricci/mcslock
 [cargo-crev]: https://github.com/crev-dev/cargo-crev
 
