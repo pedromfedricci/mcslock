@@ -189,6 +189,7 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::inline_always)]
 #![allow(clippy::doc_markdown)]
+#![warn(rust_2021_compatibility)]
 #![warn(missing_docs)]
 
 pub mod raw;

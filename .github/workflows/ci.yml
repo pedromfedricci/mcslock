@@ -45,6 +45,19 @@ jobs:
           --feature-powerset
           --skip yield,thread_local
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust 1.65.0
+        run: rustup toolchain install 1.65.0
+      - name: Set Rust 1.65.0 as default
+        run: rustup default 1.65.0
+      - name: Check MSRV
+        run: cargo check --all-features
+
   docs:
     name: Docs
     runs-on: ubuntu-latest

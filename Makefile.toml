@@ -21,6 +21,13 @@ command = "cargo"
 env = { "RUSTDOCFLAGS" = "--cfg docsrs" }
 args = ["doc", "--all-features", "--open"]
 
+# Check MSRV.
+[tasks.msrv]
+toolchain = "1.65.0"
+command = "cargo"
+# TODO: add `--all` for benches.
+args = ["check", "--all-features"]
+
 # Lint all feature combinations with cargo-hack.
 [tasks.lint]
 command = "cargo"
@@ -42,6 +49,11 @@ install_crate = { rustup_component_name = "miri" }
 command = "cargo"
 args = ["miri", "test", "--all-features", "${@}"]
 
+# Check code coverage with tarpaulin (all features).
+[tasks.tarpaulin]
+command = "cargo"
+args = ["tarpaulin", "--all-features", "--engine", "llvm", "--out", "xml"]
+
 # Run Loom tests.
 [tasks.loom-test]
 command = "cargo"
@@ -52,7 +64,7 @@ args = ["test", "--lib", "--release", "--all-features", "${@}"]
 [tasks.loom-check]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CFG_LOOM}" }
-args = ["check", "--profile", "test", "--all-features", "${@}"]
+args = ["check", "--profile", "test", "--all-features"]
 
 # Lint all feature combinations with cargo-hack on test profile and Loom cfg.
 [tasks.loom-lint]

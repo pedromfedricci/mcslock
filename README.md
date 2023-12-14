@@ -177,6 +177,14 @@ This feature implements the [`RawMutex`] trait from the [lock_api] crate for
 `barging::Mutex`. Aliases are provided by the `lock_api` module. This feature
 is `no_std` compatible.
 
+## Minimum Supported Rust Version (MSRV)
+
+This crate is guaranteed to compile on a Minimum Supported Rust Version (MSRV)
+of 1.65.0 and above. This version will not be changed without a minor version
+bump. If you intend to use this crate but can only target a older Rust version,
+feel free to open a issue with your specific target, it is possible to lower
+this crate MSRV substantially, it just has not been explored yet.
+
 ## Related projects
 
 These projects provide MCS lock implementations with slightly different APIs,
