@@ -21,6 +21,7 @@ std::thread_local! {
 // This node definition uses Loom primitives and it can't be evaluated at
 // compile-time since Loom does not support that feature.
 #[cfg(all(loom, test))]
+#[cfg(not(tarpaulin_include))]
 loom::thread_local! {
     static NODE: RefCell<MutexNode> = {
         RefCell::new(MutexNode::new())
@@ -115,6 +116,7 @@ impl<T, R> Mutex<T, R> {
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
+    #[cfg(not(tarpaulin_include))]
     fn new(value: T) -> Self {
         Self(RawMutex::new(value))
     }
@@ -132,7 +134,7 @@ impl<T, R> Mutex<T, R> {
     /// let mutex = SpinMutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn into_inner(self) -> T {
         self.0.into_inner()
     }
@@ -208,6 +210,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     mutex.lock_with(|_guard| ());
     /// });
     /// ```
+    #[inline]
     pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
@@ -278,6 +281,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     mutex.try_lock_with(|_guard| ());
     /// });
     /// ```
+    #[inline]
     pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
@@ -330,7 +334,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     #[cfg(not(all(loom, test)))]
-    #[inline]
+    #[inline(always)]
     pub fn get_mut(&mut self) -> &mut T {
         self.0.get_mut()
     }
@@ -363,6 +367,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
 
 impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
     /// Creates a `Mutex<T, R>` with the `Default` value for `T`.
+    #[inline]
     fn default() -> Self {
         Self::new(Default::default())
     }
@@ -370,6 +375,7 @@ impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
 
 impl<T, R> From<T> for Mutex<T, R> {
     /// Creates a `Mutex<T, R>` from a instance of `T`.
+    #[inline]
     fn from(data: T) -> Self {
         Self::new(data)
     }
@@ -382,7 +388,6 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
             Some(guard) => guard.inner.with(|data| d.field("data", &data)),
             None => d.field("data", &format_args!("<locked>")),
         });
-        d.field("tail", self.0.tail_debug());
         d.finish()
     }
 }
@@ -418,6 +423,10 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
         self.lock_with(f)
+    }
+
+    fn is_locked(&self) -> bool {
+        self.is_locked()
     }
 }
 
@@ -479,6 +488,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::Deref for MutexGuard<'a, T, R> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
+    #[inline(always)]
     fn deref(&self) -> &T {
         &self.inner
     }
@@ -487,6 +497,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::Deref for MutexGuard<'a, T, R> {
 #[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
     /// Mutably dereferences the guard to access the underlying data.
+    #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
         &mut self.inner
     }
@@ -495,6 +506,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
 /// SAFETY: A guard instance hold the lock locked, with exclusive access to the
 /// underlying data.
 #[cfg(all(loom, test))]
+#[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
     type Target = T;
 
@@ -516,7 +528,32 @@ mod test {
     }
 
     #[test]
-    fn try_lock() {
+    fn smoke() {
+        tests::smoke::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_guard_debug_display() {
+        tests::test_guard_debug_display::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_debug() {
+        tests::test_mutex_debug::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_from() {
+        tests::test_mutex_from::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_default() {
+        tests::test_mutex_default::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_try_lock() {
         tests::test_try_lock::<Mutex<_>>();
     }
 

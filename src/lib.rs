@@ -212,4 +212,5 @@ pub(crate) mod cfg;
 pub(crate) mod test;
 
 #[cfg(all(loom, test))]
+#[cfg(not(tarpaulin))]
 pub(crate) mod loom;

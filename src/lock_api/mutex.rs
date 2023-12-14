@@ -45,6 +45,10 @@ impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
     {
         f(self.lock())
     }
+
+    fn is_locked(&self) -> bool {
+        self.is_locked()
+    }
 }
 
 #[cfg(test)]
@@ -74,7 +78,32 @@ mod test {
     }
 
     #[test]
-    fn try_lock() {
+    fn smoke() {
+        tests::smoke::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_guard_debug_display() {
+        tests::test_guard_debug_display::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_debug() {
+        tests::test_mutex_debug::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_from() {
+        tests::test_mutex_from::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_mutex_default() {
+        tests::test_mutex_default::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_try_lock() {
         tests::test_try_lock::<Mutex<_>>();
     }
 

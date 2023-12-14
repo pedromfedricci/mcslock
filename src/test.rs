@@ -33,6 +33,9 @@ pub trait LockWith: LockNew {
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(Self::Guard<'_>) -> Ret;
+
+    /// Returns `true` if the lock is currently held.
+    fn is_locked(&self) -> bool;
 }
 
 /// A trait for lock types that can return either the underlying value (by
@@ -62,6 +65,7 @@ pub mod tests {
     // option. This file may not be copied, modified, or distributed
     // except according to those terms.
 
+    use std::fmt::{Debug, Display};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
     use std::sync::Arc;
@@ -80,15 +84,6 @@ pub mod tests {
         fn drop(&mut self) {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
-    }
-
-    pub fn smoke<L>()
-    where
-        L: LockWith<Target = Int>,
-    {
-        let mutex = L::new(1);
-        mutex.lock_with(|guard| drop(guard));
-        mutex.lock_with(|guard| drop(guard));
     }
 
     pub fn lots_and_lots<L>(data: &Arc<L>)
@@ -128,12 +123,75 @@ pub mod tests {
         assert_eq!(value, ITERS * CONCURRENCY * 2);
     }
 
+    pub fn smoke<L>()
+    where
+        L: LockWith<Target = Int>,
+    {
+        let mutex = L::new(1);
+        mutex.lock_with(|guard| drop(guard));
+        mutex.lock_with(|guard| drop(guard));
+    }
+
+    pub fn test_guard_debug_display<L>()
+    where
+        L: LockWith<Target = Int>,
+        for<'a> <L as LockWith>::Guard<'a>: Debug + Display,
+    {
+        let data = 42;
+        let mutex = L::new(data);
+        mutex.lock_with(|guard| {
+            assert_eq!(format!("{:?}", data), format!("{:?}", guard));
+            assert_eq!(format!("{}", data), format!("{}", guard));
+        });
+    }
+
+    pub fn test_mutex_debug<L>()
+    where
+        L: LockWith<Target = Int> + Debug + Send + Sync + 'static,
+    {
+        let data = 42;
+        let mutex = Arc::new(L::new(data));
+        let msg = format!("Mutex {{ data: {:?} }}", data);
+        assert_eq!(msg, format!("{:?}", mutex));
+
+        let c_mutex = Arc::clone(&mutex);
+        let msg = format!("Mutex {{ data: <locked> }}");
+        mutex.lock_with(|_guard| {
+            thread::spawn(move || {
+                assert_eq!(msg, format!("{:?}", *c_mutex));
+            })
+        });
+    }
+
+    pub fn test_mutex_default<L>()
+    where
+        L: LockData<Target = Int> + Default,
+    {
+        let mutex: L = Default::default();
+        assert_eq!(u32::default(), mutex.into_inner());
+    }
+
+    pub fn test_mutex_from<L>()
+    where
+        L: LockData<Target = Int> + From<Int>,
+    {
+        let data = 42;
+        let mutex = L::from(data);
+        assert_eq!(data, mutex.into_inner());
+    }
+
     pub fn test_try_lock<L>()
     where
         L: LockWith<Target = ()>,
     {
-        let mutex = L::new(());
-        mutex.try_lock_with(|guard| *guard.unwrap() = ());
+        use std::rc::Rc;
+        let mutex = Rc::new(L::new(()));
+        let c_mutex = Rc::clone(&mutex);
+        mutex.try_lock_with(|guard| {
+            assert_eq!(true, c_mutex.is_locked());
+            *guard.unwrap() = ();
+        });
+        assert_eq!(false, mutex.is_locked());
     }
 
     pub fn test_into_inner<M>()

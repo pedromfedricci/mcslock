@@ -39,7 +39,8 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
       - name: Build with no_std compatible features
         run: >
-          cargo hack build --target ${{ env.NO_STD_TARGET }}
+          cargo hack build
+          --target ${{ env.NO_STD_TARGET }}
           --no-dev-deps
           --feature-powerset
           --skip yield,thread_local
@@ -94,6 +95,27 @@ jobs:
         env:
           RUSTFLAGS: --cfg loom -D warnings -D clippy::pedantic -D clippy::nursery
         run: cargo hack clippy --profile test --feature-powerset
+
+  coverage:
+    name: Coverage
+    runs-on: unbuntu-latest
+    container:
+      image: xd009642/tarpaulin:latest-nightly
+      options: --security-opt seccomp=unconfined 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Generate coverage
+        run: >
+          cargo +nightly tarpaulin
+          --verbose
+          --engine llvm
+          --all-features
+          --out xml
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   miri:
     name: Miri
