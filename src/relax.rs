@@ -187,7 +187,7 @@ impl Step {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(not(loom), test))]
 mod test {
     fn returns<R: super::Relax>() {
         let mut relax = R::default();
