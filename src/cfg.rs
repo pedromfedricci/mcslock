@@ -29,6 +29,7 @@ pub mod cell {
     }
 
     #[cfg(all(loom, test))]
+    #[cfg(not(tarpaulin_include))]
     impl<T: ?Sized> WithUnchecked for UnsafeCell<T> {
         type Target = T;
 

@@ -198,7 +198,7 @@ pub mod relax;
 #[cfg_attr(docsrs, doc(cfg(feature = "barging")))]
 pub mod barging;
 
-#[cfg(all(feature = "lock_api", feature = "barging"))]
+#[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
 pub mod lock_api;
 
@@ -212,4 +212,5 @@ pub(crate) mod cfg;
 pub(crate) mod test;
 
 #[cfg(all(loom, test))]
+#[cfg(not(tarpaulin))]
 pub(crate) mod loom;

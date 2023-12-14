@@ -64,7 +64,7 @@ pub struct Yield;
 
 #[cfg(any(feature = "yield", test))]
 impl Relax for Yield {
-    #[inline]
+    #[inline(always)]
     fn relax(&mut self) {
         thread::yield_now();
     }
@@ -163,6 +163,7 @@ struct Step(u32);
 impl Step {
     /// Unbounded backoff spinning.
     #[cfg(any(feature = "yield", test))]
+    #[inline(always)]
     fn spin(&self) {
         for _ in 0..1 << self.0 {
             hint::spin_loop();
@@ -170,6 +171,7 @@ impl Step {
     }
 
     /// Bounded backoff spinning.
+    #[inline(always)]
     fn spin_to(&self, max: u32) {
         for _ in 0..1 << self.0.min(max) {
             hint::spin_loop();
@@ -177,9 +179,45 @@ impl Step {
     }
 
     /// Bounded step increment.
+    #[inline(always)]
     fn step_to(&mut self, end: u32) {
         if self.0 <= end {
             self.0 += 1;
         }
+    }
+}
+
+#[cfg(all(not(loom), test))]
+mod test {
+    fn returns<R: super::Relax>() {
+        let mut relax = R::default();
+        for _ in 0..10 {
+            relax.relax();
+        }
+    }
+
+    #[test]
+    fn spins() {
+        returns::<super::Spin>();
+    }
+
+    #[test]
+    fn spins_backoff() {
+        returns::<super::SpinBackoff>();
+    }
+
+    #[test]
+    fn yields() {
+        returns::<super::Yield>();
+    }
+
+    #[test]
+    fn yields_backoff() {
+        returns::<super::YieldBackoff>();
+    }
+
+    #[test]
+    fn loops() {
+        returns::<super::Loop>();
     }
 }
