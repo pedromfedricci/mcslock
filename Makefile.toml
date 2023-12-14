@@ -19,7 +19,7 @@ args = ["hack", "build", "--target", "thumbv7m-none-eabi",
 toolchain = "nightly"
 command = "cargo"
 env = { "RUSTDOCFLAGS" = "--cfg docsrs" }
-args = ["doc", "--all-features", "--open"]
+args = ["rustdoc", "--all-features", "--open", "--", "--default-theme", "ayu"]
 
 # Check MSRV.
 [tasks.msrv]

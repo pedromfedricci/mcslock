@@ -453,6 +453,8 @@ impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
 /// This structure is given as closure argument by [`lock_with`] and
 /// [`try_lock_with`] methods on [`Mutex`].
 ///
+/// [`Deref`]: core::ops::Deref
+/// [`DerefMut`]: core::ops::DerefMut
 /// [`lock_with`]: Mutex::lock_with
 /// [`try_lock_with`]: Mutex::try_lock_with
 #[must_use = "if unused the Mutex will immediately unlock"]

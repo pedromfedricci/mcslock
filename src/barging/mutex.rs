@@ -492,6 +492,8 @@ unsafe impl<R: Relax> lock_api::RawMutex for Mutex<(), R> {
 /// It is also given as closure argument by [`lock_with`] and [`try_lock_with`]
 /// methods.
 ///
+/// [`Deref`]: core::ops::Deref
+/// [`DerefMut`]: core::ops::DerefMut
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::lock
 /// [`lock_with`]: Mutex::lock_with
