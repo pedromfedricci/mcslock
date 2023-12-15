@@ -68,8 +68,8 @@ RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --open
 
 This implementation operates under FIFO. Raw locking APIs require exclusive
 access to a locally accessible queue node. This node is represented by the
-`MutexNode` type. Callers are responsible for instantiating the queue nodes
-themselves. This implementation is `no_std` compatible. See `raw` module for
+[`MutexNode`] type. Callers are responsible for instantiating the queue nodes
+themselves. This implementation is `no_std` compatible. See [`raw`] module for
 more information.
 
 ```rust
@@ -100,13 +100,14 @@ fn main() {
 This implementation will have non-waiting threads race for the lock against
 the front of the waiting queue thread, which means this it is an unfair lock.
 This implementation is suitable for `no_std` environments, and the locking
-APIs are compatible with the [lock_api] crate. See `barging` and `lock_api`
+APIs are compatible with the [lock_api] crate. See [`barging`] and [`lock_api`]
 modules for more information.
 
 ```rust
 use std::sync::Arc;
 use std::thread;
 
+// Requires `barging` feature.
 use mcslock::barging::spins::Mutex;
 
 fn main() {
@@ -128,7 +129,7 @@ This implementation also operates under FIFO. The locking APIs provided
 by this module do not require user-side node allocation, critical
 sections must be provided as closures and at most one lock can be held at
 any time within a thread. It is not `no_std` compatible and can be enabled
-through the `thread_local` feature. See `thread_local` module for more
+through the `thread_local` feature. See [`thread_local`] module for more
 information.
 
 ```rust
@@ -188,7 +189,7 @@ will panic if recursively acquired. Not `no_std` compatible.
 ### lock_api
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
-`barging::Mutex`. Aliases are provided by the `lock_api` module. This feature
+[`barging::Mutex`]. Aliases are provided by the [`lock_api`] module. This feature
 is `no_std` compatible.
 
 ## Minimum Supported Rust Version (MSRV)
@@ -242,6 +243,12 @@ each of your dependencies, including this one.
 [codecov]: https://codecov.io/gh/pedromfedricci/mcslock
 [cargo-crev]: https://github.com/crev-dev/cargo-crev
 
+[`MutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.MutexNode.html
+[`barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/barging/struct.Mutex.html
+[`raw`]: https://docs.rs/mcslock/latest/mcslock/raw/index.html
+[`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
+[`lock_api`]: https://docs.rs/mcslock/latest/mcslock/lock_api/index.html
+[`thread_local`]: https://docs.rs/mcslock/latest/mcslock/thread_local/index.html
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
 [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
