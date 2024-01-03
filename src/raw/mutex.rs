@@ -660,9 +660,7 @@ mod test {
 
     #[test]
     fn lots_and_lots() {
-        use std::sync::Arc;
-        let data = Arc::new(Mutex::new(0));
-        tests::lots_and_lots(&data);
+        tests::lots_and_lots::<Mutex<_>>();
     }
 
     #[test]
