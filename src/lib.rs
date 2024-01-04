@@ -149,8 +149,9 @@
 //! The `thread_local` feature provides locking APIs that do not require user-side
 //! node allocation, but critical sections must be provided as closures. This
 //! implementation handles the queue's nodes transparently, by storing them in
-//! the thread local storage of the waiting threads. Thes locking implementations
-//! will panic if recursively acquired. Not `no_std` compatible.
+//! the thread local storage of the waiting threads. This locking implementation
+//! will panic if more than one guard is alive within a single thread. Not
+//! `no_std` compatible.
 //!
 //! ### lock_api
 //!

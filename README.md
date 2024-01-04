@@ -18,7 +18,7 @@ mechanism are:
 - works equally well (requiring only O(1) network transactions per lock
   acquisition) on machines with and without coherent caches.
 
-This algorithm and serveral others were introduced by [Mellor-Crummey and Scott] paper.
+This algorithm and several others were introduced by [Mellor-Crummey and Scott] paper.
 And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
 
 ## Use cases
@@ -29,7 +29,7 @@ majority of use cases are well covered by OS-based mutexes like
 the system that the waiting thread should be parked, freeing the processor to
 work on something else.
 
-Spinlocks are only efficient in very few circunstances where the overhead
+Spinlocks are only efficient in very few circumstances where the overhead
 of context switching or process rescheduling are greater than busy waiting
 for very short periods. Spinlocks can be useful inside operating-system kernels,
 on embedded systems or even complement other locking designs. As a reference
@@ -51,7 +51,7 @@ Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 # Cargo.toml
 
 [dependencies]
-# Avaliable features: `yield`, `barging`, `thread_local` and `lock_api`.
+# Available features: `yield`, `barging`, `thread_local` and `lock_api`.
 mcslock = { version = "0.1", features = ["barging"] }
 ```
 
@@ -183,8 +183,9 @@ is heavily contended.
 The `thread_local` feature provides locking APIs that do not require user-side
 node allocation, but critical sections must be provided as closures. This
 implementation handles the queue's nodes transparently, by storing them in
-the thread local storage of the waiting threads. These locking implementations
-will panic if recursively acquired. Not `no_std` compatible.
+the thread local storage of the waiting threads. This locking implementation
+will panic if more than one guard is alive within a single thread. Not
+`no_std` compatible.
 
 ### lock_api
 

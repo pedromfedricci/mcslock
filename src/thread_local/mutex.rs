@@ -1,9 +1,13 @@
-use core::cell::RefCell;
-use core::fmt;
+use core::cell::{RefCell, RefMut};
+use core::fmt::{self, Debug, Display};
 use core::marker::PhantomData;
+use core::panic::Location;
 
 use crate::raw::{Mutex as RawMutex, MutexGuard as RawMutexGuard, MutexNode};
 use crate::relax::Relax;
+
+#[cfg(test)]
+use crate::test::{LockNew, LockWith};
 
 // A thread_local key holding a [`MutexNode`] instance behind a [`RefCell`].
 //
@@ -31,8 +35,15 @@ loom::thread_local! {
 /// The panic message as a string literal.
 macro_rules! literal_panic_msg {
     () => {
-        "At most one thread_local MCS lock can be held at any time within a thread"
+        "a thread local MCS lock is already held by this thread"
     };
+}
+
+/// Panics the thread with a message pointing to the panic location.
+#[inline(never)]
+#[cold]
+fn panic_already_held(caller: &Location<'static>) -> ! {
+    panic!("{}, conflict at: {}", literal_panic_msg!(), caller)
 }
 
 /// A mutual exclusion primitive useful for protecting shared data.
@@ -141,20 +152,20 @@ impl<T, R> Mutex<T, R> {
 }
 
 impl<T: ?Sized, R: Relax> Mutex<T, R> {
-    /// Attempts to acquire this lock and run the closure against its guard.
+    /// Attempts to acquire this mutex and then runs a closure against its guard.
     ///
     /// If the lock could not be acquired at this time, then a [`None`] value is
-    /// given to the user provided closure as the argument. If the lock has been
-    /// acquired, then a [`Some`] with the mutex guard is given instead. The lock
-    /// will be unlocked when the guard is dropped.
+    /// given back as the closure argument. If the lock has been acquired, then
+    /// a [`Some`] value with the mutex guard is given instead. The lock will be
+    /// unlocked when the guard is dropped.
     ///
     /// This function does not block.
     ///
     /// # Panics
     ///
-    /// At most one lock of this implementation might be held within a single
-    /// thread at any time. Trying to acquire a second lock while a guard is
-    /// still alive will cause a panic.
+    /// At most one `thread_local::Mutex` may be held within a single thread at
+    /// any time. Trying to acquire a second lock while a guard is still alive
+    /// will cause a panic.
     ///
     /// # Examples
     ///
@@ -203,22 +214,100 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// let mutex = SpinMutex::new(0);
     ///
-    /// mutex.try_lock_with(|_guard| {
+    /// mutex.lock_with(|_guard| {
     ///     let mutex = SpinMutex::new(());
     ///     // Acquiring more than one thread_local::Mutex within a single
     ///     // thread at the same time is not allowed, this will panic.
-    ///     mutex.lock_with(|_guard| ());
+    ///     mutex.try_lock_with(|_guard| ());
     /// });
     /// ```
     #[inline]
+    #[track_caller]
     pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
-        self.node_with(|raw, node| f(raw.try_lock(node).map(MutexGuard::new)))
+        self.with_borrow_mut(|raw, node| f(MutexGuard::try_new(raw, node)))
     }
 
-    /// Acquires a mutex, blocking the current thread until it is able to do so.
+    /// Attempts to acquire this mutex and then runs a closure against its guard.
+    ///
+    /// If the lock could not be acquired at this time, then a [`None`] value is
+    /// given back as the closure argument. If the lock has been acquired, then
+    /// a [`Some`] value with the mutex guard is given instead. The lock will be
+    /// unlocked when the guard is dropped.
+    ///
+    /// This function does not block, and also does not check if the thread local
+    /// node is already in use.
+    ///
+    /// # Safety
+    ///
+    /// There must be at most one `thread_local::MutexGuard` alive within this
+    /// thread at any time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
+    ///
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || unsafe {
+    ///     c_mutex.try_lock_with_unchecked(|guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock failed");
+    ///         }
+    ///     });
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
+    /// ```
+    ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::thread_local::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = unsafe { mutex.try_lock_with_unchecked(|g| &*g.unwrap()) };
+    /// ```
+    ///
+    /// An example of undefined behavior:
+    ///
+    /// ```no_run
+    /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
+    ///
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
+    ///
+    /// mutex.lock_with(|_guard| unsafe {
+    ///     let mutex = SpinMutex::new(());
+    ///     // Acquiring more than one thread_local::Mutex within a single
+    ///     // thread at the same time is not allowed, this is UB.
+    ///     mutex.try_lock_with_unchecked(|_guard| ());
+    /// });
+    /// ```
+    #[inline]
+    pub unsafe fn try_lock_with_unchecked<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+    {
+        self.with_borrow_mut_unchecked(|raw, node| f(MutexGuard::try_new(raw, node)))
+    }
+
+    /// Acquires this mutex and then runs the closure against its guard.
     ///
     /// This function will block the local thread until it is available to acquire
     /// the mutex. Upon acquiring the mutex, the user provided closure will be
@@ -278,15 +367,87 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     let mutex = SpinMutex::new(());
     ///     // Acquiring more than one thread_local::Mutex within a single
     ///     // thread at the same time is not allowed, this will panic.
-    ///     mutex.try_lock_with(|_guard| ());
+    ///     mutex.lock_with(|_guard| ());
     /// });
     /// ```
     #[inline]
+    #[track_caller]
     pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
-        self.node_with(|raw, node| f(MutexGuard::new(raw.lock(node))))
+        self.with_borrow_mut(|raw, node| f(MutexGuard::new(raw, node)))
+    }
+
+    /// Acquires this mutex and then runs the closure against its guard.
+    ///
+    /// This function will block the local thread until it is available to acquire
+    /// the mutex. Upon acquiring the mutex, the user provided closure will be
+    /// executed against the mutex guard. Once the guard goes out of scope, it
+    /// will unlock the mutex.
+    ///
+    /// This function will block if the lock is unavailable, and also does not
+    /// check if the thread local node is already in use.
+    ///
+    /// # Safety
+    ///
+    /// There must be at most one `thread_local::MutexGuard` alive within this
+    /// thread at any time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
+    ///
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = Arc::new(SpinMutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || {
+    ///     unsafe { c_mutex.lock_with_unchecked(|mut g| *g = 10) };
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
+    /// ```
+    ///
+    /// Borrows of the guard or its data cannot escape the given closure.
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::thread_local::spins::Mutex;
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = unsafe { mutex.lock_with_unchecked(|g| &*g) };
+    /// ```
+    ///
+    /// An example of undefined behavior:
+    ///
+    /// ```no_run
+    /// use mcslock::thread_local::Mutex;
+    /// use mcslock::relax::Spin;
+    ///
+    /// type SpinMutex<T> = Mutex<T, Spin>;
+    ///
+    /// let mutex = SpinMutex::new(0);
+    ///
+    /// mutex.lock_with(|_guard| unsafe {
+    ///     let mutex = SpinMutex::new(());
+    ///     // Acquiring more than one thread_local::Mutex within a single
+    ///     // thread at the same time is not allowed, this is UB.
+    ///     mutex.lock_with_unchecked(|_guard| ());
+    /// });
+    /// ```
+    #[inline]
+    pub unsafe fn lock_with_unchecked<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+    {
+        self.with_borrow_mut_unchecked(|raw, node| f(MutexGuard::new(raw, node)))
     }
 }
 
@@ -339,29 +500,37 @@ impl<T: ?Sized, R> Mutex<T, R> {
         self.0.get_mut()
     }
 
-    /// Runs `f` over the inner mutex and the thread local node.
+    /// Runs `f` over a raw mutex and thread local node as arguments.
     ///
     /// # Panics
     ///
-    /// Will panic if the thread local [`MutexNode`] is already in use by a held
-    /// lock from this thread.
-    fn node_with<F, Ret>(&self, f: F) -> Ret
+    /// Will panic if the thread local [`MutexNode`] is already in use by a
+    /// lock guard from the same thread.
+    #[track_caller]
+    fn with_borrow_mut<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&RawMutex<T, R>, &mut MutexNode) -> Ret,
     {
-        #[allow(clippy::option_if_let_else)]
-        NODE.with(|node| match node.try_borrow_mut() {
-            Ok(mut node) => f(&self.0, &mut node),
-            Err(_) => Self::panic_already_held(),
-        })
+        let caller = Location::caller();
+        let panic = |_| panic_already_held(caller);
+        let f = |mut node: RefMut<_>| f(&self.0, &mut node);
+        NODE.with(|node| node.try_borrow_mut().map_or_else(panic, f))
     }
 
-    /// Panics the thread with an appropiate message.
-    #[inline(never)]
-    #[track_caller]
-    #[cold]
-    fn panic_already_held() -> ! {
-        panic!("{}", literal_panic_msg!())
+    /// Runs 'f' over the a raw mutex and thread local node as arguments without
+    /// checking if the node is currently mutably borrowed.
+    ///
+    /// # Safety
+    ///
+    /// Mutably borrowing a [`RefCell`] while references are still live is
+    /// undefined behaviour. This means that two or more guards can not be in
+    /// scope within a single thread at the same time.
+    unsafe fn with_borrow_mut_unchecked<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(&RawMutex<T, R>, &mut MutexNode) -> Ret,
+    {
+        // SAFETY: Caller guaranteed that no other references are live.
+        NODE.with(|node| f(&self.0, unsafe { &mut *node.as_ptr() }))
     }
 }
 
@@ -393,7 +562,7 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
+impl<T: ?Sized, R> LockNew for Mutex<T, R> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -405,7 +574,7 @@ impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
     type Guard<'a> = MutexGuard<'a, Self::Target, R>
     where
         Self: 'a,
@@ -444,6 +613,59 @@ impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
     }
 }
 
+/// A type that calls the unchecked versions of `lock_with` and `try_lock_with`
+/// when implementing the `LockWith` trait.
+#[cfg(test)]
+struct MutexUnchecked<T: ?Sized, R>(Mutex<T, R>);
+
+#[cfg(test)]
+impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
+    type Target = T;
+
+    fn new(value: Self::Target) -> Self
+    where
+        Self::Target: Sized,
+    {
+        Self(Mutex::new(value))
+    }
+}
+
+/// Implements the test locking interface to verify the unchecked APIs:
+/// `lock_with_unchecked` and `try_lock_with_unchecked`.
+///
+/// # Safety
+///
+/// Callers must guarantee that no more than ONE mutex guard is alive at any
+/// time within a single thread. When falling to do so under Miri testing, Miri
+/// MIGHT flag the test as invoking UB, which is nice. Loom modeling does not
+/// necessarily catch such problems, although those can inadvertently break the
+/// memory model invariants which will then fire Loom errors.
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> LockWith for MutexUnchecked<T, R> {
+    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+    where
+        Self: 'a,
+        Self::Target: 'a;
+
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+    {
+        unsafe { self.0.try_lock_with_unchecked(f) }
+    }
+
+    fn lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+    {
+        unsafe { self.0.lock_with_unchecked(f) }
+    }
+
+    fn is_locked(&self) -> bool {
+        self.0.is_locked()
+    }
+}
+
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 ///
@@ -468,18 +690,29 @@ pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
 unsafe impl<'a, T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'a, T, R> {}
 
 impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
-    fn new(inner: RawMutexGuard<'a, T, R>) -> Self {
+    /// Creates a new guard instance from a raw guard.
+    fn raw(inner: RawMutexGuard<'a, T, R>) -> Self {
         Self { inner, marker: PhantomData }
+    }
+
+    /// Creates a new guard instance only if the mutex is not already locked.
+    fn try_new(mutex: &'a RawMutex<T, R>, node: &'a mut MutexNode) -> Option<Self> {
+        mutex.try_lock(node).map(Self::raw)
+    }
+
+    /// Creates a new guard instance by locking a raw mutex.
+    fn new(mutex: &'a RawMutex<T, R>, node: &'a mut MutexNode) -> Self {
+        Self::raw(mutex.lock(node))
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized + Debug, R: Relax> Debug for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display, R: Relax> fmt::Display for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized + Display, R: Relax> Display for MutexGuard<'a, T, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
@@ -519,19 +752,32 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
+    use super::MutexUnchecked as InnerUnchecked;
+
+    use crate::relax::Yield;
     use crate::test::tests;
     use crate::thread_local::yields::Mutex;
 
+    type MutexUnchecked<T> = InnerUnchecked<T, Yield>;
+
     #[test]
     fn lots_and_lots() {
-        use std::sync::Arc;
-        let data = Arc::new(Mutex::new(0));
-        tests::lots_and_lots(&data);
+        tests::lots_and_lots::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_unchecked() {
+        tests::lots_and_lots::<MutexUnchecked<_>>();
     }
 
     #[test]
     fn smoke() {
         tests::smoke::<Mutex<_>>();
+    }
+
+    #[test]
+    fn smoke_unchecked() {
+        tests::smoke::<MutexUnchecked<_>>();
     }
 
     #[test]
@@ -557,6 +803,11 @@ mod test {
     #[test]
     fn test_try_lock() {
         tests::test_try_lock::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_try_lock_unchecked() {
+        tests::test_try_lock::<MutexUnchecked<_>>();
     }
 
     #[test]
@@ -592,19 +843,39 @@ mod test {
     }
 
     #[test]
+    fn test_lock_arc_access_in_unwind_uncheckd() {
+        tests::test_lock_arc_access_in_unwind::<MutexUnchecked<_>>();
+    }
+
+    #[test]
     fn test_lock_unsized() {
         tests::test_lock_unsized::<Mutex<_>>();
+    }
+
+    #[test]
+    fn test_lock_unsized_unchecked() {
+        tests::test_lock_unsized::<MutexUnchecked<_>>();
     }
 }
 
 #[cfg(all(loom, test))]
 mod model {
+    use super::MutexUnchecked as InnerUnchecked;
+
     use crate::loom::models;
+    use crate::relax::Yield;
     use crate::thread_local::yields::Mutex;
+
+    type MutexUnchecked<T> = InnerUnchecked<T, Yield>;
 
     #[test]
     fn try_lock_join() {
         models::try_lock_join::<Mutex<_>>();
+    }
+
+    #[test]
+    fn try_lock_join_unchecked() {
+        models::try_lock_join::<MutexUnchecked<_>>();
     }
 
     #[test]
@@ -613,7 +884,17 @@ mod model {
     }
 
     #[test]
+    fn lock_join_unchecked() {
+        models::lock_join::<MutexUnchecked<_>>();
+    }
+
+    #[test]
     fn mixed_lock_join() {
         models::mixed_lock_join::<Mutex<_>>();
+    }
+
+    #[test]
+    fn mixed_lock_join_unchecked() {
+        models::mixed_lock_join::<MutexUnchecked<_>>();
     }
 }

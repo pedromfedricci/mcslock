@@ -86,7 +86,7 @@ pub mod tests {
         }
     }
 
-    pub fn lots_and_lots<L>(data: &Arc<L>)
+    pub fn lots_and_lots<L>()
     where
         L: LockWith<Target = Int> + Send + Sync + 'static,
     {
@@ -99,15 +99,16 @@ pub mod tests {
             }
         }
 
+        let data = Arc::new(L::new(0));
         let (tx, rx) = channel();
         for _ in 0..CONCURRENCY {
-            let data1 = Arc::clone(data);
+            let data1 = Arc::clone(&data);
             let tx2 = tx.clone();
             thread::spawn(move || {
                 inc(&data1);
                 tx2.send(()).unwrap();
             });
-            let data2 = Arc::clone(data);
+            let data2 = Arc::clone(&data);
             let tx2 = tx.clone();
             thread::spawn(move || {
                 inc(&data2);
