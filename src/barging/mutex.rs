@@ -263,9 +263,9 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// Attempts to acquire this mutex and then runs a closure against its guard.
     ///
     /// If the lock could not be acquired at this time, then a [`None`] value is
-    /// given to the user provided closure as the argument. If the lock has been
-    /// acquired, then a [`Some`] with the mutex guard is given instead. The lock
-    /// will be unlocked when the guard is dropped.
+    /// given back as the closure argument. If the lock has been acquired, then
+    /// a [`Some`] value with the mutex guard is given instead. The lock will be
+    /// unlocked when the guard is dropped.
     ///
     /// This function does not block.
     ///

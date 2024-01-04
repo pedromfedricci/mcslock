@@ -249,9 +249,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// given back as the closure argument. If the lock has been acquired, then
     /// a [`Some`] value with the mutex guard is given instead. The lock will be
     /// unlocked when the guard is dropped.
-    /// This function does not block.
     ///
-    /// # Examples
+    /// This function does not block.
     ///
     /// ```
     /// use std::sync::Arc;

@@ -237,7 +237,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// a [`Some`] value with the mutex guard is given instead. The lock will be
     /// unlocked when the guard is dropped.
     ///
-    /// This function does not block.
+    /// This function does not block, and also does not check if the thread local
+    /// node is already in use.
     ///
     /// # Safety
     ///
@@ -385,7 +386,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// executed against the mutex guard. Once the guard goes out of scope, it
     /// will unlock the mutex.
     ///
-    /// This function will block if the lock is unavailable.
+    /// This function will block if the lock is unavailable, and also does not
+    /// check if the thread local node is already in use.
     ///
     /// # Safety
     ///
