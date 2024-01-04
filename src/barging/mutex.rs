@@ -118,7 +118,7 @@ impl<T, R> Mutex<T, R> {
 }
 
 impl<T: ?Sized, R: Relax> Mutex<T, R> {
-    /// Acquires a mutex, blocking the current thread until it is able to do so.
+    /// Acquires this mutex, blocking the current thread until it is able to do so.
     ///
     /// This function will block the local thread until it is available to acquire
     /// the mutex. Upon returning, the thread is the only thread with the lock
@@ -167,7 +167,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         MutexGuard::new(self)
     }
 
-    /// Acquires a mutex and then runs the closure against its guard.
+    /// Acquires this mutex and then runs the closure against its guard.
     ///
     /// This function will block the local thread until it is available to acquire
     /// the mutex. Upon acquiring the mutex, the user provided closure will be
@@ -216,7 +216,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
 }
 
 impl<T: ?Sized, R> Mutex<T, R> {
-    /// Attempts to acquire this lock.
+    /// Attempts to acquire this mutex without blocking the thread.
     ///
     /// If the lock could not be acquired at this time, then [`None`] is returned.
     /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
@@ -260,7 +260,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
             .ok()
     }
 
-    /// Attempts to acquire this lock and then runs the closure against its guard.
+    /// Attempts to acquire this mutex and then runs a closure against its guard.
     ///
     /// If the lock could not be acquired at this time, then a [`None`] value is
     /// given to the user provided closure as the argument. If the lock has been
