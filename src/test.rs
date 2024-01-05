@@ -141,8 +141,8 @@ pub mod tests {
         let data = 42;
         let mutex = L::new(data);
         mutex.lock_with(|guard| {
-            assert_eq!(format!("{:?}", data), format!("{:?}", guard));
-            assert_eq!(format!("{}", data), format!("{}", guard));
+            assert_eq!(format!("{data:?}"), format!("{guard:?}"));
+            assert_eq!(format!("{data}"), format!("{guard}"));
         });
     }
 
@@ -152,11 +152,11 @@ pub mod tests {
     {
         let data = 42;
         let mutex = Arc::new(L::new(data));
-        let msg = format!("Mutex {{ data: {:?} }}", data);
-        assert_eq!(msg, format!("{:?}", mutex));
+        let msg = format!("Mutex {{ data: {data:?} }}");
+        assert_eq!(msg, format!("{mutex:?}"));
 
         let c_mutex = Arc::clone(&mutex);
-        let msg = format!("Mutex {{ data: <locked> }}");
+        let msg = "Mutex {{ data: <locked> }}".to_string();
         mutex.lock_with(|_guard| {
             thread::spawn(move || {
                 assert_eq!(msg, format!("{:?}", *c_mutex));
@@ -189,10 +189,10 @@ pub mod tests {
         let mutex = Rc::new(L::new(()));
         let c_mutex = Rc::clone(&mutex);
         mutex.try_lock_with(|guard| {
-            assert_eq!(true, c_mutex.is_locked());
+            assert!(c_mutex.is_locked());
             *guard.unwrap() = ();
         });
-        assert_eq!(false, mutex.is_locked());
+        assert!(!mutex.is_locked());
     }
 
     pub fn test_into_inner<M>()
