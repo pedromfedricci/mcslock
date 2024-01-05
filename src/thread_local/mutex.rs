@@ -163,9 +163,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Panics
     ///
-    /// At most one `thread_local::Mutex` may be held within a single thread at
+    /// At most one [`thread_local::Mutex`] may be held within a single thread at
     /// any time. Trying to acquire a second lock while a guard is still alive
     /// will cause a panic.
+    ///
+    /// [`thread_local::Mutex`]: Mutex
     ///
     /// # Examples
     ///
@@ -242,8 +244,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Safety
     ///
-    /// There must be at most one `thread_local::MutexGuard` alive within this
-    /// thread at any time.
+    /// At most one [`thread_local::Mutex`] may be held within a single thread at
+    /// any time. Trying to acquire a second lock while a guard is still alive
+    /// is undefined behavior.
+    ///
+    /// [`thread_local::Mutex`]: Mutex
     ///
     /// # Examples
     ///
@@ -318,9 +323,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Panics
     ///
-    /// At most one lock of this implementation might be held within a single
-    /// thread at any time. Trying to acquire a second lock while a guard is
-    /// still alive will cause a panic.
+    /// At most one [`thread_local::Mutex`] may be held within a single thread at
+    /// any time. Trying to acquire a second lock while a guard is still alive
+    /// will cause a panic.
+    ///
+    /// [`thread_local::Mutex`]: Mutex
     ///
     /// # Examples
     ///
@@ -391,8 +398,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// # Safety
     ///
-    /// There must be at most one `thread_local::MutexGuard` alive within this
-    /// thread at any time.
+    /// At most one [`thread_local::Mutex`] may be held within a single thread at
+    /// any time. Trying to acquire a second lock while a guard is still alive
+    /// is undefined behavior.
+    ///
+    /// [`thread_local::Mutex`]: Mutex
     ///
     /// # Examples
     ///
@@ -636,8 +646,8 @@ impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
 /// # Safety
 ///
 /// Callers must guarantee that no more than ONE mutex guard is alive at any
-/// time within a single thread. When falling to do so under Miri testing, Miri
-/// MIGHT flag the test as invoking UB, which is nice. Loom modeling does not
+/// time within a single thread. When failling to do so under Miri testing, Miri
+/// has flagged the test as invoking UB, which is nice. Loom execution does not
 /// necessarily catch such problems, although those can inadvertently break the
 /// memory model invariants which will then fire Loom errors.
 #[cfg(test)]
