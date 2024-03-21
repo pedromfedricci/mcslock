@@ -79,6 +79,12 @@ impl MutexNode {
     }
 }
 
+impl Default for MutexNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
 /// This mutex will block threads waiting for the lock to become available. The
