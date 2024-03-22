@@ -113,14 +113,17 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     container:
-      image: xd009642/tarpaulin:latest-nightly
+      # TODO: tarpaulin is currently failing to parse reports with llvm engine
+      # for Rust >= 1.77 because of the llvm 18 update. Version 0.27.3 pulls
+      # Rust 1.76.0.
+      image: xd009642/tarpaulin:0.27.3
       options: --security-opt seccomp=unconfined 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Generate coverage
         run: >
-          cargo +nightly tarpaulin
+          cargo tarpaulin
           --verbose
           --engine llvm
           --all-features
