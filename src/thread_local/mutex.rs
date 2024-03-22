@@ -762,13 +762,11 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use super::MutexUnchecked as InnerUnchecked;
-
     use crate::relax::Yield;
     use crate::test::tests;
     use crate::thread_local::yields::Mutex;
 
-    type MutexUnchecked<T> = InnerUnchecked<T, Yield>;
+    type MutexUnchecked<T> = super::MutexUnchecked<T, Yield>;
 
     #[test]
     fn lots_and_lots() {
