@@ -79,6 +79,12 @@ impl MutexNode {
     }
 }
 
+impl Default for MutexNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
 /// This mutex will block threads waiting for the lock to become available. The
@@ -655,6 +661,21 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 mod test {
     use crate::raw::yields::Mutex;
     use crate::test::tests;
+
+    #[test]
+    fn node_default_and_new_init() {
+        use super::MutexNode;
+
+        let mut d = MutexNode::default();
+        let dinit = d.initialize();
+        assert!(dinit.next.get_mut().is_null());
+        assert!(*dinit.locked.get_mut());
+
+        let mut n = MutexNode::new();
+        let ninit = n.initialize();
+        assert!(ninit.next.get_mut().is_null());
+        assert!(*ninit.locked.get_mut());
+    }
 
     #[test]
     fn lots_and_lots() {
