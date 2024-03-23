@@ -148,8 +148,8 @@ pub struct Mutex<T: ?Sized, R> {
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
-unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
 unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
+unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
 
 impl<T, R> Mutex<T, R> {
     /// Creates a new mutex in an unlocked state ready for use.
@@ -585,7 +585,10 @@ pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
     node: &'a MutexNodeInit,
 }
 
-// Same unsafe impl as `std::sync::MutexGuard`.
+// `std::sync::MutexGuard` is not Send for pthread compatibility, but this
+// implementation is safe to be Send.
+unsafe impl<T: ?Sized + Send, R: Relax> Send for MutexGuard<'_, T, R> {}
+// Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 
 impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
@@ -652,7 +655,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
 unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
     type Target = T;
 
-    fn get(&self) -> &UnsafeCell<Self::Target> {
+    fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
         &self.lock.data
     }
 }

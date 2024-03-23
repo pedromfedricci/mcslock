@@ -105,6 +105,10 @@ fn panic_already_held(caller: &Location<'static>) -> ! {
 /// [`try_lock_with`]: Mutex::try_lock_with
 pub struct Mutex<T: ?Sized, R>(RawMutex<T, R>);
 
+// Same unsafe impls as `crate::raw::Mutex`.
+unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
+unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
+
 impl<T, R> Mutex<T, R> {
     /// Creates a new mutex in an unlocked state ready for use.
     ///
@@ -697,7 +701,7 @@ pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
 }
 
 // SAFETY: Guard only access thread local storage during drop call, can be Sync.
-unsafe impl<'a, T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'a, T, R> {}
+unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 
 impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
     /// Creates a new guard instance from a raw guard.
