@@ -1,9 +1,8 @@
 use core::fmt;
-use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
-use crate::cfg::cell::WithUnchecked;
+use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::raw::{Mutex as RawMutex, MutexNode};
 use crate::relax::Relax;
 
@@ -63,9 +62,13 @@ use crate::relax::Relax;
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
     locked: AtomicBool,
-    marker: PhantomData<R>,
-    inner: RawMutex<T, R>,
+    raw: RawMutex<(), R>,
+    data: UnsafeCell<T>,
 }
+
+// Same unsafe impls as `crate::raw::Mutex`.
+unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
+unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
 
 impl<T, R> Mutex<T, R> {
     /// Creates a new mutex in an unlocked state ready for use.
@@ -85,8 +88,9 @@ impl<T, R> Mutex<T, R> {
     #[inline]
     pub const fn new(value: T) -> Self {
         let locked = AtomicBool::new(false);
-        let inner = RawMutex::new(value);
-        Self { locked, inner, marker: PhantomData }
+        let raw = RawMutex::new(());
+        let data = UnsafeCell::new(value);
+        Self { locked, raw, data }
     }
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
@@ -94,8 +98,9 @@ impl<T, R> Mutex<T, R> {
     #[cfg(not(tarpaulin_include))]
     fn new(value: T) -> Self {
         let locked = AtomicBool::new(false);
-        let inner = RawMutex::new(value);
-        Self { locked, inner, marker: PhantomData }
+        let raw = RawMutex::new(());
+        let data = UnsafeCell::new(value);
+        Self { locked, raw, data }
     }
 
     /// Consumes this mutex, returning the underlying data.
@@ -113,7 +118,7 @@ impl<T, R> Mutex<T, R> {
     /// ```
     #[inline(always)]
     pub fn into_inner(self) -> T {
-        self.inner.into_inner()
+        self.data.into_inner()
     }
 }
 
@@ -156,7 +161,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
             return MutexGuard::new(self);
         }
         let mut node = MutexNode::new();
-        let guard = self.inner.lock(&mut node);
+        let guard = self.raw.lock(&mut node);
         while !self.try_lock_fast() {
             let mut relax = R::default();
             while self.locked.load(Relaxed) {
@@ -359,7 +364,8 @@ impl<T: ?Sized, R> Mutex<T, R> {
     #[cfg(not(all(loom, test)))]
     #[inline(always)]
     pub fn get_mut(&mut self) -> &mut T {
-        self.inner.get_mut()
+        // SAFETY: We hold exclusive access to the Mutex data.
+        unsafe { &mut *self.data.get() }
     }
 
     /// Tries to lock this mutex with a weak exchange.
@@ -503,7 +509,8 @@ pub struct MutexGuard<'a, T: ?Sized, R> {
     lock: &'a Mutex<T, R>,
 }
 
-// Same unsafe impl as `std::sync::MutexGuard`.
+// Same unsafe impls as `crate::raw::MutexGuard`.
+unsafe impl<T: ?Sized + Send, R> Send for MutexGuard<'_, T, R> {}
 unsafe impl<T: ?Sized + Sync, R> Sync for MutexGuard<'_, T, R> {}
 
 impl<'a, T: ?Sized, R> MutexGuard<'a, T, R> {
@@ -518,7 +525,7 @@ impl<'a, T: ?Sized, R> MutexGuard<'a, T, R> {
         F: FnOnce(&T) -> Ret,
     {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { self.lock.inner.data.with_unchecked(f) }
+        unsafe { self.lock.data.with_unchecked(f) }
     }
 }
 
@@ -549,7 +556,7 @@ impl<'a, T: ?Sized, R> core::ops::Deref for MutexGuard<'a, T, R> {
     #[inline(always)]
     fn deref(&self) -> &T {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { &*self.lock.inner.data.get() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
@@ -559,7 +566,7 @@ impl<'a, T: ?Sized, R> core::ops::DerefMut for MutexGuard<'a, T, R> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
-        unsafe { &mut *self.lock.inner.data.get() }
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
@@ -571,7 +578,7 @@ unsafe impl<T: ?Sized, R> crate::loom::Guard for MutexGuard<'_, T, R> {
     type Target = T;
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
-        &self.lock.inner.data
+        &self.lock.data
     }
 }
 
