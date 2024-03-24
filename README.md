@@ -2,8 +2,8 @@
 
 [![MIT][mit-badge]][mit]
 [![Apache 2.0][apache2-badge]][apache2]
-[![Docs][docs-badge]][docs]
 [![Crates][crates-badge]][crates]
+[![Docs][docs-badge]][docs]
 [![CI][ci-badge]][ci]
 [![Codecov][codecov-badge]][codecov]
 ![No_std][no_std-badge]
