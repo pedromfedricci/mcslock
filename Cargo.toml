@@ -20,9 +20,14 @@ keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 # NOTE: Features `yield` and `thread_local` require std.
 yield = []
 thread_local = []
-barging = []
+barging = ["dep:crossbeam-utils"]
 # NOTE: The `dep:` syntax requires Rust 1.60.
 lock_api = ["barging", "dep:lock_api"]
+
+[dependencies.crossbeam-utils]
+version = "0.8"
+default-features = false
+optional = true
 
 [dependencies.lock_api]
 version = "0.4"

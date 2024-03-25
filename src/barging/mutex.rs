@@ -6,6 +6,8 @@ use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::raw::{Mutex as RawMutex, MutexNode};
 use crate::relax::Relax;
 
+use crossbeam_utils::CachePadded;
+
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
 /// This mutex will block threads waiting for the lock to become available. The
@@ -61,10 +63,15 @@ use crate::relax::Relax;
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
-    locked: AtomicBool,
-    raw: RawMutex<(), R>,
+    locked: CachePadded<AtomicBool>,
+    raw: CachePadded<RawMutex<(), R>>,
     data: UnsafeCell<T>,
 }
+
+/// 256 with no data.
+/// 384 with one byte long data.
+/// So realistically 384 would be the bare minimum on x86.
+const _MUTEX_SIZE: usize = core::mem::size_of::<Mutex<u8, ()>>();
 
 // Same unsafe impls as `crate::raw::Mutex`.
 unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
@@ -87,8 +94,8 @@ impl<T, R> Mutex<T, R> {
     #[cfg(not(all(loom, test)))]
     #[inline]
     pub const fn new(value: T) -> Self {
-        let locked = AtomicBool::new(false);
-        let raw = RawMutex::new(());
+        let locked = CachePadded::new(AtomicBool::new(false));
+        let raw = CachePadded::new(RawMutex::new(()));
         let data = UnsafeCell::new(value);
         Self { locked, raw, data }
     }
@@ -97,8 +104,8 @@ impl<T, R> Mutex<T, R> {
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
     fn new(value: T) -> Self {
-        let locked = AtomicBool::new(false);
-        let raw = RawMutex::new(());
+        let locked = CachePadded::new(AtomicBool::new(false));
+        let raw = CachePadded::new(RawMutex::new(()));
         let data = UnsafeCell::new(value);
         Self { locked, raw, data }
     }
