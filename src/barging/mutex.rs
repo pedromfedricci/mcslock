@@ -203,7 +203,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::barging::spins::Mutex;
@@ -302,7 +303,8 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::barging::spins::Mutex;

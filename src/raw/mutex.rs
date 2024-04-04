@@ -284,7 +284,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::raw::spins::Mutex;
@@ -383,7 +384,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::raw::spins::Mutex;
@@ -662,13 +664,19 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
+    use super::{MutexNode, MutexNodeInit};
+
     use crate::raw::yields::Mutex;
     use crate::test::tests;
 
     #[test]
-    fn node_default_and_new_init() {
-        use super::MutexNode;
+    fn node_drop_does_not_matter() {
+        assert!(!core::mem::needs_drop::<MutexNode>());
+        assert!(!core::mem::needs_drop::<MutexNodeInit>());
+    }
 
+    #[test]
+    fn node_default_and_new_init() {
         let mut d = MutexNode::default();
         let dinit = d.initialize();
         assert!(dinit.next.get_mut().is_null());

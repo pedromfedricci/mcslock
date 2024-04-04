@@ -70,11 +70,16 @@ pub mod hint {
     pub use loom::hint::spin_loop;
 }
 
-#[cfg(any(feature = "yield", test))]
 pub mod thread {
-    #[cfg(not(all(loom, test)))]
+    #[cfg(all(any(feature = "yield", test), not(all(loom, test))))]
     pub use std::thread::yield_now;
 
     #[cfg(all(loom, test))]
     pub use loom::thread::yield_now;
+
+    #[cfg(all(feature = "thread_local", not(all(loom, test))))]
+    pub use std::thread::LocalKey;
+
+    #[cfg(all(feature = "thread_local", loom, test))]
+    pub use loom::thread::LocalKey;
 }

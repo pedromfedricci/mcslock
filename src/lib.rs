@@ -70,6 +70,8 @@
 //! more information.
 //!
 //! ```
+//! # #[cfg(feature = "barging")]
+//! # {
 //! use std::sync::Arc;
 //! use std::thread;
 //!
@@ -84,6 +86,9 @@
 //! .join().expect("thread::spawn failed");
 //!
 //! assert_eq!(*mutex.try_lock().unwrap(), 10);
+//! # }
+//! # #[cfg(not(feature = "barging"))]
+//! # fn main() {}
 //! ```
 //!
 //! ## Thread local MCS lock
@@ -207,6 +212,11 @@ pub mod lock_api;
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 pub mod thread_local;
+
+#[cfg(feature = "thread_local")]
+#[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
+/// TODO: Documentation
+pub mod thread_local2;
 
 pub(crate) mod cfg;
 
