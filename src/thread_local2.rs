@@ -42,14 +42,17 @@ use crate::relax::Relax;
 
 /// A handle to a [`MutexNode`] stored at the thread local storage.
 ///
-/// This node can be claimed for temporary, exclusive access during runtime for
-/// locking purposes.
+/// Thread local nodes can be claimed for temporary, exclusive access during
+/// runtime for locking purposes. Node handles refer to the node stored at
+/// the current running thread.
 ///
 /// Just like `MutexNode`, this is an opaque type that holds metadata for the
 /// [`raw::Mutex`]'s waiting queue. You must declare a thread local node with
-/// the [`thread_local_node!`] macro, and provide the generated key handles for
-/// the appropriate [`raw::Mutex`] locking APIs. Claiming exclusive borrow from
-/// a `LocalKeyNode` value while it is currently mutably borrowed will panic.
+/// the [`thread_local_node!`] macro, and provide the generated handles to the
+/// appropriate [`raw::Mutex`] locking APIs. Attempting to lock a mutex with a
+/// thread local node that already is in used for the locking thread will cause
+/// a panic. Handles are provided by value to functions, they are simply
+/// wrappers around static references.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
 /// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
@@ -67,65 +70,57 @@ pub struct LocalNodeKey {
     key: &'static LocalKey<RefCell<MutexNode>>,
 }
 
-impl LocalNodeKey {
-    /// Creates a new `LocalNodeKey` instance.
-    ///
-    /// This function is **NOT** part of the public API and so must not be
-    /// called directly by user's code. It is subjected to changes **WITHOUT**
-    /// prior notice or accompanied with relevant SemVer changes.
-    #[doc(hidden)]
-    #[must_use]
-    #[inline(always)]
-    pub const fn __new(key: &'static LocalKey<RefCell<MutexNode>>) -> Self {
-        Self { key }
+/// Creates a new `LocalNodeKey` instace, which is handle to a node stored at
+/// thread local storage.
+///
+/// This function is **NOT** part of the public API and so must not be
+/// called directly by user's code. It is subjected to changes **WITHOUT**
+/// prior notice or accompanied with relevant SemVer changes.
+#[doc(hidden)]
+#[inline(always)]
+pub const fn __local_node_key() -> LocalNodeKey {
+    #[cfg(not(all(loom, test)))]
+    std::thread_local! {
+        static NODE: RefCell<MutexNode> = const {
+           RefCell::new(MutexNode::new())
+        }
     }
+
+    #[cfg(all(loom, test))]
+    loom::thread_loca! {
+        static NODE: RefCell<MutexNode> = {
+            RefCell::new(MutexNode::new())
+        }
+    }
+
+    LocalNodeKey { key: &NODE }
 }
 
-/// Non-recursive definition of `thread_local_node!` with std's `thread_local!`.
+/// Non-recursive definition of `thread_local_node!`.
+///
+/// This macro is **NOT** part of the public API and so must not be called
+/// directly by user's code. It is subjected to changes **WITHOUT** prior
+/// notice or accompanied with relevant SemVer changes.
 #[cfg(not(all(loom, test)))]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
         $vis const $node: $crate::thread_local2::LocalNodeKey = {
-            ::std::thread_local! {
-                static $node: ::core::cell::RefCell<$crate::raw::MutexNode> = const {
-                    ::core::cell::RefCell::new($crate::raw::MutexNode::new())
-                }
-            }
-            $crate::thread_local2::LocalNodeKey::__new(&$node)
+            $crate::thread_local2::__local_node_key()
         };
     };
 }
 
-/// Non-recursive definition of `thread_local_node!` with Loom's `thread_local!`.
-///
-/// This node definition uses Loom primitives and so it can't be evaluated at
-/// compile-time since Loom does not support that feature.
-#[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __thread_local_node_inner {
-    ($vis:vis $node:ident) => {
-        $vis const $node: $crate::thread_local2::LocalNodeKey = {
-            ::loom::thread_local! {
-                static $node: ::core::cell::RefCell<$crate::raw::MutexNode> = {
-                    ::core::cell::RefCell::new($crate::raw::MutexNode::new())
-                }
-            }
-            $crate::thread_local2::LocalNodeKey::__new(&$node)
-        };
-    };
-}
-
-/// Declares a new [`LocalNodeKey`] thread local storage key handle.
+/// Declares a new [`LocalNodeKey`] key, which is a handle to the thread local
+/// node of the currently running thread.
 ///
 /// The macro wraps any number of static declarations and make them thread
 /// local. Each provided name is associated with a single thread local key. The
 /// keys are wrapped and managed by the [`LocalNodeKey`] type, which are the
 /// actual handles meant to be used with the `lock_with_local` API family from
-/// [`raw::Mutex`].
+/// [`raw::Mutex`]. Handles are provided by value to functions, they are simply
+/// wrappers around static references.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
 /// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
@@ -145,12 +140,17 @@ macro_rules! __thread_local_node_inner {
 /// ```
 /// use mcslock::raw::spins::Mutex;
 ///
+/// // Multiple difenitions.
 /// mcslock::thread_local_node! {
 ///     pub static NODE;
-///     static OTHER_NODE;
+///     static OTHER_NODE1;
 /// }
 ///
+/// // Single definition.
+/// mcslock::thread_local_node!(pub static OTHER_NODE2);
+///
 /// let mutex = Mutex::new(0);
+/// // Handles are provided to APIs by value.
 /// mutex.lock_with_local(NODE, |mut guard| *guard = 10);
 /// assert_eq!(mutex.lock_with_local(NODE, |guard| *guard), 10);
 /// ```
@@ -639,7 +639,7 @@ mod test {
     }
 
     #[test]
-    fn test_lock_arc_access_in_unwind_uncheckd() {
+    fn test_lock_arc_access_in_unwind_unchecked() {
         tests::test_lock_arc_access_in_unwind::<MutexUnchecked<_>>();
     }
 
