@@ -215,7 +215,6 @@ pub mod thread_local;
 
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
-/// TODO: Documentation
 pub mod thread_local2;
 
 pub(crate) mod cfg;
