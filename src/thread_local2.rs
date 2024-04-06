@@ -48,7 +48,7 @@ use crate::relax::Relax;
 ///
 /// Just like `MutexNode`, this is an opaque type that holds metadata for the
 /// [`raw::Mutex`]'s waiting queue. You must declare a thread local node with
-/// the [`thread_local_node!`] macro, and provide the generated handles to the
+/// the [`thread_local_node!`] macro, and provide the generated handle to the
 /// appropriate [`raw::Mutex`] locking APIs. Attempting to lock a mutex with a
 /// thread local node that already is in used for the locking thread will cause
 /// a panic. Handles are provided by reference to functions.
@@ -68,13 +68,15 @@ use crate::relax::Relax;
 pub struct LocalMutexNode {
     #[cfg(not(all(loom, test)))]
     key: LocalKey<RefCell<MutexNode>>,
+    // We can't take ownership of Loom's `thread_local!` value since it is a
+    // `static`, non-copy value, so we just point to it.
     #[cfg(all(loom, test))]
     key: &'static LocalKey<RefCell<MutexNode>>,
 }
 
 impl LocalMutexNode {
-    /// Creates a new `LocalMutexNode` handle associated with the provided
-    /// thread local node key.
+    /// Creates a new `LocalMutexNode` key from the provided thread local node
+    /// key.
     ///
     /// This function is **NOT** part of the public API and so must not be
     /// called directly by user's code. It is subjected to changes **WITHOUT**
@@ -111,8 +113,9 @@ macro_rules! __thread_local_node_inner {
 
 /// Non-recursive, Loom based definition of `thread_local_node!`.
 ///
-// This node definition uses Loom primitives and it can't be evaluated at
-// compile-time since Loom does not support that feature.
+/// This node definition uses Loom primitives and it can't be evaluated at
+/// compile-time since Loom does not support that feature. Loom's `thread_local!`
+/// macro defines a `static` value as oppose to std's `const` value.
 #[cfg(all(loom, test))]
 #[macro_export]
 macro_rules! __thread_local_node_inner {
@@ -470,8 +473,10 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// # Safety
     ///
     /// Mutably borrowing a [`RefCell`] while references are still live is
-    /// undefined behaviour. This means that two or more guards can not be in
-    /// scope within a single thread at the same time.
+    /// undefined behaviour. Threfore, caller must guarantee that the thread
+    /// local node is not already in use for the current thread. A thread local
+    /// node is release to the current thread once the associated `with_local`'s
+    /// f closure runs out of scope.
     unsafe fn with_local_node_unchecked<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
     where
         F: FnOnce(&Self, &mut MutexNode) -> Ret,
