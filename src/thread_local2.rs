@@ -51,8 +51,7 @@ use crate::relax::Relax;
 /// the [`thread_local_node!`] macro, and provide the generated handles to the
 /// appropriate [`raw::Mutex`] locking APIs. Attempting to lock a mutex with a
 /// thread local node that already is in used for the locking thread will cause
-/// a panic. Handles are provided by value to functions, they are simply
-/// wrappers around static references.
+/// a panic. Handles are provided by reference to functions.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
 /// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
@@ -65,35 +64,28 @@ use crate::relax::Relax;
 /// [`try_lock_with_local_unchecked`]: Mutex::try_lock_with_local_unchecked
 /// [`lock_with_local_unchecked`]: Mutex::lock_with_local_unchecked
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug)]
-pub struct LocalNodeKey {
+#[derive(Debug)]
+pub struct LocalMutexNode {
+    #[cfg(not(all(loom, test)))]
+    key: LocalKey<RefCell<MutexNode>>,
+    #[cfg(all(loom, test))]
     key: &'static LocalKey<RefCell<MutexNode>>,
 }
 
-/// Creates a new `LocalNodeKey` instace, which is handle to a node stored at
-/// thread local storage.
-///
-/// This function is **NOT** part of the public API and so must not be
-/// called directly by user's code. It is subjected to changes **WITHOUT**
-/// prior notice or accompanied with relevant SemVer changes.
-#[doc(hidden)]
-#[inline(always)]
-pub const fn __local_node_key() -> LocalNodeKey {
+impl LocalMutexNode {
+    /// Creates a new `LocalMutexNode` handle associated with the provided
+    /// thread local node key.
+    ///
+    /// This function is **NOT** part of the public API and so must not be
+    /// called directly by user's code. It is subjected to changes **WITHOUT**
+    /// prior notice or accompanied with relevant SemVer changes.
     #[cfg(not(all(loom, test)))]
-    std::thread_local! {
-        static NODE: RefCell<MutexNode> = const {
-           RefCell::new(MutexNode::new())
-        }
+    #[doc(hidden)]
+    #[must_use]
+    #[inline(always)]
+    pub const fn __new(key: LocalKey<RefCell<MutexNode>>) -> Self {
+        Self { key }
     }
-
-    #[cfg(all(loom, test))]
-    loom::thread_loca! {
-        static NODE: RefCell<MutexNode> = {
-            RefCell::new(MutexNode::new())
-        }
-    }
-
-    LocalNodeKey { key: &NODE }
 }
 
 /// Non-recursive definition of `thread_local_node!`.
@@ -106,21 +98,44 @@ pub const fn __local_node_key() -> LocalNodeKey {
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
-        $vis const $node: $crate::thread_local2::LocalNodeKey = {
-            $crate::thread_local2::__local_node_key()
+        $vis const $node: $crate::thread_local2::LocalMutexNode = {
+            ::std::thread_local! {
+                static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = const {
+                    ::core::cell::RefCell::new($crate::raw::MutexNode::new())
+                };
+            }
+            $crate::thread_local2::LocalMutexNode::__new(NODE)
         };
     };
 }
 
-/// Declares a new [`LocalNodeKey`] key, which is a handle to the thread local
+/// Non-recursive, Loom based definition of `thread_local_node!`.
+///
+// This node definition uses Loom primitives and it can't be evaluated at
+// compile-time since Loom does not support that feature.
+#[cfg(all(loom, test))]
+#[macro_export]
+macro_rules! __thread_local_node_inner {
+    ($vis:vis $node:ident) => {
+        $vis static $node: $crate::thread_local2::LocalMutexNode = {
+            ::loom::thread_local! {
+                static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = {
+                    ::core::cell::RefCell::new($crate::raw::MutexNode::new())
+                };
+            }
+            $crate::thread_local2::LocalMutexNode { key: &NODE }
+        };
+    };
+}
+
+/// Declares a new [`LocalMutexNode`] key, which is a handle to the thread local
 /// node of the currently running thread.
 ///
 /// The macro wraps any number of static declarations and make them thread
 /// local. Each provided name is associated with a single thread local key. The
-/// keys are wrapped and managed by the [`LocalNodeKey`] type, which are the
+/// keys are wrapped and managed by the [`LocalMutexNode`] type, which are the
 /// actual handles meant to be used with the `lock_with_local` API family from
-/// [`raw::Mutex`]. Handles are provided by value to functions, they are simply
-/// wrappers around static references.
+/// [`raw::Mutex`]. Handles are provided by reference to functions.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
 /// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
@@ -150,9 +165,9 @@ macro_rules! __thread_local_node_inner {
 /// mcslock::thread_local_node!(pub static OTHER_NODE2);
 ///
 /// let mutex = Mutex::new(0);
-/// // Handles are provided to APIs by value.
-/// mutex.lock_with_local(NODE, |mut guard| *guard = 10);
-/// assert_eq!(mutex.lock_with_local(NODE, |guard| *guard), 10);
+/// // Keys are provided to APIs by reference.
+/// mutex.lock_with_local(&NODE, |mut guard| *guard = 10);
+/// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
 /// ```
 /// [`raw::Mutex`]: Mutex
 /// [`std::thread_local!`]: https://doc.rust-lang.org/std/macro.thread_local.html
@@ -162,11 +177,14 @@ macro_rules! __thread_local_node_inner {
 /// [`lock_with_local_unchecked`]: Mutex::lock_with_local_unchecked
 #[macro_export]
 macro_rules! thread_local_node {
+    // Empty (base for recursion).
     () => {};
+    // Process multiply definitions (recursive).
     ($vis:vis static $node:ident; $($rest:tt)*) => {
         $crate::__thread_local_node_inner!($vis $node);
         $crate::thread_local_node!($($rest)*);
     };
+    // Process single declaration.
     ($vis:vis static $node:ident) => {
         $crate::__thread_local_node_inner!($vis $node);
     };
@@ -196,7 +214,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// To acquire a MCS lock through this function, it's also required a mutably
     /// borrowed thread local node, which is a record that keeps a link for
-    /// forming the queue, see [`LocalNodeKey`] and [`thread_local_node!`].
+    /// forming the queue, see [`LocalMutexNode`] and [`thread_local_node!`].
     ///
     /// This function does not block.
     ///
@@ -224,7 +242,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.try_lock_with_local(NODE, |guard| {
+    ///     c_mutex.try_lock_with_local(&NODE, |guard| {
     ///         if let Some(mut guard) = guard {
     ///             *guard = 10;
     ///         } else {
@@ -234,7 +252,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// })
     /// .join().expect("thread::spawn failed");
     ///
-    /// assert_eq!(mutex.lock_with_local(NODE, |guard| *guard), 10);
+    /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
     /// ```
     ///
     /// Compile fail: borrows of the guard or its data cannot escape the given
@@ -246,7 +264,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// mcslock::thread_local_node!(static NODE);
     ///
     /// let mutex = Mutex::new(1);
-    /// let data = mutex.try_lock_with_local(NODE, |guard| &*guard.unwrap());
+    /// let data = mutex.try_lock_with_local(&NODE, |guard| &*guard.unwrap());
     /// ```
     ///
     /// Panic: thread local node cannot be borrowed more than once at the same
@@ -262,19 +280,19 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// let mutex = SpinMutex::new(0);
     ///
-    /// mutex.lock_with_local(NODE, |_guard| {
+    /// mutex.lock_with_local(&NODE, |_guard| {
     ///     // `NODE` is already mutably borrowed in this thread by the
     ///     // inclosing `lock_with_local`, the borrow is live for the full
     ///     // duration of this closure scope.
     ///     let mutex = SpinMutex::new(());
-    ///     mutex.try_lock_with_local(NODE, |_guard| ());
+    ///     mutex.try_lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
-    /// [`LocalNodeKey`]: LocalNodeKey
+    /// [`LocalMutexNode`]: LocalMutexNode
     /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
-    pub fn try_lock_with_local<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    pub fn try_lock_with_local<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
@@ -282,7 +300,14 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     }
 
     /// TODO: Docs
-    pub unsafe fn try_lock_with_local_unchecked<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    ///
+    /// # Safety
+    ///
+    pub unsafe fn try_lock_with_local_unchecked<F, Ret>(
+        &self,
+        node: &'static LocalMutexNode,
+        f: F,
+    ) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
@@ -298,7 +323,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// To acquire a MCS lock through this function, it's also required a mutably
     /// borrowed thread local node, which is a record that keeps a link for
-    /// forming the queue, see [`LocalNodeKey`] and [`thread_local_node!`].
+    /// forming the queue, see [`LocalMutexNode`] and [`thread_local_node!`].
     ///
     /// This function will block if the lock is unavailable.
     ///
@@ -326,11 +351,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
-    ///     c_mutex.lock_with_local(NODE, |mut guard| *guard = 10);
+    ///     c_mutex.lock_with_local(&NODE, |mut guard| *guard = 10);
     /// })
     /// .join().expect("thread::spawn failed");
     ///
-    /// assert_eq!(mutex.lock_with_local(NODE, |guard| *guard), 10);
+    /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
     /// ```
     ///
     /// Compile fail: borrows of the guard or its data cannot escape the given
@@ -342,7 +367,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// mcslock::thread_local_node!(static NODE);
     ///
     /// let mutex = Mutex::new(1);
-    /// let data = mutex.lock_with_local(NODE, |guard| &*guard);
+    /// let data = mutex.lock_with_local(&NODE, |guard| &*guard);
     /// ```
     ///
     /// Panic: thread local node cannot be borrowed more than once at the same
@@ -358,19 +383,19 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// mcslock::thread_local_node!(static NODE);
     ///
-    /// mutex.lock_with_local(NODE, |_guard| {
+    /// mutex.lock_with_local(&NODE, |_guard| {
     ///     // `NODE` is already mutably borrowed in this thread by the
     ///     // inclosing `lock_with_local`, the borrow is live for the full
     ///     // duration of this closure scope.
     ///     let mutex = SpinMutex::new(());
-    ///     mutex.lock_with_local(NODE, |_guard| ());
+    ///     mutex.lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
-    /// [`LocalNodeKey`]: LocalNodeKey
+    /// [`LocalMutexNode`]: LocalMutexNode
     /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
-    pub fn lock_with_local<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    pub fn lock_with_local<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
@@ -378,7 +403,14 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     }
 
     /// TODO: Docs
-    pub unsafe fn lock_with_local_unchecked<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    ///
+    /// # Safety
+    ///
+    pub unsafe fn lock_with_local_unchecked<F, Ret>(
+        &self,
+        node: &'static LocalMutexNode,
+        f: F,
+    ) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
@@ -394,7 +426,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// mcslock::thread_local_node!(static NODE);
     ///
     /// let mutex = Mutex::new(1);
-    /// let guard = mutex.lock_with_local(NODE, |guard| guard);
+    /// let guard = mutex.lock_with_local(&NODE, |guard| guard);
     /// ```
     ///
     /// ```compile_fail,E0521
@@ -403,7 +435,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// mcslock::thread_local_node!(static NODE);
     ///
     /// let mutex = Mutex::new(1);
-    /// mutex.lock_with_local(NODE, |guard| {
+    /// mutex.lock_with_local(&NODE, |guard| {
     ///     thread::spawn(move || {
     ///         let guard = guard;
     ///     });
@@ -422,7 +454,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// Panics if the key currently has its destructor running, and it **may**
     /// panic if the destructor has previously been run for this thread.
     #[track_caller]
-    fn with_local_node<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    fn with_local_node<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
     where
         F: FnOnce(&Self, &mut MutexNode) -> Ret,
     {
@@ -440,7 +472,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// Mutably borrowing a [`RefCell`] while references are still live is
     /// undefined behaviour. This means that two or more guards can not be in
     /// scope within a single thread at the same time.
-    unsafe fn with_local_node_unchecked<F, Ret>(&self, node: LocalNodeKey, f: F) -> Ret
+    unsafe fn with_local_node_unchecked<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
     where
         F: FnOnce(&Self, &mut MutexNode) -> Ret,
     {
@@ -456,7 +488,7 @@ use crate::test::{LockNew, LockWith};
 
 // A thread local node definition used for testing.
 #[cfg(test)]
-thread_local_node!(static NODE);
+thread_local_node!(static TEST_NODE);
 
 /// A Mutex wrapper type that calls the `lock_with_local` and
 /// `try_lock_with_local` when implementing testing traits.
@@ -500,14 +532,14 @@ impl<T: ?Sized, R: Relax> LockWith for MutexPanic<T, R> {
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
-        self.0.try_lock_with_local(NODE, f)
+        self.0.try_lock_with_local(&TEST_NODE, f)
     }
 
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
-        self.0.lock_with_local(NODE, f)
+        self.0.lock_with_local(&TEST_NODE, f)
     }
 
     fn is_locked(&self) -> bool {
@@ -559,7 +591,7 @@ impl<T: ?Sized, R: Relax> LockWith for MutexUnchecked<T, R> {
     {
         // SAFETY: caller must guarantee that this thread local NODE is not
         // already mutably borrowed for some other lock acquisition.
-        unsafe { self.0.try_lock_with_local_unchecked(NODE, f) }
+        unsafe { self.0.try_lock_with_local_unchecked(&TEST_NODE, f) }
     }
 
     fn lock_with<F, Ret>(&self, f: F) -> Ret
@@ -568,7 +600,7 @@ impl<T: ?Sized, R: Relax> LockWith for MutexUnchecked<T, R> {
     {
         // SAFETY: caller must guarantee that this thread local NODE is not
         // already mutably borrowed for some other lock acquisition.
-        unsafe { self.0.lock_with_local_unchecked(NODE, f) }
+        unsafe { self.0.lock_with_local_unchecked(&TEST_NODE, f) }
     }
 
     fn is_locked(&self) -> bool {
@@ -576,7 +608,7 @@ impl<T: ?Sized, R: Relax> LockWith for MutexUnchecked<T, R> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(not(loom), test))]
 mod test {
     use crate::raw::MutexNode;
     use crate::relax::Yield;
