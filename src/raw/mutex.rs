@@ -284,7 +284,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///         if let Some(mut guard) = guard {
     ///             *guard = 10;
     ///         } else {
-    ///             println!("try_lock failed");
+    ///             println!("try_lock_with failed");
     ///         }
     ///     });
     /// })

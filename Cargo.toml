@@ -45,9 +45,5 @@ name = "thread_local"
 required-features = ["thread_local"]
 
 [[example]]
-name = "thread_local2"
-required-features = ["thread_local"]
-
-[[example]]
 name = "lock_api"
 required-features = ["lock_api", "barging"]

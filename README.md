@@ -123,12 +123,10 @@ fn main() {
 }
 ```
 
-## Thread local MCS lock
+## Thread local MCS lock nodes
 
-This implementation also operates under FIFO. The locking APIs provided
-by this module do not require user-side node allocation, critical
-sections must be provided as closures and at most one lock can be held at
-any time within a thread. It is not `no_std` compatible and can be enabled
+TODO: Docs
+It is not `no_std` compatible and can be enabled
 through the `thread_local` feature. See [`thread_local`] module for more
 information.
 
@@ -136,21 +134,25 @@ information.
 use std::sync::Arc;
 use std::thread;
 
+use mcslock::raw::spins::Mutex;
+
 // Requires `thread_local` feature.
-use mcslock::thread_local::spins::Mutex;
+mcslock::thread_local_node!(static NODE);
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
     let c_mutex = Arc::clone(&mutex);
 
     thread::spawn(move || {
+        // Local nodes handles are provided by reference.
         // Critical section must be defined as closure.
-        c_mutex.lock_with(|mut guard| *guard = 10);
+        c_mutex.lock_with_local(&NODE, |mut guard| *guard = 10);
     })
     .join().expect("thread::spawn failed");
 
+    // Local nodes handles are provided by reference.
     // Critical section must be defined as closure.
-    assert_eq!(mutex.try_lock_with(|guard| *guard.unwrap()), 10);
+    assert_eq!(mutex.try_lock_with_local(&NODE, |guard| *guard.unwrap()), 10);
 }
 ```
 
@@ -180,12 +182,7 @@ is heavily contended.
 
 ### thread_local
 
-The `thread_local` feature provides locking APIs that do not require user-side
-node allocation, but critical sections must be provided as closures. This
-implementation handles the queue's nodes transparently, by storing them in
-the thread local storage of the waiting threads. This locking implementation
-will panic if more than one guard is alive within a single thread. Not
-`no_std` compatible.
+TODO: Docs
 
 ### lock_api
 

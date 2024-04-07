@@ -100,13 +100,13 @@ impl LocalMutexNode {
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
-        $vis const $node: $crate::thread_local2::LocalMutexNode = {
+        $vis const $node: $crate::thread_local::LocalMutexNode = {
             ::std::thread_local! {
                 static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = const {
                     ::core::cell::RefCell::new($crate::raw::MutexNode::new())
                 };
             }
-            $crate::thread_local2::LocalMutexNode::__new(NODE)
+            $crate::thread_local::LocalMutexNode::__new(NODE)
         };
     };
 }
@@ -120,13 +120,13 @@ macro_rules! __thread_local_node_inner {
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
-        $vis static $node: $crate::thread_local2::LocalMutexNode = {
+        $vis static $node: $crate::thread_local::LocalMutexNode = {
             ::loom::thread_local! {
                 static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = {
                     ::core::cell::RefCell::new($crate::raw::MutexNode::new())
                 };
             }
-            $crate::thread_local2::LocalMutexNode { key: &NODE }
+            $crate::thread_local::LocalMutexNode { key: &NODE }
         };
     };
 }
@@ -247,7 +247,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///         if let Some(mut guard) = guard {
     ///             *guard = 10;
     ///         } else {
-    ///             println!("try_lock failed");
+    ///             println!("try_lock_with_local failed");
     ///         }
     ///     });
     /// })
@@ -332,7 +332,13 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || unsafe {
-    ///     c_mutex.try_lock_with_local_unchecked(&NODE, |mut guard| *guard = 10);
+    ///     c_mutex.try_lock_with_local_unchecked(&NODE, |guard| {
+    ///         if let Some(mut guard) = guard {
+    ///             *guard = 10;
+    ///         } else {
+    ///             println!("try_lock_with_local_unchecked failed");
+    ///         }
+    ///     });
     /// })
     /// .join().expect("thread::spawn failed");
     ///
