@@ -82,6 +82,7 @@ impl LocalMutexNode {
     /// called directly by user's code. It is subjected to changes **WITHOUT**
     /// prior notice or accompanied with relevant SemVer changes.
     #[cfg(not(all(loom, test)))]
+    #[cfg(not(tarpaulin_include))]
     #[doc(hidden)]
     #[must_use]
     #[inline(always)]
@@ -583,6 +584,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     });
     /// });
     /// ```
+    #[cfg(not(tarpaulin_include))]
     const fn __guard_cant_escape_closure() {}
 }
 
@@ -627,6 +629,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
 
 // A thread local node definition used for testing.
 #[cfg(test)]
+#[cfg(not(tarpaulin_include))]
 thread_local_node!(static TEST_NODE);
 
 /// A Mutex wrapper type that calls the `lock_with_local` and
@@ -643,20 +646,6 @@ impl<T: ?Sized, R> crate::test::LockNew for MutexPanic<T, R> {
         Self::Target: Sized,
     {
         Self(Mutex::new(value))
-    }
-}
-
-#[cfg(all(not(loom), test))]
-impl<T: ?Sized, R> crate::test::LockData for MutexPanic<T, R> {
-    fn into_inner(self) -> Self::Target
-    where
-        Self::Target: Sized,
-    {
-        self.0.into_inner()
-    }
-
-    fn get_mut(&mut self) -> &mut Self::Target {
-        self.0.get_mut()
     }
 }
 
@@ -700,20 +689,6 @@ impl<T: ?Sized, R> crate::test::LockNew for MutexUnchecked<T, R> {
         Self::Target: Sized,
     {
         Self(Mutex::new(value))
-    }
-}
-
-#[cfg(all(not(loom), test))]
-impl<T: ?Sized, R> crate::test::LockData for MutexUnchecked<T, R> {
-    fn into_inner(self) -> Self::Target
-    where
-        Self::Target: Sized,
-    {
-        self.0.into_inner()
-    }
-
-    fn get_mut(&mut self) -> &mut Self::Target {
-        self.0.get_mut()
     }
 }
 
