@@ -1,4 +1,4 @@
-// TODO: Update
+//! TODO: Update
 //! A MCS lock implementation that stores queue nodes in the thread local
 //! storage of the waiting threads.
 //!
@@ -215,9 +215,10 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// a [`Some`] value with the mutex guard is given instead. The lock will be
     /// unlocked when the guard is dropped.
     ///
-    /// To acquire a MCS lock through this function, it's also required a mutably
-    /// borrowed thread local node, which is a record that keeps a link for
-    /// forming the queue, see [`LocalMutexNode`] and [`thread_local_node!`].
+    /// To acquire a MCS lock through this function, it's also required a
+    /// queue node, which is a record that keeps a link for forming the queue,
+    /// to be stored in the current locking thread local storage. See
+    /// [`LocalMutexNode`] and [`thread_local_node!`].
     ///
     /// This function does not block.
     ///
@@ -234,14 +235,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw::Mutex;
-    /// use mcslock::relax::Spin;
-    ///
-    /// type SpinMutex<T> = Mutex<T, Spin>;
+    /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
     ///
-    /// let mutex = Arc::new(SpinMutex::new(0));
+    /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -274,20 +272,17 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// time:
     ///
     #[doc = concat!("```should_panic,", already_borrowed_error!())]
-    /// use mcslock::raw::Mutex;
-    /// use mcslock::relax::Spin;
-    ///
-    /// type SpinMutex<T> = Mutex<T, Spin>;
+    /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
     ///
-    /// let mutex = SpinMutex::new(0);
+    /// let mutex = Mutex::new(0);
     ///
     /// mutex.lock_with_local(&NODE, |_guard| {
     ///     // `NODE` is already mutably borrowed in this thread by the
-    ///     // inclosing `lock_with_local`, the borrow is live for the full
+    ///     // enclosing `lock_with_local`, the borrow is live for the full
     ///     // duration of this closure scope.
-    ///     let mutex = SpinMutex::new(());
+    ///     let mutex = Mutex::new(());
     ///     mutex.try_lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
@@ -302,10 +297,81 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         self.with_local_node(node, |mutex, node| f(mutex.try_lock(node)))
     }
 
-    /// TODO: Docs
+    /// Attempts to acquire this mutex and then runs a closure against its guard.
+    ///
+    /// If the lock could not be acquired at this time, then a [`None`] value is
+    /// given back as the closure argument. If the lock has been acquired, then
+    /// a [`Some`] value with the mutex guard is given instead. The lock will be
+    /// unlocked when the guard is dropped.
+    ///
+    /// To acquire a MCS lock through this function, it's also required a
+    /// queue node, which is a record that keeps a link for forming the queue,
+    /// to be stored in the current locking thread local storage. See
+    /// [`LocalMutexNode`] and [`thread_local_node!`].
+    ///
+    /// This function does not block.
     ///
     /// # Safety
     ///
+    /// Unlike [`try_lock_with_local`], this method is unsafe because it does
+    /// not check if the current thread local node is already mutably borrowed.
+    /// If the current thread local node is already borrowed, calling this
+    /// function is undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Arc::new(Mutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || unsafe {
+    ///     c_mutex.try_lock_with_local_unchecked(&NODE, |mut guard| *guard = 10);
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
+    /// ```
+    ///
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = unsafe {
+    ///     mutex.try_lock_with_local_unchecked(&NODE, |g| &*g.unwrap())
+    /// };
+    /// ```
+    ///
+    /// Undefined behavior: thread local node cannot be borrowed more than once
+    /// at the same time:
+    ///
+    /// ```no_run
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(0);
+    ///
+    /// mutex.lock_with_local(&NODE, |_guard| unsafe {
+    ///     // UB: `NODE` is already mutably borrowed in this thread by the
+    ///     // enclosing `lock_with_local`, the borrow is live for the full
+    ///     // duration of this closure scope.
+    ///     let mutex = Mutex::new(());
+    ///     mutex.try_lock_with_local_unchecked(&NODE, |_guard| ());
+    /// });
+    /// ```
+    /// [`try_lock_with_local`]: Mutex::try_lock_with_local
     pub unsafe fn try_lock_with_local_unchecked<F, Ret>(
         &self,
         node: &'static LocalMutexNode,
@@ -324,9 +390,10 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// executed against the mutex guard. Once the guard goes out of scope, it
     /// will unlock the mutex.
     ///
-    /// To acquire a MCS lock through this function, it's also required a mutably
-    /// borrowed thread local node, which is a record that keeps a link for
-    /// forming the queue, see [`LocalMutexNode`] and [`thread_local_node!`].
+    /// To acquire a MCS lock through this function, it's also required a
+    /// queue node, which is a record that keeps a link for forming the queue,
+    /// to be stored in the current locking thread local storage. See
+    /// [`LocalMutexNode`] and [`thread_local_node!`].
     ///
     /// This function will block if the lock is unavailable.
     ///
@@ -343,14 +410,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw::Mutex;
-    /// use mcslock::relax::Spin;
-    ///
-    /// type SpinMutex<T> = Mutex<T, Spin>;
+    /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
     ///
-    /// let mutex = Arc::new(SpinMutex::new(0));
+    /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -377,20 +441,17 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// time:
     ///
     #[doc = concat!("```should_panic,", already_borrowed_error!())]
-    /// use mcslock::raw::Mutex;
-    /// use mcslock::relax::Spin;
-    ///
-    /// type SpinMutex<T> = Mutex<T, Spin>;
-    ///
-    /// let mutex = SpinMutex::new(0);
+    /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
     ///
+    /// let mutex = Mutex::new(0);
+    ///
     /// mutex.lock_with_local(&NODE, |_guard| {
     ///     // `NODE` is already mutably borrowed in this thread by the
-    ///     // inclosing `lock_with_local`, the borrow is live for the full
+    ///     // enclosing `lock_with_local`, the borrow is live for the full
     ///     // duration of this closure scope.
-    ///     let mutex = SpinMutex::new(());
+    ///     let mutex = Mutex::new(());
     ///     mutex.lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
@@ -405,10 +466,82 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         self.with_local_node(node, |mutex, node| f(mutex.lock(node)))
     }
 
-    /// TODO: Docs
+    /// Acquires this mutex and then runs the closure against its guard.
+    ///
+    /// This function will block the local thread until it is available to acquire
+    /// the mutex. Upon acquiring the mutex, the user provided closure will be
+    /// executed against the mutex guard. Once the guard goes out of scope, it
+    /// will unlock the mutex.
+    ///
+    /// To acquire a MCS lock through this function, it's also required a
+    /// queue node, which is a record that keeps a link for forming the queue,
+    /// to be stored in the current locking thread local storage. See
+    /// [`LocalMutexNode`] and [`thread_local_node!`].
+    ///
+    /// This function will block if the lock is unavailable.
     ///
     /// # Safety
     ///
+    /// Unlike [`lock_with_local`], this method is unsafe because it does not
+    /// check if the current thread local node is already mutably borrowed. If
+    /// the current thread local node is already borrowed, calling this
+    /// function is undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::thread;
+    ///
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Arc::new(Mutex::new(0));
+    /// let c_mutex = Arc::clone(&mutex);
+    ///
+    /// thread::spawn(move || unsafe {
+    ///     c_mutex.lock_with_local_unchecked(&NODE, |mut guard| *guard = 10);
+    /// })
+    /// .join().expect("thread::spawn failed");
+    ///
+    /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
+    /// ```
+    ///
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
+    ///
+    /// ```compile_fail,E0515
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let data = unsafe {
+    ///     mutex.lock_with_local_unchecked(&NODE, |g| &*g)
+    /// };
+    /// ```
+    ///
+    /// Undefined behavior: thread local node cannot be borrowed more than once
+    /// at the same time:
+    ///
+    /// ```no_run
+    /// use mcslock::raw::spins::Mutex;
+    ///
+    /// mcslock::thread_local_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(0);
+    ///
+    /// mutex.lock_with_local(&NODE, |_guard| unsafe {
+    ///     // UB: `NODE` is already mutably borrowed in this thread by the
+    ///     // enclosing `lock_with_local`, the borrow is live for the full
+    ///     // duration of this closure scope.
+    ///     let mutex = Mutex::new(());
+    ///     mutex.lock_with_local_unchecked(&NODE, |_guard| ());
+    /// });
+    /// ```
+    /// [`lock_with_local`]: Mutex::lock_with_local
+    #[inline]
     pub unsafe fn lock_with_local_unchecked<F, Ret>(
         &self,
         node: &'static LocalMutexNode,
@@ -486,11 +619,6 @@ impl<T: ?Sized, R> Mutex<T, R> {
     }
 }
 
-#[cfg(all(not(loom), test))]
-use crate::test::LockData;
-#[cfg(test)]
-use crate::test::{LockNew, LockWith};
-
 // A thread local node definition used for testing.
 #[cfg(test)]
 thread_local_node!(static TEST_NODE);
@@ -501,7 +629,7 @@ thread_local_node!(static TEST_NODE);
 struct MutexPanic<T: ?Sized, R>(Mutex<T, R>);
 
 #[cfg(test)]
-impl<T: ?Sized, R> LockNew for MutexPanic<T, R> {
+impl<T: ?Sized, R> crate::test::LockNew for MutexPanic<T, R> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -513,7 +641,7 @@ impl<T: ?Sized, R> LockNew for MutexPanic<T, R> {
 }
 
 #[cfg(all(not(loom), test))]
-impl<T: ?Sized, R> LockData for MutexPanic<T, R> {
+impl<T: ?Sized, R> crate::test::LockData for MutexPanic<T, R> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,
@@ -527,7 +655,7 @@ impl<T: ?Sized, R> LockData for MutexPanic<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockWith for MutexPanic<T, R> {
+impl<T: ?Sized, R: Relax> crate::test::LockWith for MutexPanic<T, R> {
     type Guard<'a> = MutexGuard<'a, Self::Target, R>
     where
         Self: 'a,
@@ -558,7 +686,7 @@ impl<T: ?Sized, R: Relax> LockWith for MutexPanic<T, R> {
 struct MutexUnchecked<T: ?Sized, R>(Mutex<T, R>);
 
 #[cfg(test)]
-impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
+impl<T: ?Sized, R> crate::test::LockNew for MutexUnchecked<T, R> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -570,7 +698,7 @@ impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
 }
 
 #[cfg(all(not(loom), test))]
-impl<T: ?Sized, R> LockData for MutexUnchecked<T, R> {
+impl<T: ?Sized, R> crate::test::LockData for MutexUnchecked<T, R> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,
@@ -584,7 +712,7 @@ impl<T: ?Sized, R> LockData for MutexUnchecked<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockWith for MutexUnchecked<T, R> {
+impl<T: ?Sized, R: Relax> crate::test::LockWith for MutexUnchecked<T, R> {
     type Guard<'a> = MutexGuard<'a, Self::Target, R>
     where
         Self: 'a,
