@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.1.2..HEAD
+[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.2.0..HEAD
+
+## [0.2.0] - 2024-04-09
+
+### Added
+
+- **BREAKING**: Add new thread_local locking design ([#11]).
+
+[#11]: https://github.com/pedromfedricci/mcslock/pull/11
+
+### Removed
+
+- **BREAKING**: Remove MutexNode reexports ([#12]).
+
+[#12]: https://github.com/pedromfedricci/mcslock/pull/12
 
 ## [0.1.2] - 2024-03-24
 
