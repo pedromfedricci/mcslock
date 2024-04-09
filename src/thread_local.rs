@@ -1,38 +1,3 @@
-//! TODO: Update
-//! A MCS lock implementation that stores queue nodes in the thread local
-//! storage of the waiting threads.
-//!
-//! The `thread_local` implementation of MCS lock is fair, that is, it
-//! guarantees that thread that have waited for longer will be scheduled first
-//! (FIFO). Each waiting thread will spin against its own, thread local atomic
-//! lock state, which then avoids the network contention of the state access.
-//!
-//! This module provide MCS locking APIs that do not require user-side node
-//! allocation, by managing the queue's node allocations internally. Queue
-//! nodes are stored in the thread local storage, therefore this implementation
-//! requires support from the standard library. Critical sections must be
-//! provided to [`lock_with`] and [`try_lock_with`] as closures. Closure arguments
-//! provide a RAII guard that has exclusive over the data. The mutex guard will
-//! be dropped at the end of the call, freeing the mutex.
-//!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. Each module in `thread_local` provides type
-//! aliases for [`Mutex`] and [`MutexGuard`] associated with one relax strategy.
-//! See their documentation for more information.
-//!
-//! # Panics
-//!
-//! The `thread_local` [`Mutex`] implementation only allows at most on lock held
-//! within a single thread at any time. Trying to acquire a second lock while a
-//! guard is alive will cause a panic. See [`lock_with`] and [`try_lock_with`]
-//! functions for more information.
-//!
-//! [`lock_with`]: Mutex::lock_with
-//! [`try_lock_with`]: Mutex::try_lock_with
-//! [`relax`]: crate::relax
-//! [`Relax`]: crate::relax::Relax
-
 use core::cell::{RefCell, RefMut};
 use core::panic::Location;
 
@@ -101,13 +66,13 @@ impl LocalMutexNode {
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
-        $vis const $node: $crate::thread_local::LocalMutexNode = {
+        $vis const $node: $crate::raw::LocalMutexNode = {
             ::std::thread_local! {
                 static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = const {
                     ::core::cell::RefCell::new($crate::raw::MutexNode::new())
                 };
             }
-            $crate::thread_local::LocalMutexNode::__new(NODE)
+            $crate::raw::LocalMutexNode::__new(NODE)
         };
     };
 }
@@ -121,13 +86,13 @@ macro_rules! __thread_local_node_inner {
 #[macro_export]
 macro_rules! __thread_local_node_inner {
     ($vis:vis $node:ident) => {
-        $vis static $node: $crate::thread_local::LocalMutexNode = {
+        $vis static $node: $crate::raw::LocalMutexNode = {
             ::loom::thread_local! {
                 static NODE: ::core::cell::RefCell<$crate::raw::MutexNode> = {
                     ::core::cell::RefCell::new($crate::raw::MutexNode::new())
                 };
             }
-            $crate::thread_local::LocalMutexNode { key: &NODE }
+            $crate::raw::LocalMutexNode { key: &NODE }
         };
     };
 }
