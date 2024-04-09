@@ -128,9 +128,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// This function will block the local thread until it is available to acquire
     /// the mutex. Upon returning, the thread is the only thread with the lock
     /// held. An RAII guard is returned to allow scoped unlock of the lock. When
-    /// the guard goes out of scope, the mutex will be unlocked. To acquire a MCS
-    /// lock, it's also required a mutably borrowed queue node, which is a record
-    /// that keeps a link for forming the queue, see [`MutexNode`].
+    /// the guard goes out of scope, the mutex will be unlocked.
     ///
     /// This function will block if the lock is unavailable.
     ///
@@ -203,7 +201,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::barging::spins::Mutex;
@@ -225,9 +224,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// If the lock could not be acquired at this time, then [`None`] is returned.
     /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
-    /// guard is dropped. To acquire a MCS lock, it's also required a mutably
-    /// borrowed queue node, which is a record that keeps a link for forming the
-    /// queue, see [`MutexNode`].
+    /// guard is dropped.
     ///
     /// This function does not block.
     ///
@@ -293,7 +290,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///         if let Some(mut guard) = guard {
     ///             *guard = 10;
     ///         } else {
-    ///             println!("try_lock failed");
+    ///             println!("try_lock_with failed");
     ///         }
     ///     });
     /// })
@@ -302,7 +299,8 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::barging::spins::Mutex;

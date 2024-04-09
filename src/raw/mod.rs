@@ -31,6 +31,9 @@
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};
 
+#[cfg(feature = "thread_local")]
+pub use crate::thread_local::LocalMutexNode;
+
 /// A `raw` MCS lock alias that signals the processor that it is running a
 /// busy-wait spin-loop during lock contention.
 pub mod spins {

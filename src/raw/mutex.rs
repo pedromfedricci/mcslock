@@ -54,7 +54,9 @@ impl MutexNodeInit {
 /// [`try_lock`]: Mutex::try_lock
 #[repr(transparent)]
 #[derive(Debug)]
-pub struct MutexNode(MaybeUninit<MutexNodeInit>);
+pub struct MutexNode {
+    inner: MaybeUninit<MutexNodeInit>,
+}
 
 impl MutexNode {
     /// Creates new `MutexNode` instance.
@@ -69,13 +71,13 @@ impl MutexNode {
     #[must_use]
     #[inline(always)]
     pub const fn new() -> Self {
-        Self(MaybeUninit::uninit())
+        Self { inner: MaybeUninit::uninit() }
     }
 
     /// Initializes this node and returns a exclusive reference to the initialized
     /// inner state.
     fn initialize(&mut self) -> &mut MutexNodeInit {
-        self.0.write(MutexNodeInit::new())
+        self.inner.write(MutexNodeInit::new())
     }
 }
 
@@ -144,7 +146,7 @@ impl Default for MutexNode {
 pub struct Mutex<T: ?Sized, R> {
     tail: AtomicPtr<MutexNodeInit>,
     marker: PhantomData<R>,
-    pub(crate) data: UnsafeCell<T>,
+    data: UnsafeCell<T>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -206,7 +208,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// If the lock could not be acquired at this time, then [`None`] is returned.
     /// Otherwise, an RAII guard is returned. The lock will be unlocked when the
-    /// guard is dropped. To acquire a MCS lock, it's also required a mutably
+    /// guard is dropped.
+    ///
+    /// To acquire a MCS lock through this function, it's also required a mutably
     /// borrowed queue node, which is a record that keeps a link for forming the
     /// queue, see [`MutexNode`].
     ///
@@ -256,6 +260,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// a [`Some`] value with the mutex guard is given instead. The lock will be
     /// unlocked when the guard is dropped.
     ///
+    /// This function instantiates a [`MutexNode`] for each call, which is
+    /// convenient for one-liners by not particularly efficient on hot paths.
+    /// If that is your use case, consider calling [`try_lock`] in busy loops
+    /// while reusing one single node allocation.
+    ///
     /// This function does not block.
     ///
     /// ```
@@ -275,7 +284,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///         if let Some(mut guard) = guard {
     ///             *guard = 10;
     ///         } else {
-    ///             println!("try_lock failed");
+    ///             println!("try_lock_with failed");
     ///         }
     ///     });
     /// })
@@ -284,7 +293,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::raw::spins::Mutex;
@@ -292,6 +302,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let mutex = Mutex::new(1);
     /// let data = mutex.try_lock_with(|guard| &*guard.unwrap());
     /// ```
+    /// [`try_lock`]: Mutex::try_lock
     #[inline]
     pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
@@ -306,9 +317,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// This function will block the local thread until it is available to acquire
     /// the mutex. Upon returning, the thread is the only thread with the lock
     /// held. An RAII guard is returned to allow scoped unlock of the lock. When
-    /// the guard goes out of scope, the mutex will be unlocked. To acquire a MCS
-    /// lock, it's also required a mutably borrowed queue node, which is a record
-    /// that keeps a link for forming the queue, see [`MutexNode`].
+    /// the guard goes out of scope, the mutex will be unlocked.
+    ///
+    /// To acquire a MCS lock through this function, it's also required a mutably
+    /// borrowed queue node, which is a record that keeps a link for forming the
+    /// queue, see [`MutexNode`].
     ///
     /// This function will block if the lock is unavailable.
     ///
@@ -359,6 +372,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// executed against the mutex guard. Once the guard goes out of scope, it
     /// will unlock the mutex.
     ///
+    /// This function instantiates a [`MutexNode`] for each call, which is
+    /// convenient for one-liners by not particularly efficient on hot paths.
+    /// If that is your use case, consider calling [`lock`] in the busy loop
+    /// while reusing one single node allocation.
+    ///
     /// This function will block if the lock is unavailable.
     ///
     /// # Examples
@@ -383,7 +401,8 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// assert_eq!(mutex.lock_with(|guard| *guard), 10);
     /// ```
     ///
-    /// Borrows of the guard or its data cannot escape the given closure.
+    /// Compile fail: borrows of the guard or its data cannot escape the given
+    /// closure:
     ///
     /// ```compile_fail,E0515
     /// use mcslock::raw::spins::Mutex;
@@ -391,6 +410,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let mutex = Mutex::new(1);
     /// let data = mutex.lock_with(|guard| &*guard);
     /// ```
+    /// [`lock`]: Mutex::lock
     #[inline]
     pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
@@ -662,22 +682,28 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
+    use super::{MutexNode, MutexNodeInit};
+
     use crate::raw::yields::Mutex;
     use crate::test::tests;
 
     #[test]
-    fn node_default_and_new_init() {
-        use super::MutexNode;
+    fn node_drop_does_not_matter() {
+        assert!(!core::mem::needs_drop::<MutexNode>());
+        assert!(!core::mem::needs_drop::<MutexNodeInit>());
+    }
 
+    #[test]
+    fn node_default_and_new_init() {
         let mut d = MutexNode::default();
-        let dinit = d.initialize();
-        assert!(dinit.next.get_mut().is_null());
-        assert!(*dinit.locked.get_mut());
+        let d_init = d.initialize();
+        assert!(d_init.next.get_mut().is_null());
+        assert!(*d_init.locked.get_mut());
 
         let mut n = MutexNode::new();
-        let ninit = n.initialize();
-        assert!(ninit.next.get_mut().is_null());
-        assert!(*ninit.locked.get_mut());
+        let n_init = n.initialize();
+        assert!(n_init.next.get_mut().is_null());
+        assert!(*n_init.locked.get_mut());
     }
 
     #[test]
