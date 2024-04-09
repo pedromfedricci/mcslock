@@ -40,14 +40,12 @@ pub mod spins {
     use super::mutex;
     use crate::relax::Spin;
 
-    pub use mutex::MutexNode;
-
     /// A `raw` MCS lock that implements the [`Spin`] relax strategy.
     ///
     /// # Example
     ///
     /// ```
-    /// use mcslock::raw::spins::{Mutex, MutexNode};
+    /// use mcslock::raw::{spins::Mutex, MutexNode};
     ///
     /// let mutex = Mutex::new(0);
     /// let mut node = MutexNode::new();
@@ -66,14 +64,12 @@ pub mod spins {
         use super::mutex;
         use crate::relax::SpinBackoff;
 
-        pub use mutex::MutexNode;
-
         /// A `raw` MCS lock that implements the [`SpinBackoff`] relax strategy.
         ///
         /// # Example
         ///
         /// ```
-        /// use mcslock::raw::spins::backoff::{Mutex, MutexNode};
+        /// use mcslock::raw::{spins::backoff::Mutex, MutexNode};
         ///
         /// let mutex = Mutex::new(0);
         /// let mut node = MutexNode::new();
@@ -95,14 +91,12 @@ pub mod yields {
     use super::mutex;
     use crate::relax::Yield;
 
-    pub use mutex::MutexNode;
-
     /// A `raw` MCS lock that implements the [`Yield`] relax strategy.
     ///
     /// # Example
     ///
     /// ```
-    /// use mcslock::raw::yields::{Mutex, MutexNode};
+    /// use mcslock::raw::{yields::Mutex, MutexNode};
     ///
     /// let mutex = Mutex::new(0);
     /// let mut node = MutexNode::new();
@@ -122,14 +116,12 @@ pub mod yields {
         use super::mutex;
         use crate::relax::YieldBackoff;
 
-        pub use mutex::MutexNode;
-
         /// A `raw` MCS lock that implements the [`YieldBackoff`] relax strategy.
         ///
         /// # Example
         ///
         /// ```
-        /// use mcslock::raw::yields::backoff::{Mutex, MutexNode};
+        /// use mcslock::raw::{yields::backoff::Mutex, MutexNode};
         ///
         /// let mutex = Mutex::new(0);
         /// let mut node = MutexNode::new();
@@ -149,14 +141,12 @@ pub mod loops {
     use super::mutex;
     use crate::relax::Loop;
 
-    pub use mutex::MutexNode;
-
     /// A `raw` MCS lock that implements the [`Loop`] relax strategy.
     ///
     /// # Example
     ///
     /// ```
-    /// use mcslock::raw::loops::{Mutex, MutexNode};
+    /// use mcslock::raw::{loops::Mutex, MutexNode};
     ///
     /// let mutex = Mutex::new(0);
     /// let mut node = MutexNode::new();

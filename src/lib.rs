@@ -43,7 +43,7 @@
 //! use std::sync::Arc;
 //! use std::thread;
 //!
-//! use mcslock::raw::spins::{Mutex, MutexNode};
+//! use mcslock::raw::{spins::Mutex, MutexNode};
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);

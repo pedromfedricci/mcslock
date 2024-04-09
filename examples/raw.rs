@@ -2,7 +2,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::raw::spins::{Mutex, MutexNode};
+use mcslock::raw::{spins::Mutex, MutexNode};
 
 fn main() {
     const N: usize = 10;
