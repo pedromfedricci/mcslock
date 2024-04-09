@@ -156,11 +156,9 @@ pub mod tests {
         assert_eq!(msg, format!("{mutex:?}"));
 
         let c_mutex = Arc::clone(&mutex);
-        let msg = "Mutex {{ data: <locked> }}".to_string();
+        let msg = "Mutex { data: <locked> }".to_string();
         mutex.lock_with(|_guard| {
-            thread::spawn(move || {
-                assert_eq!(msg, format!("{:?}", *c_mutex));
-            })
+            assert_eq!(msg, format!("{:?}", *c_mutex));
         });
     }
 
