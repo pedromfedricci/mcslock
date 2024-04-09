@@ -34,6 +34,12 @@ command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
 args = ["hack", "clippy", "--feature-powerset", "--no-dev-deps"]
 
+# Run example.
+[tasks.example]
+command = "cargo"
+env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
+args = ["run", "--example", "${@}", "--all-features"]
+
 # Lint all feature combinations with carg-hack on test profile.
 [tasks.lint-test]
 command = "cargo"

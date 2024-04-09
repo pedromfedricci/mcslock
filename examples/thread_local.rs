@@ -41,10 +41,10 @@ fn main() {
                     tx.send(()).unwrap();
                 }
                 // the lock is unlocked here when `data` goes out of scope.
-            })
+            });
         });
     }
-    let _message = rx.recv().unwrap();
+    let _message = rx.recv();
 
     let count = data.lock_with_local(&NODE, |guard| *guard);
     assert_eq!(count, N);

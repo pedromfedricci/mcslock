@@ -76,7 +76,7 @@ more information.
 use std::sync::Arc;
 use std::thread;
 
-use mcslock::raw::spins::{Mutex, MutexNode};
+use mcslock::raw::{spins::Mutex, MutexNode};
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
