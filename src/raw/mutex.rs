@@ -618,7 +618,7 @@ impl<'a, T: ?Sized, R: Relax> MutexGuard<'a, T, R> {
     }
 
     /// Runs `f` against an shared reference pointing to the underlying data.
-    pub(crate) fn with<F, Ret>(&self, f: F) -> Ret
+    fn with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&T) -> Ret,
     {

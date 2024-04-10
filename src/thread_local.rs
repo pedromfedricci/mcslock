@@ -15,7 +15,7 @@ use crate::relax::Relax;
 /// [`raw::Mutex`]'s waiting queue. You must declare a thread local node with
 /// the [`thread_local_node!`] macro, and provide the generated handle to the
 /// appropriate [`raw::Mutex`] locking APIs. Attempting to lock a mutex with a
-/// thread local node that already is in used for the locking thread will cause
+/// thread local node that already is in use for the locking thread will cause
 /// a panic. Handles are provided by reference to functions.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
@@ -56,7 +56,7 @@ impl LocalMutexNode {
     }
 }
 
-/// Non-recursive definition of `thread_local_node!`.
+/// Non-recursive, inner definition of `thread_local_node!`.
 ///
 /// This macro is **NOT** part of the public API and so must not be called
 /// directly by user's code. It is subjected to changes **WITHOUT** prior
@@ -77,7 +77,7 @@ macro_rules! __thread_local_node_inner {
     };
 }
 
-/// Non-recursive, Loom based definition of `thread_local_node!`.
+/// Non-recursive, Loom based inner definition of `thread_local_node!`.
 ///
 /// This node definition uses Loom primitives and it can't be evaluated at
 /// compile-time since Loom does not support that feature. Loom's `thread_local!`
@@ -344,6 +344,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// });
     /// ```
     /// [`try_lock_with_local`]: Mutex::try_lock_with_local
+    #[inline]
     pub unsafe fn try_lock_with_local_unchecked<F, Ret>(
         &self,
         node: &'static LocalMutexNode,
@@ -597,7 +598,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
 #[cfg(not(tarpaulin_include))]
 thread_local_node!(static TEST_NODE);
 
-/// A Mutex wrapper type that calls the `lock_with_local` and
+/// A Mutex wrapper type that calls `lock_with_local` and
 /// `try_lock_with_local` when implementing testing traits.
 #[cfg(test)]
 struct MutexPanic<T: ?Sized, R>(Mutex<T, R>);
@@ -640,7 +641,7 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for MutexPanic<T, R> {
     }
 }
 
-/// A Mutex wrapper type that calls the `lock_with_local_unchecked` and
+/// A Mutex wrapper type that calls `lock_with_local_unchecked` and
 /// `try_lock_with_local_unchecked` when implementing testing traits.
 #[cfg(test)]
 struct MutexUnchecked<T: ?Sized, R>(Mutex<T, R>);
@@ -668,7 +669,7 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for MutexUnchecked<T, R> {
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
-        // SAFETY: caller must guarantee that this thread local NODE is not
+        // SAFETY: caller must guarantee that this thread local node is not
         // already mutably borrowed for some other lock acquisition.
         unsafe { self.0.try_lock_with_local_unchecked(&TEST_NODE, f) }
     }
@@ -677,7 +678,7 @@ impl<T: ?Sized, R: Relax> crate::test::LockWith for MutexUnchecked<T, R> {
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
-        // SAFETY: caller must guarantee that this thread local NODE is not
+        // SAFETY: caller must guarantee that this thread local node is not
         // already mutably borrowed for some other lock acquisition.
         unsafe { self.0.lock_with_local_unchecked(&TEST_NODE, f) }
     }
