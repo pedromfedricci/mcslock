@@ -191,7 +191,11 @@
 //! [Johnson and Harathi]: https://web.archive.org/web/20140411142823/http://www.cise.ufl.edu/tr/DOC/REP-1992-71.pdf
 
 #![cfg_attr(
-    all(not(any(feature = "yield", feature = "thread_local")), not(loom), not(test)),
+    all(
+        not(any(feature = "yield", feature = "thread_local", feature = "parking")),
+        not(loom),
+        not(test)
+    ),
     no_std
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -212,6 +216,11 @@ pub mod barging;
 #[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
 pub mod lock_api;
+
+/// TODO: Docs
+#[cfg(feature = "parking")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parking")))]
+pub mod parking;
 
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
