@@ -21,9 +21,13 @@ keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 yield = []
 thread_local = []
 barging = []
-parking = []
+parking = ["dep:atomic-wait"]
 # NOTE: The `dep:` syntax requires Rust 1.60.
 lock_api = ["barging", "dep:lock_api"]
+
+[dependencies.atomic-wait]
+version = "1"
+optional = true
 
 [dependencies.lock_api]
 version = "0.4"

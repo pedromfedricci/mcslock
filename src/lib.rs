@@ -192,7 +192,9 @@
 
 #![cfg_attr(
     all(
-        not(any(feature = "yield", feature = "thread_local", feature = "parking")),
+        not(feature = "yield"),
+        not(feature = "thread_local"),
+        not(feature = "parking"),
         not(loom),
         not(test)
     ),
@@ -209,6 +211,10 @@
 pub mod raw;
 pub mod relax;
 
+pub(crate) mod cfg;
+pub(crate) mod inner;
+pub(crate) mod wait;
+
 #[cfg(feature = "barging")]
 #[cfg_attr(docsrs, doc(cfg(feature = "barging")))]
 pub mod barging;
@@ -217,7 +223,6 @@ pub mod barging;
 #[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
 pub mod lock_api;
 
-/// TODO: Docs
 #[cfg(feature = "parking")]
 #[cfg_attr(docsrs, doc(cfg(feature = "parking")))]
 pub mod parking;
@@ -225,8 +230,6 @@ pub mod parking;
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 mod thread_local;
-
-pub(crate) mod cfg;
 
 #[cfg(test)]
 pub(crate) mod test;

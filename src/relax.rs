@@ -15,6 +15,7 @@
 //! Strategies that determine the behaviour of locks when encountering contention.
 
 use crate::cfg::hint;
+
 #[cfg(any(feature = "yield", test))]
 use crate::cfg::thread;
 

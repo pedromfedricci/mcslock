@@ -82,10 +82,4 @@ pub mod thread {
 
     #[cfg(all(feature = "thread_local", loom, test))]
     pub use loom::thread::LocalKey;
-
-    #[cfg(not(all(loom, test)))]
-    pub use std::thread::{current, park, Thread};
-
-    #[cfg(all(loom, test))]
-    pub use loom::thread::{current, park, Thread};
 }

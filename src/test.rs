@@ -87,6 +87,13 @@ pub mod tests {
         }
     }
 
+    pub fn node_waiter_drop_does_not_matter<W>() {
+        use crate::inner::{MutexNode, MutexNodeInit};
+        assert!(!core::mem::needs_drop::<W>());
+        assert!(!core::mem::needs_drop::<MutexNode<W>>());
+        assert!(!core::mem::needs_drop::<MutexNodeInit<W>>());
+    }
+
     pub fn lots_and_lots<L>()
     where
         L: LockWith<Target = Int> + Send + Sync + 'static,
