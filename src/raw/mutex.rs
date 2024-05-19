@@ -4,7 +4,7 @@ use core::sync::atomic::Ordering::{Relaxed, Release};
 use crate::cfg::atomic::AtomicBool;
 use crate::inner;
 use crate::relax::Relax;
-use crate::wait::Waiter;
+use crate::wait::{Wait, Waiter};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -41,6 +41,7 @@ impl MutexNode {
 }
 
 impl Default for MutexNode {
+    #[inline(always)]
     fn default() -> Self {
         Self::new()
     }
@@ -299,7 +300,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```
     #[inline]
     pub fn lock<'a>(&'a self, node: &'a mut MutexNode) -> MutexGuard<'a, T, R> {
-        self.inner.lock(&mut node.inner).into()
+        self.inner.lock::<RawWait<R>>(&mut node.inner).into()
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -575,15 +576,30 @@ impl<T> Waiter<T> for AtomicBool {
         Self::new(true)
     }
 
-    fn lock_wait<R: Relax>(&self) {
-        let mut relax = R::default();
-        while self.load(Relaxed) {
-            relax.relax();
-        }
+    fn lock_wait<W: Wait>(&self) {
+        W::wait(self, |this| this.load(Relaxed));
     }
 
     fn notify(&self) {
         self.store(false, Release);
+    }
+}
+
+struct RawWait<R: Relax> {
+    marker: core::marker::PhantomData<R>,
+}
+
+impl<R: Relax> Wait for RawWait<R> {
+    type Relax = R;
+
+    fn wait<T, F>(event: &T, not_ready: F)
+    where
+        F: Fn(&T) -> bool,
+    {
+        let mut relax = Self::Relax::default();
+        while not_ready(event) {
+            relax.relax();
+        }
     }
 }
 

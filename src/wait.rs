@@ -3,16 +3,24 @@ use core::sync::atomic::Ordering::Relaxed;
 use crate::cfg::atomic::AtomicPtr;
 use crate::relax::Relax;
 
-pub trait Waiter<T>: Sized {
+pub trait Waiter<T> {
+    /// Creates a new Waiter instance.
+    ///
+    /// It's expected for a implementing type to be compiler-time evaluable,
+    /// since they compose node types that do require it (except Loom based
+    /// nodes).
     #[cfg(not(all(loom, test)))]
     const NEW: Self;
 
+    /// Creates a new Waiter instance with Loom primitives (non-const).
+    ///
+    /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
     fn new() -> Self;
 
-    fn lock_wait<R: Relax>(&self);
+    fn lock_wait<W: Wait>(&self);
 
-    fn unlock_wait<R: Relax>(&self, next: &AtomicPtr<T>) -> *mut T {
+    fn unlock_relax<R: Relax>(next: &AtomicPtr<T>) -> *mut T {
         let mut relax = R::default();
         loop {
             let ptr = next.load(Relaxed);
@@ -22,4 +30,16 @@ pub trait Waiter<T>: Sized {
     }
 
     fn notify(&self);
+}
+
+/// TODO: Docs
+#[allow(unused)]
+pub trait Wait {
+    /// TODO: Docs
+    type Relax: Relax;
+
+    /// TODO: Docs
+    fn wait<T, F>(event: &T, not_ready: F)
+    where
+        F: Fn(&T) -> bool;
 }

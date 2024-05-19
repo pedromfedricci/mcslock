@@ -7,7 +7,7 @@ use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 use crate::cfg::atomic::{fence, AtomicPtr};
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::relax::Relax;
-use crate::wait::Waiter;
+use crate::wait::{Wait, Waiter};
 
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
 /// state.
@@ -50,12 +50,20 @@ impl<W: Waiter<Self>> Default for MutexNodeInit<W> {
 }
 
 /// A locally-accessible record for forming the waiting queue.
+///
+/// The inner state is never dropped, only overwritten. This is desirable and
+/// well suited for our use cases, since all `W` types used are only composed
+/// of `no drop glue` types (eg. atomic types) with the exception of Loom's
+/// `Thread`, which is only used for tests.
+///
+/// `W` must fail [`core::mem::needs_drop`] check, else `W` will leak.
 #[derive(Debug)]
 pub struct MutexNode<W> {
     inner: MaybeUninit<MutexNodeInit<W>>,
 }
 
 impl<W> MutexNode<W> {
+    /// Creates new `MutexNode` instance.
     #[must_use]
     pub const fn new() -> Self {
         Self { inner: MaybeUninit::uninit() }
@@ -63,6 +71,8 @@ impl<W> MutexNode<W> {
 }
 
 impl<W: Waiter<MutexNodeInit<W>>> MutexNode<W> {
+    /// Initializes this node's inner state, returning an exclusive reference
+    /// pointing to it.
     fn initialize(&mut self) -> &mut MutexNodeInit<W> {
         self.inner.write(MutexNodeInit::new())
     }
@@ -74,21 +84,21 @@ impl<W> Default for MutexNode<W> {
     }
 }
 
-/// A mutual exclusion primitive useful for protecting shared data.
-pub struct Mutex<T: ?Sized, W, P> {
+/// A mutual exclusion primitive implementing the MCS lock protocol, useful for
+/// protecting shared data.
+pub struct Mutex<T: ?Sized, W, R> {
     tail: AtomicPtr<MutexNodeInit<W>>,
-    marker: PhantomData<P>,
+    marker: PhantomData<R>,
     data: UnsafeCell<T>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
-unsafe impl<T: ?Sized + Send, W, P> Send for Mutex<T, W, P> {}
-unsafe impl<T: ?Sized + Send, W, P> Sync for Mutex<T, W, P> {}
+unsafe impl<T: ?Sized + Send, W, R> Send for Mutex<T, W, R> {}
+unsafe impl<T: ?Sized + Send, W, R> Sync for Mutex<T, W, R> {}
 
-impl<T, W, P> Mutex<T, W, P> {
+impl<T, W, R> Mutex<T, W, R> {
     /// Creates a new mutex in an unlocked state ready for use.
     #[cfg(not(all(loom, test)))]
-    #[inline]
     pub const fn new(value: T) -> Self {
         let tail = AtomicPtr::new(ptr::null_mut());
         let data = UnsafeCell::new(value);
@@ -121,14 +131,15 @@ impl<T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> Mutex<T, W, R> {
     }
 
     /// Acquires this mutex, blocking the current thread until it is able to do so.
-    pub fn lock<'a>(&'a self, node: &'a mut MutexNode<W>) -> MutexGuard<'a, T, W, R> {
+    pub fn lock<'a, Wt: Wait>(&'a self, node: &'a mut MutexNode<W>) -> MutexGuard<'a, T, W, R> {
         let node = node.initialize();
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
         // If we have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
-            node.waiter.lock_wait::<R>();
+            // Acquire this mutex, applying some waiting policy.
+            node.waiter.lock_wait::<Wt>();
             fence(Acquire);
         }
         MutexGuard::new(self, node)
@@ -144,8 +155,9 @@ impl<T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> Mutex<T, W, R> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = node.waiter.unlock_wait::<R>(&node.next);
+            next = W::unlock_relax::<R>(&node.next);
         }
+        // Notify our successor that they hold the lock.
         fence(Acquire);
         // SAFETY: We already verified that our successor is not null.
         unsafe { &*next }.waiter.notify();
@@ -154,8 +166,9 @@ impl<T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> Mutex<T, W, R> {
 
 impl<T: ?Sized, W, P> Mutex<T, W, P> {
     /// Returns `true` if the lock is currently held.
+    ///
+    /// This function does not guarantee strong ordering, only atomicity.
     pub fn is_locked(&self) -> bool {
-        // Relaxed is sufficient because this method only guarantees atomicity.
         !self.tail.load(Relaxed).is_null()
     }
 
@@ -211,7 +224,7 @@ impl<'a, T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> MutexGuard<'a, T, W, 
         Self { lock, node }
     }
 
-    /// Runs `f` against an shared reference pointing to the underlying data.
+    /// Runs `f` against a shared reference pointing to the underlying data.
     fn with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(&T) -> Ret,
@@ -262,7 +275,6 @@ impl<'a, T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> core::ops::DerefMut
 }
 
 impl<'a, T: ?Sized, W: Waiter<MutexNodeInit<W>>, R: Relax> Drop for MutexGuard<'a, T, W, R> {
-    #[inline]
     fn drop(&mut self) {
         self.lock.unlock(self.node);
     }

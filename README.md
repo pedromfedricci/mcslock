@@ -118,13 +118,13 @@ fn main() {
 
     thread::spawn(move || {
         // Local nodes handles are provided by reference.
-        // Critical section must be defined as closure.
+        // Critical section must be defined as a closure.
         c_mutex.lock_with_local(&NODE, |mut guard| *guard = 10);
     })
     .join().expect("thread::spawn failed");
 
     // Local nodes handles are provided by reference.
-    // Critical section must be defined as closure.
+    // Critical section must be defined as a closure.
     assert_eq!(mutex.try_lock_with_local(&NODE, |g| *g.unwrap()), 10);
 }
 ```
@@ -192,7 +192,7 @@ is heavily contended.
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
 [`barging::Mutex`]. Aliases are provided by the [`lock_api`] module. This feature
-is `no_std` compatible.
+is `no_std` compatible and automatically enables the `barging` feature.
 
 ## Minimum Supported Rust Version (MSRV)
 

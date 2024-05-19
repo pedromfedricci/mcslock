@@ -1,11 +1,8 @@
-//! TODO: Docs
-
 use core::fmt::{self, Debug, Display, Formatter};
 
+use super::parker::Parker;
 use crate::inner;
 use crate::relax::Relax;
-
-use super::parker::Parker;
 
 /// A locally-accessible record for forming the waiting queue.
 #[repr(transparent)]
@@ -16,14 +13,6 @@ pub struct MutexNode {
 
 impl MutexNode {
     /// Creates new `MutexNode` instance.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use mcslock::raw::MutexNode;
-    ///
-    /// let node = MutexNode::new();
-    /// ```
     #[must_use]
     #[inline(always)]
     pub const fn new() -> Self {
@@ -32,6 +21,7 @@ impl MutexNode {
 }
 
 impl Default for MutexNode {
+    #[inline(always)]
     fn default() -> Self {
         Self::new()
     }
@@ -118,7 +108,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
 }
 
 impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
-    /// Creates a `Mutex<T, P>`, with the `Default` value for `T`.
+    /// Creates a `Mutex<T, R>`, with the `Default` value for `T`.
     #[inline]
     fn default() -> Self {
         Self::new(Default::default())
@@ -126,7 +116,7 @@ impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
 }
 
 impl<T, R> From<T> for Mutex<T, R> {
-    /// Creates a `Mutex<T, P>` from a instance of `T`.
+    /// Creates a `Mutex<T, R>` from a instance of `T`.
     #[inline]
     fn from(data: T) -> Self {
         Self::new(data)
