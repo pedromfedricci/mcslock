@@ -39,7 +39,7 @@ pub trait ParkerT {
 
     /// Returns `true` if the lock is currently held.
     ///
-    /// This function does guarantee strong ordering, only atomicity.
+    /// This function does not guarantee strong ordering, only atomicity.
     fn is_locked(&self) -> bool;
 
     /// Blocks unless or until the current thread's token is made availiable.

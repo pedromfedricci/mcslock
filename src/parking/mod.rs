@@ -1,7 +1,7 @@
 //! TODO: Docs
 
 pub mod park;
-pub(crate) mod parker;
+mod parker;
 
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};

@@ -43,7 +43,7 @@ jobs:
           --target ${{ env.NO_STD_TARGET }}
           --no-dev-deps
           --feature-powerset
-          --skip yield,thread_local
+          --skip yield,thread_local,parking
 
   msrv:
     name: MSRV

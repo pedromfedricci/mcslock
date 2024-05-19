@@ -52,7 +52,7 @@ impl<W: Waiter<Self>> Default for MutexNodeInit<W> {
 ///
 /// The inner state is never dropped, only overwritten. This is desirable and
 /// well suited for our use cases, since all `W` types used are only composed
-/// of `no drop glue` types (eg. atomic types) with the exception of Loom's
+/// of `no drop needed` types (eg. atomic types) with the exception of Loom's
 /// `Thread`, which is only used for tests.
 ///
 /// `W` must fail [`core::mem::needs_drop`] check, else `W` will leak.
