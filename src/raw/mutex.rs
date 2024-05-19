@@ -1,4 +1,5 @@
 use core::fmt::{self, Debug, Display, Formatter};
+use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
@@ -104,7 +105,7 @@ impl Default for MutexNode {
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
-    inner: inner::Mutex<T, AtomicBool, R>,
+    inner: inner::Mutex<T, AtomicBool, RawWait<R>>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -300,7 +301,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```
     #[inline]
     pub fn lock<'a>(&'a self, node: &'a mut MutexNode) -> MutexGuard<'a, T, R> {
-        self.inner.lock::<RawWait<R>>(&mut node.inner).into()
+        self.inner.lock(&mut node.inner).into()
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -505,7 +506,7 @@ impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
 /// [`try_lock_with`]: Mutex::try_lock_with
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
-    inner: inner::MutexGuard<'a, T, AtomicBool, R>,
+    inner: inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>,
 }
 
 // `std::sync::MutexGuard` is not Send for pthread compatibility, but this
@@ -514,10 +515,10 @@ unsafe impl<T: ?Sized + Send, R: Relax> Send for MutexGuard<'_, T, R> {}
 // Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 
-impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, R>>
+impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>>
     for MutexGuard<'a, T, R>
 {
-    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, R>) -> Self {
+    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>) -> Self {
         Self { inner }
     }
 }
@@ -577,6 +578,8 @@ impl<T> Waiter<T> for AtomicBool {
     }
 
     fn lock_wait<W: Wait>(&self) {
+        // Run the waiting policy until the relaxed load returns `false`,
+        // indicating that the lock was handed off to the current thread.
         W::wait(self, |this| this.load(Relaxed));
     }
 
@@ -585,14 +588,18 @@ impl<T> Waiter<T> for AtomicBool {
     }
 }
 
-struct RawWait<R: Relax> {
-    marker: core::marker::PhantomData<R>,
+/// A relaxed waiting policy that will only unblock the thread once a event has
+/// been observed.
+///
+/// This waiting policy then will always return `true`.
+struct RawWait<R> {
+    marker: PhantomData<R>,
 }
 
 impl<R: Relax> Wait for RawWait<R> {
     type Relax = R;
 
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
@@ -600,6 +607,7 @@ impl<R: Relax> Wait for RawWait<R> {
         while not_ready(event) {
             relax.relax();
         }
+        true
     }
 }
 

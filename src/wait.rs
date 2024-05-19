@@ -39,7 +39,7 @@ pub trait Wait {
     type Relax: Relax;
 
     /// TODO: Docs
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool;
 }

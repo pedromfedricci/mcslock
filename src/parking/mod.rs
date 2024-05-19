@@ -3,68 +3,77 @@
 pub mod park;
 pub(crate) mod parker;
 
-// mod mutex;
-// pub use mutex::{Mutex, MutexGuard, MutexNode};
+mod mutex;
+pub use mutex::{Mutex, MutexGuard, MutexNode};
 
-// /// TODO: Docs
-// pub mod spins {
-//     use super::mutex;
-//     use crate::relax::Spin;
+/// TODO: Docs
+pub mod spins {
+    use super::mutex;
+    use crate::parking::park::SpinThanPark;
 
-//     /// TODO: Docs
-//     pub type Mutex<T> = mutex::Mutex<T, Spin>;
+    /// TODO: Docs
+    pub type Mutex<T> = mutex::Mutex<T, SpinThanPark>;
 
-//     /// TODO: Docs
-//     pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Spin>;
+    /// TODO: Docs
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinThanPark>;
 
-//     /// TODO: Docs
-//     pub mod backoff {
-//         use super::mutex;
-//         use crate::relax::SpinBackoff;
+    /// TODO: Docs
+    pub mod backoff {
+        use super::mutex;
+        use crate::parking::park::SpinBackoffThanPark;
 
-//         /// TODO: Docs
-//         pub type Mutex<T> = mutex::Mutex<T, SpinBackoff>;
+        /// TODO: Docs
+        pub type Mutex<T> = mutex::Mutex<T, SpinBackoffThanPark>;
 
-//         /// TODO: Docs
-//         pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoff>;
-//     }
-// }
+        /// TODO: Docs
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoffThanPark>;
+    }
+}
 
-// /// TODO: Docs
-// #[cfg(any(feature = "yield", loom, test))]
-// #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-// pub mod yields {
-//     use super::mutex;
-//     use crate::relax::Yield;
+/// TODO: Docs
+pub mod yields {
+    use super::mutex;
+    use crate::parking::park::YieldThanPark;
 
-//     /// TODO: Docs
-//     pub type Mutex<T> = mutex::Mutex<T, Yield>;
+    /// TODO: Docs
+    pub type Mutex<T> = mutex::Mutex<T, YieldThanPark>;
 
-//     /// TODO: Docs
-//     pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Yield>;
+    /// TODO: Docs
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldThanPark>;
 
-//     /// TODO: Docs
-//     #[cfg(feature = "yield")]
-//     pub mod backoff {
-//         use super::mutex;
-//         use crate::relax::YieldBackoff;
+    /// TODO: Docs
+    pub mod backoff {
+        use super::mutex;
+        use crate::parking::park::YieldBackoffThanPark;
 
-//         /// TODO: Docs
-//         pub type Mutex<T> = mutex::Mutex<T, YieldBackoff>;
+        /// TODO: Docs
+        pub type Mutex<T> = mutex::Mutex<T, YieldBackoffThanPark>;
 
-//         /// TODO: Docs
-//         pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff>;
-//     }
-// }
+        /// TODO: Docs
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoffThanPark>;
+    }
+}
 
-// /// TODO: Docs
-// pub mod loops {
-//     use super::mutex;
-//     use crate::relax::Loop;
+/// TODO: Docs
+pub mod loops {
+    use super::mutex;
+    use crate::parking::park::LoopThanPark;
 
-//     /// TODO: Docs
-//     pub type Mutex<T> = mutex::Mutex<T, Loop>;
+    /// TODO: Docs
+    pub type Mutex<T> = mutex::Mutex<T, LoopThanPark>;
 
-//     /// TODO: Docs
-//     pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop>;
-// }
+    /// TODO: Docs
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThanPark>;
+}
+
+/// TODO: Docs
+pub mod immediate {
+    use super::mutex;
+    use crate::parking::park::ImmediatePark;
+
+    /// TODO: Docs
+    pub type Mutex<T> = mutex::Mutex<T, ImmediatePark>;
+
+    /// TODO: Docs
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, ImmediatePark>;
+}

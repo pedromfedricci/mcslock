@@ -2,37 +2,14 @@
 
 use core::marker::PhantomData;
 
-use crate::relax::{Loop, Relax, Spin, SpinBackoff};
+use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 use crate::wait::Wait;
-
-#[cfg(feature = "yield")]
-use crate::relax::{Yield, YieldBackoff};
 
 pub use sealed::Park;
 
 mod sealed {
     /// TODO: Docs
     pub trait Park: crate::wait::Wait {}
-}
-
-struct Limited<R: Relax, const MAX: u8 = 100> {
-    marker: PhantomData<R>,
-}
-
-impl<R: Relax, const MAX: u8> Wait for Limited<R, MAX> {
-    type Relax = R;
-
-    fn wait<T, F>(event: &T, not_ready: F)
-    where
-        F: Fn(&T) -> bool,
-    {
-        let mut relax = Self::Relax::default();
-        let mut attempts: u8 = 0;
-        while attempts < MAX && not_ready(event) {
-            relax.relax();
-            attempts += 1;
-        }
-    }
 }
 
 /// TODO: Docs
@@ -43,11 +20,11 @@ impl Wait for SpinThanPark {
     type Relax = Spin;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
-        Limited::<Self::Relax>::wait(event, not_ready)
+        Bounded::<Self::Relax>::wait(event, not_ready)
     }
 }
 
@@ -61,35 +38,32 @@ impl Wait for LoopThanPark {
     type Relax = Loop;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
-        Limited::<Self::Relax>::wait(event, not_ready)
+        Bounded::<Self::Relax>::wait(event, not_ready)
     }
 }
 
 impl Park for LoopThanPark {}
 
 /// TODO: Docs
-#[cfg(feature = "yield")]
 #[non_exhaustive]
 pub struct YieldThanPark;
 
-#[cfg(feature = "yield")]
 impl Wait for YieldThanPark {
     type Relax = Yield;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
-        Limited::<Self::Relax>::wait(event, not_ready)
+        Bounded::<Self::Relax>::wait(event, not_ready)
     }
 }
 
-#[cfg(feature = "yield")]
 impl Park for YieldThanPark {}
 
 /// TODO: Docs
@@ -101,10 +75,11 @@ impl Wait for ImmediatePark {
     type Relax = Loop;
 
     #[inline(always)]
-    fn wait<T, F>(_: &T, _: F)
+    fn wait<T, F>(_: &T, _: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
+        true
     }
 }
 
@@ -118,32 +93,57 @@ impl Wait for SpinBackoffThanPark {
     type Relax = SpinBackoff;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
-        Limited::<Self::Relax>::wait(event, not_ready)
+        Bounded::<Self::Relax>::wait(event, not_ready)
     }
 }
 
 impl Park for SpinBackoffThanPark {}
 
 /// TODO: Docs
-#[cfg(feature = "yield")]
 pub struct YieldBackoffThanPark;
 
-#[cfg(feature = "yield")]
 impl Wait for YieldBackoffThanPark {
     type Relax = YieldBackoff;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F)
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
     where
         F: Fn(&T) -> bool,
     {
-        Limited::<Self::Relax>::wait(event, not_ready)
+        Bounded::<Self::Relax>::wait(event, not_ready)
     }
 }
 
-#[cfg(feature = "yield")]
 impl Park for YieldBackoffThanPark {}
+
+/// A bounded, relaxed waiting policy that will block against an event for at
+/// most some number of attempts.
+///
+/// If the event was not ready until all attempts have been issued, then return
+/// `false`, indicating to the `Waiter` (eg. Parker) that the event was not
+/// observed within the limit. If the event was observed, then return `true`.  
+struct Bounded<R: Relax, const MAX: u8 = 100> {
+    marker: PhantomData<R>,
+}
+
+impl<R: Relax, const MAX: u8> Wait for Bounded<R, MAX> {
+    type Relax = R;
+
+    fn wait<T, F>(event: &T, not_ready: F) -> bool
+    where
+        F: Fn(&T) -> bool,
+    {
+        let mut relax = Self::Relax::default();
+        let mut attempts = 0;
+        while attempts < MAX {
+            let true = not_ready(event) else { return true };
+            relax.relax();
+            attempts += 1;
+        }
+        false
+    }
+}

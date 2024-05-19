@@ -58,6 +58,28 @@ pub trait ParkerT {
     fn unpark(&self);
 }
 
+impl<T> Waiter<T> for Parker {
+    #[cfg(not(all(loom, test)))]
+    #[allow(clippy::declare_interior_mutable_const)]
+    const NEW: Self = ParkerT::NEW;
+
+    #[cfg(all(loom, test))]
+    fn new() -> Self {
+        ParkerT::new()
+    }
+
+    fn lock_wait<W: Wait>(&self) {
+        // Wait operation returns `true` if the event was obeserved within the
+        // attempts' limit, `false` otherwise. Then, when if fails, it is best
+        // to put the thread to sleep.
+        (!W::wait(self, ParkerT::is_locked)).then(|| ParkerT::park_loop(self));
+    }
+
+    fn notify(&self) {
+        ParkerT::unpark(self);
+    }
+}
+
 #[cfg(not(all(loom, test)))]
 mod common {
     use core::ptr;
@@ -140,25 +162,5 @@ mod loom {
             self.locked.store(UNLOCKED, UNPARK_ORDERING);
             self.thread.unpark();
         }
-    }
-}
-
-impl<T> Waiter<T> for Parker {
-    #[cfg(not(all(loom, test)))]
-    #[allow(clippy::declare_interior_mutable_const)]
-    const NEW: Self = ParkerT::NEW;
-
-    #[cfg(all(loom, test))]
-    fn new() -> Self {
-        ParkerT::new(true)
-    }
-
-    fn lock_wait<W: Wait>(&self) {
-        W::wait(self, |this| this.is_locked());
-        ParkerT::park_loop(self);
-    }
-
-    fn notify(&self) {
-        ParkerT::unpark(self);
     }
 }
