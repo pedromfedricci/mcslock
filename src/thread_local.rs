@@ -5,6 +5,8 @@ use crate::cfg::thread::LocalKey;
 use crate::raw::{Mutex, MutexGuard, MutexNode};
 use crate::relax::Relax;
 
+type StaticNode = &'static LocalMutexNode;
+
 /// A handle to a [`MutexNode`] stored at the thread local storage.
 ///
 /// Thread local nodes can be claimed for temporary, exclusive access during
@@ -33,6 +35,7 @@ use crate::relax::Relax;
 pub struct LocalMutexNode {
     #[cfg(not(all(loom, test)))]
     key: LocalKey<RefCell<MutexNode>>,
+
     // We can't take ownership of Loom's `thread_local!` value since it is a
     // `static`, non-copy value, so we just point to it.
     #[cfg(all(loom, test))]
@@ -256,7 +259,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
-    pub fn try_lock_with_local<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
+    pub fn try_lock_with_local<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
@@ -345,11 +348,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```
     /// [`try_lock_with_local`]: Mutex::try_lock_with_local
     #[inline]
-    pub unsafe fn try_lock_with_local_unchecked<F, Ret>(
-        &self,
-        node: &'static LocalMutexNode,
-        f: F,
-    ) -> Ret
+    pub unsafe fn try_lock_with_local_unchecked<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
     {
@@ -432,7 +431,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
-    pub fn lock_with_local<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
+    pub fn lock_with_local<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
@@ -515,11 +514,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```
     /// [`lock_with_local`]: Mutex::lock_with_local
     #[inline]
-    pub unsafe fn lock_with_local_unchecked<F, Ret>(
-        &self,
-        node: &'static LocalMutexNode,
-        f: F,
-    ) -> Ret
+    pub unsafe fn lock_with_local_unchecked<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
@@ -564,7 +559,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// Panics if the key currently has its destructor running, and it **may**
     /// panic if the destructor has previously been run for this thread.
     #[track_caller]
-    fn with_local_node<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
+    fn with_local_node<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(&Self, &mut MutexNode) -> Ret,
     {
@@ -584,7 +579,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// local node is not already in use for the current thread. A thread local
     /// node is release to the current thread once the associated `with_local`'s
     /// f closure runs out of scope.
-    unsafe fn with_local_node_unchecked<F, Ret>(&self, node: &'static LocalMutexNode, f: F) -> Ret
+    unsafe fn with_local_node_unchecked<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
         F: FnOnce(&Self, &mut MutexNode) -> Ret,
     {
