@@ -195,6 +195,7 @@
     no_std
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![allow(unexpected_cfgs)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::inline_always)]
 #![allow(clippy::doc_markdown)]
