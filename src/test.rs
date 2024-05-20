@@ -35,6 +35,7 @@ pub trait LockWith: LockNew {
         F: FnOnce(Self::Guard<'_>) -> Ret;
 
     /// Returns `true` if the lock is currently held.
+    #[allow(dead_code)]
     fn is_locked(&self) -> bool;
 }
 
