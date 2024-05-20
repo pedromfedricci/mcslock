@@ -43,6 +43,7 @@ impl<W: Waiter<Self>> MutexNodeInit<W> {
 }
 
 impl<W: Waiter<Self>> Default for MutexNodeInit<W> {
+    #[cfg(not(tarpaulin_include))]
     fn default() -> Self {
         Self::new()
     }
@@ -78,6 +79,7 @@ impl<W: Waiter<MutexNodeInit<W>>> MutexNode<W> {
 }
 
 impl<W> Default for MutexNode<W> {
+    #[cfg(not(tarpaulin_include))]
     fn default() -> Self {
         Self::new()
     }

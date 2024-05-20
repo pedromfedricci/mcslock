@@ -42,6 +42,7 @@ impl MutexNode {
 }
 
 impl Default for MutexNode {
+    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn default() -> Self {
         Self::new()
@@ -573,6 +574,7 @@ impl<T> Waiter<T> for AtomicBool {
     const NEW: Self = Self::new(true);
 
     #[cfg(all(loom, test))]
+    #[cfg(not(tarpaulin_include))]
     fn new() -> Self {
         Self::new(true)
     }

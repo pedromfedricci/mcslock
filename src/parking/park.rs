@@ -79,7 +79,7 @@ impl Wait for ImmediatePark {
     where
         F: Fn(&T) -> bool,
     {
-        true
+        false
     }
 }
 
@@ -145,5 +145,55 @@ impl<R: Relax, const MAX: u8> Wait for Bounded<R, MAX> {
             attempts += 1;
         }
         false
+    }
+}
+
+#[cfg(all(not(loom), test))]
+mod test {
+    use super::Wait;
+
+    fn ready<W: Wait>() -> bool {
+        W::wait(&(), |_| false)
+    }
+
+    fn not_ready<W: Wait>() -> bool {
+        W::wait(&(), |_| true)
+    }
+
+    fn assert_bounded<W: Wait>() {
+        assert!(ready::<W>());
+        assert!(!not_ready::<W>());
+    }
+
+    #[test]
+    fn spins() {
+        assert_bounded::<super::SpinThanPark>();
+    }
+
+    #[test]
+    fn spins_backoff() {
+        assert_bounded::<super::SpinBackoffThanPark>();
+    }
+
+    #[test]
+    fn yields() {
+        assert_bounded::<super::YieldThanPark>();
+    }
+
+    #[test]
+    fn yields_backoff() {
+        assert_bounded::<super::YieldBackoffThanPark>();
+    }
+
+    #[test]
+    fn loops() {
+        assert_bounded::<super::LoopThanPark>();
+    }
+
+    #[test]
+    fn immediate() {
+        use super::ImmediatePark;
+        assert!(!ready::<ImmediatePark>());
+        assert!(!not_ready::<ImmediatePark>());
     }
 }

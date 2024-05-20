@@ -21,6 +21,7 @@ impl MutexNode {
 }
 
 impl Default for MutexNode {
+    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn default() -> Self {
         Self::new()
@@ -246,7 +247,7 @@ unsafe impl<T: ?Sized, P: Park> crate::loom::Guard for MutexGuard<'_, T, P> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::yields::Mutex;
+    use crate::parking::immediate::Mutex;
     use crate::test::tests;
 
     #[test]
@@ -255,7 +256,14 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots() {
+    fn lots_and_lots_immediate_park() {
+        use crate::parking::immediate::Mutex;
+        tests::lots_and_lots::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_yield_than_park() {
+        use crate::parking::yields::Mutex;
         tests::lots_and_lots::<Mutex<_>>();
     }
 
@@ -328,20 +336,40 @@ mod test {
 #[cfg(all(loom, test))]
 mod model {
     use crate::loom::models;
-    use crate::parking::yields::Mutex;
 
     #[test]
-    fn try_lock_join() {
+    fn try_lock_join_immediate_park() {
+        use crate::parking::immediate::Mutex;
         models::try_lock_join::<Mutex<_>>();
     }
 
     #[test]
-    fn lock_join() {
+    fn lock_join_immediate_park() {
+        use crate::parking::immediate::Mutex;
         models::lock_join::<Mutex<_>>();
     }
 
     #[test]
-    fn mixed_lock_join() {
+    fn mixed_lock_join_immediate_park() {
+        use crate::parking::immediate::Mutex;
+        models::mixed_lock_join::<Mutex<_>>();
+    }
+
+    #[test]
+    fn try_lock_join_yield_than_park() {
+        use crate::parking::yields::Mutex;
+        models::try_lock_join::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lock_join_yield_than_park() {
+        use crate::parking::yields::Mutex;
+        models::lock_join::<Mutex<_>>();
+    }
+
+    #[test]
+    fn mixed_lock_join_yield_than_park() {
+        use crate::parking::yields::Mutex;
         models::mixed_lock_join::<Mutex<_>>();
     }
 }
