@@ -1,7 +1,5 @@
 //! TODO: Docs
 
-use core::marker::PhantomData;
-
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 use crate::wait::Wait;
 
@@ -12,188 +10,246 @@ mod sealed {
     pub trait Park: crate::wait::Wait {}
 }
 
-/// TODO: Docs
-#[non_exhaustive]
-pub struct SpinThanPark;
+type Uint = u8;
+const DEFMAX: Uint = 100;
 
-impl Wait for SpinThanPark {
+/// TODO: Docs
+#[derive(Default)]
+pub struct SpinThanPark<const MAX: Uint = DEFMAX> {
+    bounded: Bounded<Spin, MAX>,
+}
+
+impl<const MAX: Uint> Wait for SpinThanPark<MAX> {
     type Relax = Spin;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        Bounded::<Self::Relax>::wait(event, not_ready)
+    fn should_wait(&self) -> bool {
+        self.bounded.should_wait()
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
     }
 }
 
 impl Park for SpinThanPark {}
 
 /// TODO: Docs
-#[non_exhaustive]
-pub struct LoopThanPark;
+#[derive(Default)]
+pub struct LoopThanPark<const MAX: Uint = DEFMAX> {
+    bounded: Bounded<Loop, MAX>,
+}
 
-impl Wait for LoopThanPark {
+impl<const MAX: Uint> Wait for LoopThanPark<MAX> {
     type Relax = Loop;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        Bounded::<Self::Relax>::wait(event, not_ready)
+    fn should_wait(&self) -> bool {
+        self.bounded.should_wait()
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
     }
 }
 
 impl Park for LoopThanPark {}
 
 /// TODO: Docs
-#[non_exhaustive]
-pub struct YieldThanPark;
+#[derive(Default)]
+pub struct YieldThanPark<const MAX: Uint = DEFMAX> {
+    bounded: Bounded<Yield, MAX>,
+}
 
-impl Wait for YieldThanPark {
+impl<const MAX: Uint> Wait for YieldThanPark<MAX> {
     type Relax = Yield;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        Bounded::<Self::Relax>::wait(event, not_ready)
+    fn should_wait(&self) -> bool {
+        self.bounded.should_wait()
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
     }
 }
 
 impl Park for YieldThanPark {}
 
-/// TODO: Docs
+/// Immediately inform that the current should be parked.
+#[derive(Default)]
 #[non_exhaustive]
 pub struct ImmediatePark;
 
-// Immediately inform that the event was not observed, without checking.
 impl Wait for ImmediatePark {
+    // We still want to apply some relax operation during `unlock_wait`, even
+    // thought we don't want to run any before asking the thread to be parked.
     type Relax = Yield;
 
     #[inline(always)]
-    fn wait<T, F>(_: &T, _: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
+    fn should_wait(&self) -> bool {
         false
     }
+
+    #[cfg(not(tarpaulin_include))]
+    #[inline(always)]
+    fn relax(&mut self) {}
 }
 
 impl Park for ImmediatePark {}
 
 /// TODO: Docs
-#[non_exhaustive]
-pub struct SpinBackoffThanPark;
+#[derive(Default)]
+pub struct SpinBackoffThanPark<const MAX: Uint = DEFMAX> {
+    bounded: Bounded<SpinBackoff, MAX>,
+}
 
-impl Wait for SpinBackoffThanPark {
+impl<const MAX: Uint> Wait for SpinBackoffThanPark<MAX> {
     type Relax = SpinBackoff;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        Bounded::<Self::Relax>::wait(event, not_ready)
+    fn should_wait(&self) -> bool {
+        self.bounded.should_wait()
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
     }
 }
 
 impl Park for SpinBackoffThanPark {}
 
 /// TODO: Docs
-pub struct YieldBackoffThanPark;
+#[derive(Default)]
+pub struct YieldBackoffThanPark<const MAX: Uint = DEFMAX> {
+    bounded: Bounded<YieldBackoff, MAX>,
+}
 
-impl Wait for YieldBackoffThanPark {
+impl<const MAX: Uint> Wait for YieldBackoffThanPark<MAX> {
     type Relax = YieldBackoff;
 
     #[inline(always)]
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        Bounded::<Self::Relax>::wait(event, not_ready)
+    fn should_wait(&self) -> bool {
+        self.bounded.should_wait()
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
     }
 }
 
 impl Park for YieldBackoffThanPark {}
 
-/// A bounded, relaxed waiting policy that will block against an event for at
-/// most some number of attempts.
+/// A bounded, relaxed waiting policy that will block the thread against a
+/// condition for at most some number of attempts.
 ///
-/// If the event was not ready until all attempts have been issued, then return
-/// `false`, indicating to the `Waiter` (eg. Parker) that the event was not
-/// observed within the limit. If the event was observed, then return `true`.  
-struct Bounded<R: Relax, const MAX: u8 = 100> {
-    marker: PhantomData<R>,
+/// While the condition holds `true`, we are signaling to the Parker than it
+/// should not park the current thread yet. Once all attempts have been issued,
+/// return `false`, indicating to the Parker that it should park the thread.
+#[derive(Default)]
+struct Bounded<R, const MAX: Uint> {
+    relax: R,
+    attempts: Uint,
 }
 
-impl<R: Relax, const MAX: u8> Wait for Bounded<R, MAX> {
+impl<R: Relax, const MAX: Uint> Wait for Bounded<R, MAX> {
     type Relax = R;
 
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        let mut relax = Self::Relax::default();
-        let mut attempts = 0;
-        while attempts < MAX {
-            let true = not_ready(event) else { return true };
-            relax.relax();
-            attempts += 1;
-        }
-        false
+    fn should_wait(&self) -> bool {
+        self.attempts < MAX
+    }
+
+    fn relax(&mut self) {
+        self.relax.relax();
+        self.attempts += 1;
     }
 }
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use super::Wait;
+    use super::{Uint, Wait};
 
-    fn ready<W: Wait>() -> bool {
-        W::wait(&(), |()| false)
+    trait Bounded<const MAX: Uint>: Wait {}
+
+    use super::SpinThanPark;
+    impl<const MAX: Uint> Bounded<MAX> for SpinThanPark<MAX> {}
+
+    use super::YieldThanPark;
+    impl<const MAX: Uint> Bounded<MAX> for YieldThanPark<MAX> {}
+
+    use super::LoopThanPark;
+    impl<const MAX: Uint> Bounded<MAX> for LoopThanPark<MAX> {}
+
+    use super::SpinBackoffThanPark;
+    impl<const MAX: Uint> Bounded<MAX> for SpinBackoffThanPark<MAX> {}
+
+    use super::YieldBackoffThanPark;
+    impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThanPark<MAX> {}
+
+    fn counter_loop<W: Wait>() -> (W, Uint) {
+        let mut wait = W::default();
+        let mut counter = 0;
+        while wait.should_wait() {
+            wait.relax();
+            counter += 1;
+        }
+        (wait, counter)
     }
 
-    fn not_ready<W: Wait>() -> bool {
-        W::wait(&(), |()| true)
+    fn should_wait<W: Bounded<MAX>, const MAX: Uint>() {
+        let (wait, counter): (W, Uint) = counter_loop();
+        assert!(!wait.should_wait());
+        assert_eq!(MAX, counter);
     }
 
-    fn assert_bounded<W: Wait>() {
-        assert!(ready::<W>());
-        assert!(!not_ready::<W>());
+    fn should_not_wait<W: Wait>() {
+        let (wait, counter): (W, Uint) = counter_loop();
+        assert!(!wait.should_wait());
+        assert_eq!(0, counter);
     }
 
     #[test]
     fn spins() {
-        assert_bounded::<super::SpinThanPark>();
-    }
-
-    #[test]
-    fn spins_backoff() {
-        assert_bounded::<super::SpinBackoffThanPark>();
+        should_wait::<SpinThanPark<0>, 0>();
+        should_wait::<SpinThanPark<1>, 1>();
+        should_wait::<SpinThanPark<10>, 10>();
     }
 
     #[test]
     fn yields() {
-        assert_bounded::<super::YieldThanPark>();
-    }
-
-    #[test]
-    fn yields_backoff() {
-        assert_bounded::<super::YieldBackoffThanPark>();
+        should_wait::<YieldThanPark<0>, 0>();
+        should_wait::<YieldThanPark<1>, 1>();
+        should_wait::<YieldThanPark<10>, 10>();
     }
 
     #[test]
     fn loops() {
-        assert_bounded::<super::LoopThanPark>();
+        should_wait::<LoopThanPark<0>, 0>();
+        should_wait::<LoopThanPark<1>, 1>();
+        should_wait::<LoopThanPark<10>, 10>();
+    }
+
+    #[test]
+    fn spin_backoff() {
+        should_wait::<SpinBackoffThanPark<0>, 0>();
+        should_wait::<SpinBackoffThanPark<1>, 1>();
+        should_wait::<SpinBackoffThanPark<10>, 10>();
+    }
+
+    #[test]
+    fn yield_backoff() {
+        should_wait::<YieldBackoffThanPark<0>, 0>();
+        should_wait::<YieldBackoffThanPark<1>, 1>();
+        should_wait::<YieldBackoffThanPark<10>, 10>();
     }
 
     #[test]
     fn immediate() {
-        use super::ImmediatePark;
-        assert!(!ready::<ImmediatePark>());
-        assert!(!not_ready::<ImmediatePark>());
+        should_not_wait::<super::ImmediatePark>();
     }
 }

@@ -34,12 +34,13 @@ pub trait Waiter<T> {
 
 /// TODO: Docs
 #[allow(unused)]
-pub trait Wait {
+pub trait Wait: Default {
     /// TODO: Docs
     type Relax: Relax;
 
     /// TODO: Docs
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool;
+    fn should_wait(&self) -> bool;
+
+    /// TODO: Dcos
+    fn relax(&mut self);
 }

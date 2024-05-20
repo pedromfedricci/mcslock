@@ -580,9 +580,12 @@ impl<T> Waiter<T> for AtomicBool {
     }
 
     fn lock_wait<W: Wait>(&self) {
-        // Run the waiting policy until the relaxed load returns `false`,
+        // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        W::wait(self, |this| this.load(Relaxed));
+        let mut relax = W::Relax::default();
+        while self.load(Relaxed) {
+            relax.relax();
+        }
     }
 
     fn notify(&self) {
@@ -590,10 +593,7 @@ impl<T> Waiter<T> for AtomicBool {
     }
 }
 
-/// A relaxed waiting policy that will only unblock the thread once a event has
-/// been observed.
-///
-/// This waiting policy then will always return `true`.
+#[derive(Default)]
 struct RawWait<R> {
     marker: PhantomData<R>,
 }
@@ -601,15 +601,12 @@ struct RawWait<R> {
 impl<R: Relax> Wait for RawWait<R> {
     type Relax = R;
 
-    fn wait<T, F>(event: &T, not_ready: F) -> bool
-    where
-        F: Fn(&T) -> bool,
-    {
-        let mut relax = Self::Relax::default();
-        while not_ready(event) {
-            relax.relax();
-        }
-        true
+    fn should_wait(&self) -> bool {
+        unreachable!();
+    }
+
+    fn relax(&mut self) {
+        unreachable!();
     }
 }
 
