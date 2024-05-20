@@ -336,40 +336,35 @@ mod test {
 #[cfg(all(loom, test))]
 mod model {
     use crate::loom::models;
+    use crate::parking::{immediate, yields};
 
     #[test]
     fn try_lock_join_immediate_park() {
-        use crate::parking::immediate::Mutex;
-        models::try_lock_join::<Mutex<_>>();
+        models::try_lock_join::<immediate::Mutex<_>>();
     }
 
     #[test]
     fn lock_join_immediate_park() {
-        use crate::parking::immediate::Mutex;
-        models::lock_join::<Mutex<_>>();
+        models::lock_join::<immediate::Mutex<_>>();
     }
 
     #[test]
     fn mixed_lock_join_immediate_park() {
-        use crate::parking::immediate::Mutex;
-        models::mixed_lock_join::<Mutex<_>>();
+        models::mixed_lock_join::<immediate::Mutex<_>>();
     }
 
     #[test]
     fn try_lock_join_yield_than_park() {
-        use crate::parking::yields::Mutex;
-        models::try_lock_join::<Mutex<_>>();
+        models::try_lock_join::<yields::Mutex<_>>();
     }
 
     #[test]
     fn lock_join_yield_than_park() {
-        use crate::parking::yields::Mutex;
-        models::lock_join::<Mutex<_>>();
+        models::lock_join::<yields::Mutex<_>>();
     }
 
     #[test]
     fn mixed_lock_join_yield_than_park() {
-        use crate::parking::yields::Mutex;
-        models::mixed_lock_join::<Mutex<_>>();
+        models::mixed_lock_join::<yields::Mutex<_>>();
     }
 }
