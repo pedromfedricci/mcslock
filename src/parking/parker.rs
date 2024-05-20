@@ -74,8 +74,7 @@ impl<T> Waiter<T> for Parker {
         // Wait operation returns `true` if the event was obeserved within the
         // attempts' limit, `false` otherwise. Then, when if fails, it is best
         // to put the thread to sleep.
-        // (!W::wait(self, ParkerT::is_locked)).then(|| ParkerT::park_loop(self));
-        ParkerT::park_loop(self);
+        (!W::wait(self, ParkerT::is_locked)).then(|| ParkerT::park_loop(self));
     }
 
     fn notify(&self) {

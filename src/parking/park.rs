@@ -70,9 +70,9 @@ impl Park for YieldThanPark {}
 #[non_exhaustive]
 pub struct ImmediatePark;
 
+// Immediately inform that the event was not observed, without checking.
 impl Wait for ImmediatePark {
-    // Relax strategy doesn't matter here since it won't be used.
-    type Relax = Loop;
+    type Relax = Yield;
 
     #[inline(always)]
     fn wait<T, F>(_: &T, _: F) -> bool
@@ -153,11 +153,11 @@ mod test {
     use super::Wait;
 
     fn ready<W: Wait>() -> bool {
-        W::wait(&(), |_| false)
+        W::wait(&(), |()| false)
     }
 
     fn not_ready<W: Wait>() -> bool {
-        W::wait(&(), |_| true)
+        W::wait(&(), |()| true)
     }
 
     fn assert_bounded<W: Wait>() {
