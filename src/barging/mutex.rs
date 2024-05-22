@@ -6,6 +6,9 @@ use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::raw::{Mutex as RawMutex, MutexNode};
 use crate::relax::Relax;
 
+#[cfg(test)]
+use crate::test::{LockNew, LockWith};
+
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
 /// This mutex will block threads waiting for the lock to become available. The
@@ -405,7 +408,7 @@ impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
+impl<T: ?Sized, R> LockNew for Mutex<T, R> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -417,7 +420,7 @@ impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
     type Guard<'a> = MutexGuard<'a, Self::Target, R>
     where
         Self: 'a,

@@ -33,7 +33,6 @@ pub trait Waiter<T> {
 }
 
 /// TODO: Docs
-#[allow(unused)]
 pub trait Wait: Default {
     /// TODO: Docs
     type Relax: Relax;

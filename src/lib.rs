@@ -209,6 +209,10 @@
 #![warn(rust_2021_compatibility)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "thread_local")]
+#[macro_use]
+pub(crate) mod thread_local;
+
 pub mod raw;
 pub mod relax;
 
@@ -227,10 +231,6 @@ pub mod lock_api;
 #[cfg(feature = "parking")]
 #[cfg_attr(docsrs, doc(cfg(feature = "parking")))]
 pub mod parking;
-
-#[cfg(feature = "thread_local")]
-#[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
-mod thread_local;
 
 #[cfg(test)]
 pub(crate) mod test;

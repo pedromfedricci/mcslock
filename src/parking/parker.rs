@@ -46,7 +46,7 @@ pub trait ParkerT {
     /// Blocks unless or until the current thread's token is made availiable.
     ///
     /// Implementors of this function are expected to call the platform's
-    /// specific APIs for thread parking and also to also implement a mechanism
+    /// specific APIs for thread parking and to also implement a mechanism
     /// to safeguard agains spurious wake-ups if they are possible. That is,
     /// this function should only unblock once a corresponding unpark call has
     /// been issued to this parked thread.
@@ -71,11 +71,16 @@ impl<T> Waiter<T> for Parker {
     }
 
     fn lock_wait<W: Wait>(&self) {
+        // Block the thread with a relaxed loop until either all attempts have
+        // already been made or the lock has been handed off to this thread. If
+        // the limit of attempts has been reached and the lock stills locked,
+        // then park the thread.
         let mut wait = W::default();
         while wait.should_wait() {
             let true = self.is_locked() else { return };
             wait.relax();
         }
+        // Park the current thread. The parking loop will handle spurious wakeups.
         self.park_loop();
     }
 

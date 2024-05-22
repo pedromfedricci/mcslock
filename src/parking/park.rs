@@ -3,12 +3,7 @@
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 use crate::wait::Wait;
 
-pub use sealed::Park;
-
-mod sealed {
-    /// TODO: Docs
-    pub trait Park: crate::wait::Wait {}
-}
+pub use crate::wait::Wait as Park;
 
 type Uint = u8;
 const DEFMAX: Uint = 100;
@@ -33,8 +28,6 @@ impl<const MAX: Uint> Wait for SpinThanPark<MAX> {
     }
 }
 
-impl Park for SpinThanPark {}
-
 /// TODO: Docs
 #[derive(Default)]
 pub struct LoopThanPark<const MAX: Uint = DEFMAX> {
@@ -54,8 +47,6 @@ impl<const MAX: Uint> Wait for LoopThanPark<MAX> {
         self.bounded.relax();
     }
 }
-
-impl Park for LoopThanPark {}
 
 /// TODO: Docs
 #[derive(Default)]
@@ -77,8 +68,6 @@ impl<const MAX: Uint> Wait for YieldThanPark<MAX> {
     }
 }
 
-impl Park for YieldThanPark {}
-
 /// Immediately inform that the current should be parked.
 #[derive(Default)]
 #[non_exhaustive]
@@ -98,8 +87,6 @@ impl Wait for ImmediatePark {
     #[inline(always)]
     fn relax(&mut self) {}
 }
-
-impl Park for ImmediatePark {}
 
 /// TODO: Docs
 #[derive(Default)]
@@ -121,8 +108,6 @@ impl<const MAX: Uint> Wait for SpinBackoffThanPark<MAX> {
     }
 }
 
-impl Park for SpinBackoffThanPark {}
-
 /// TODO: Docs
 #[derive(Default)]
 pub struct YieldBackoffThanPark<const MAX: Uint = DEFMAX> {
@@ -143,13 +128,11 @@ impl<const MAX: Uint> Wait for YieldBackoffThanPark<MAX> {
     }
 }
 
-impl Park for YieldBackoffThanPark {}
-
 /// A bounded, relaxed waiting policy that will block the thread against a
 /// condition for at most some number of attempts.
 ///
 /// While the condition holds `true`, we are signaling to the Parker than it
-/// should not park the current thread yet. Once all attempts have been issued,
+/// should not park the current thread yet. Once all attempts have been made,
 /// return `false`, indicating to the Parker that it should park the thread.
 #[derive(Default)]
 struct Bounded<R, const MAX: Uint> {

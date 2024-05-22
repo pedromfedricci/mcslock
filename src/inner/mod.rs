@@ -8,6 +8,11 @@ use crate::cfg::atomic::{fence, AtomicPtr};
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::wait::{Wait, Waiter};
 
+#[cfg(feature = "thread_local")]
+mod thread_local;
+#[cfg(feature = "thread_local")]
+pub use thread_local::LocalMutexNode;
+
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
 /// state.
 #[derive(Debug)]
@@ -42,8 +47,8 @@ impl<W: Waiter<Self>> MutexNodeInit<W> {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl<W: Waiter<Self>> Default for MutexNodeInit<W> {
-    #[cfg(not(tarpaulin_include))]
     fn default() -> Self {
         Self::new()
     }
@@ -78,8 +83,8 @@ impl<W: Waiter<MutexNodeInit<W>>> MutexNode<W> {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl<W> Default for MutexNode<W> {
-    #[cfg(not(tarpaulin_include))]
     fn default() -> Self {
         Self::new()
     }

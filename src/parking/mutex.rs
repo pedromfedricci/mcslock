@@ -1,8 +1,12 @@
 use core::fmt::{self, Debug, Display, Formatter};
+use core::ops::{Deref, DerefMut};
 
 use super::park::Park;
 use super::parker::Parker;
 use crate::inner;
+
+#[cfg(test)]
+use crate::test::{LockNew, LockWith};
 
 /// A locally-accessible record for forming the waiting queue.
 #[repr(transparent)]
@@ -20,8 +24,22 @@ impl MutexNode {
     }
 }
 
+impl Deref for MutexNode {
+    type Target = inner::MutexNode<Parker>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for MutexNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
 impl Default for MutexNode {
-    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn default() -> Self {
         Self::new()
@@ -30,7 +48,7 @@ impl Default for MutexNode {
 
 /// A mutual exclusion primitive useful for protecting shared data.
 pub struct Mutex<T: ?Sized, P> {
-    inner: inner::Mutex<T, Parker, P>,
+    pub(super) inner: inner::Mutex<T, Parker, P>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -131,7 +149,7 @@ impl<T: ?Sized + Debug, P: Park> Debug for Mutex<T, P> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, P> crate::test::LockNew for Mutex<T, P> {
+impl<T: ?Sized, P> LockNew for Mutex<T, P> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -143,7 +161,7 @@ impl<T: ?Sized, P> crate::test::LockNew for Mutex<T, P> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, P: Park> crate::test::LockWith for Mutex<T, P> {
+impl<T: ?Sized, P: Park> LockWith for Mutex<T, P> {
     type Guard<'a> = MutexGuard<'a, Self::Target, P>
     where
         Self: 'a,
@@ -214,7 +232,7 @@ impl<'a, T: ?Sized + Display, P: Park> Display for MutexGuard<'a, T, P> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, P: Park> core::ops::Deref for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized, P: Park> Deref for MutexGuard<'a, T, P> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -225,7 +243,7 @@ impl<'a, T: ?Sized, P: Park> core::ops::Deref for MutexGuard<'a, T, P> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, P: Park> core::ops::DerefMut for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized, P: Park> DerefMut for MutexGuard<'a, T, P> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {

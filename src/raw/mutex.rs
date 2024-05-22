@@ -1,11 +1,15 @@
 use core::fmt::{self, Debug, Display, Formatter};
 use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
 use core::sync::atomic::Ordering::{Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
 use crate::inner;
 use crate::relax::Relax;
 use crate::wait::{Wait, Waiter};
+
+#[cfg(test)]
+use crate::test::{LockNew, LockWith};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -41,8 +45,22 @@ impl MutexNode {
     }
 }
 
+impl Deref for MutexNode {
+    type Target = inner::MutexNode<AtomicBool>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for MutexNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
 impl Default for MutexNode {
-    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn default() -> Self {
         Self::new()
@@ -106,7 +124,7 @@ impl Default for MutexNode {
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
-    inner: inner::Mutex<T, AtomicBool, RawWait<R>>,
+    pub(super) inner: inner::Mutex<T, AtomicBool, RawWait<R>>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -438,7 +456,7 @@ impl<T: ?Sized + Debug, R: Relax> Debug for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
+impl<T: ?Sized, R> LockNew for Mutex<T, R> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -450,7 +468,7 @@ impl<T: ?Sized, R> crate::test::LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> crate::test::LockWith for Mutex<T, R> {
+impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
     type Guard<'a> = MutexGuard<'a, Self::Target, R>
     where
         Self: 'a,
@@ -537,7 +555,7 @@ impl<'a, T: ?Sized + Display, R: Relax> Display for MutexGuard<'a, T, R> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R: Relax> core::ops::Deref for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, R: Relax> Deref for MutexGuard<'a, T, R> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -548,7 +566,7 @@ impl<'a, T: ?Sized, R: Relax> core::ops::Deref for MutexGuard<'a, T, R> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R: Relax> core::ops::DerefMut for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, R: Relax> DerefMut for MutexGuard<'a, T, R> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -594,7 +612,7 @@ impl<T> Waiter<T> for AtomicBool {
 }
 
 #[derive(Default)]
-struct RawWait<R> {
+pub(super) struct RawWait<R> {
     marker: PhantomData<R>,
 }
 

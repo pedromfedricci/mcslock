@@ -1,7 +1,11 @@
 //! TODO: Docs
 
 pub mod park;
+
 mod parker;
+
+mod thread_local;
+pub use thread_local::LocalMutexNode;
 
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};
