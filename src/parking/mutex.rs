@@ -24,6 +24,7 @@ impl MutexNode {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl Deref for MutexNode {
     type Target = inner::MutexNode<Parker>;
 
