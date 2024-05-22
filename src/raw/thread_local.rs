@@ -10,8 +10,8 @@ use crate::test::{LockNew, LockWith};
 
 type StaticNode = &'static LocalMutexNode;
 
-/// Declares a new [`LocalMutexNode`] key, which is a handle to the thread local
-/// node of the currently running thread.
+/// Declares a new [`raw::LocalMutexNode`] key, which is a handle to the thread
+/// local node of the currently running thread.
 ///
 /// The macro wraps any number of static declarations and make them thread
 /// local. Each provided name is associated with a single thread local key. The
@@ -52,6 +52,7 @@ type StaticNode = &'static LocalMutexNode;
 /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
 /// ```
 /// [`raw::Mutex`]: Mutex
+/// [`raw::LocalMutexNode`]: LocalMutexNode
 /// [`std::thread_local!`]: https://doc.rust-lang.org/std/macro.thread_local.html
 /// [`try_lock_with_local`]: Mutex::try_lock_with_local
 /// [`lock_with_local`]: Mutex::lock_with_local

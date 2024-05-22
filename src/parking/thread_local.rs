@@ -10,14 +10,14 @@ use crate::test::{LockNew, LockWith};
 
 type StaticNode = &'static LocalMutexNode;
 
-/// Declares a new [`LocalMutexNode`] key, which is a handle to the thread local
-/// node of the currently running thread.
+/// Declares a new [`parking::LocalMutexNode`] key, which is a handle to the
+/// thread local node of the currently running thread.
 ///
 /// The macro wraps any number of static declarations and make them thread
 /// local. Each provided name is associated with a single thread local key. The
 /// keys are wrapped and managed by the [`LocalMutexNode`] type, which are the
 /// actual handles meant to be used with the `lock_with_local` API family from
-/// [`raw::Mutex`]. Handles are provided by reference to functions.
+/// [`parking::Mutex`]. Handles are provided by reference to functions.
 ///
 /// See: [`try_lock_with_local`], [`lock_with_local`],
 /// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
@@ -51,7 +51,8 @@ type StaticNode = &'static LocalMutexNode;
 /// mutex.lock_with_local(&NODE, |mut guard| *guard = 10);
 /// assert_eq!(mutex.lock_with_local(&NODE, |guard| *guard), 10);
 /// ```
-/// [`raw::Mutex`]: Mutex
+/// [`parking::Mutex`]: Mutex
+/// [`parking::LocalMutexNode`]: LocalMutexNode
 /// [`std::thread_local!`]: https://doc.rust-lang.org/std/macro.thread_local.html
 /// [`try_lock_with_local`]: Mutex::try_lock_with_local
 /// [`lock_with_local`]: Mutex::lock_with_local
@@ -124,6 +125,8 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// not check if the current thread local node is already mutably borrowed.
     /// If the current thread local node is already borrowed, calling this
     /// function is undefined behavior.
+    ///
+    /// [`try_lock_with_local`]: Mutex::try_lock_with_local
     #[inline]
     pub unsafe fn try_lock_with_local_unchecked<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
@@ -150,6 +153,8 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// check if the current thread local node is already mutably borrowed. If
     /// the current thread local node is already borrowed, calling this
     /// function is undefined behavior.
+    ///
+    /// [`lock_with_local`]: Mutex::lock_with_local
     #[inline]
     pub unsafe fn lock_with_local_unchecked<F, Ret>(&self, node: StaticNode, f: F) -> Ret
     where
