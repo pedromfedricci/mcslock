@@ -1,9 +1,10 @@
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 
-use super::park::Park;
-use super::parker::Parker;
 use crate::inner;
+use crate::parking::park::Park;
+use crate::parking::parker::Parker;
+use crate::wait::Wait;
 
 #[cfg(test)]
 use crate::test::{LockNew, LockWith};
@@ -49,7 +50,7 @@ impl Default for MutexNode {
 
 /// A mutual exclusion primitive useful for protecting shared data.
 pub struct Mutex<T: ?Sized, P> {
-    pub(super) inner: inner::Mutex<T, Parker, P>,
+    pub(super) inner: inner::Mutex<T, Parker, ParkWait<P>>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
@@ -205,7 +206,7 @@ impl<T: ?Sized, P> crate::test::LockData for Mutex<T, P> {
 /// dropped (falls out of scope), the lock will be unlocked.
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, P: Park> {
-    inner: inner::MutexGuard<'a, T, Parker, P>,
+    inner: inner::MutexGuard<'a, T, Parker, ParkWait<P>>,
 }
 
 // `std::sync::MutexGuard` is not Send for pthread compatibility, but this
@@ -214,8 +215,10 @@ unsafe impl<T: ?Sized + Send, P: Park> Send for MutexGuard<'_, T, P> {}
 // Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, P: Park> Sync for MutexGuard<'_, T, P> {}
 
-impl<'a, T: ?Sized, P: Park> From<inner::MutexGuard<'a, T, Parker, P>> for MutexGuard<'a, T, P> {
-    fn from(inner: inner::MutexGuard<'a, T, Parker, P>) -> Self {
+impl<'a, T: ?Sized, P: Park> From<inner::MutexGuard<'a, T, Parker, ParkWait<P>>>
+    for MutexGuard<'a, T, P>
+{
+    fn from(inner: inner::MutexGuard<'a, T, Parker, ParkWait<P>>) -> Self {
         Self { inner }
     }
 }
@@ -264,9 +267,26 @@ unsafe impl<T: ?Sized, P: Park> crate::loom::Guard for MutexGuard<'_, T, P> {
     }
 }
 
+#[derive(Default)]
+pub(super) struct ParkWait<P> {
+    wait: P,
+}
+
+impl<P: Park> Wait for ParkWait<P> {
+    type Relax = P::Relax;
+
+    fn should_wait(&self) -> bool {
+        self.wait.should_wait()
+    }
+
+    fn relax(&mut self) {
+        self.wait.relax();
+    }
+}
+
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::immediate::Mutex;
+    use crate::parking::raw::immediate::Mutex;
     use crate::test::tests;
 
     #[test]
@@ -276,13 +296,13 @@ mod test {
 
     #[test]
     fn lots_and_lots_immediate_park() {
-        use crate::parking::immediate::Mutex;
+        use crate::parking::raw::immediate::Mutex;
         tests::lots_and_lots::<Mutex<_>>();
     }
 
     #[test]
     fn lots_and_lots_yield_than_park() {
-        use crate::parking::yields::Mutex;
+        use crate::parking::raw::yields::Mutex;
         tests::lots_and_lots::<Mutex<_>>();
     }
 
@@ -355,7 +375,7 @@ mod test {
 #[cfg(all(loom, test))]
 mod model {
     use crate::loom::models;
-    use crate::parking::{immediate, yields};
+    use crate::parking::raw::{immediate, yields};
 
     #[test]
     fn try_lock_join_immediate_park() {

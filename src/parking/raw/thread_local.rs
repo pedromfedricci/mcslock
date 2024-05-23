@@ -35,7 +35,7 @@ type StaticNode = &'static LocalMutexNode;
 /// # Example
 ///
 /// ```
-/// use mcslock::parking::spins::Mutex;
+/// use mcslock::parking::raw::spins::Mutex;
 ///
 /// // Multiple difenitions.
 /// mcslock::thread_local_parking_node! {
@@ -64,12 +64,12 @@ macro_rules! thread_local_parking_node {
     () => {};
     // Process multiply definitions (recursive).
     ($vis:vis static $node:ident; $($rest:tt)*) => {
-        $crate::__thread_local_node_inner!($vis $node, parking);
+        $crate::__thread_local_node_inner!($vis $node, parking::raw);
         $crate::thread_local_parking_node!($($rest)*);
     };
     // Process single declaration.
     ($vis:vis static $node:ident) => {
-        $crate::__thread_local_node_inner!($vis $node, parking);
+        $crate::__thread_local_node_inner!($vis $node, parking::raw);
     };
 }
 
@@ -162,7 +162,35 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     {
         self.inner.lock_with_local_unchecked(&node.inner, |guard| f(From::from(guard)))
     }
+
+    /// Guard cannot outlive the closure or else it would allow the guard drop
+    /// call to access the thread local node even though its exclusive borrow
+    /// has already expired at the end of the closure.
+    ///
+    /// ```compile_fail
+    /// use mcslock::parking::raw::spins::Mutex;
+    /// mcslock::thread_local_parking_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(1);
+    /// let guard = mutex.lock_with_local(&NODE, |guard| guard);
+    /// ```
+    ///
+    /// ```compile_fail,E0521
+    /// use std::thread;
+    /// use mcslock::parking::raw::spins::Mutex;
+    /// mcslock::thread_local_parking_node!(static NODE);
+    ///
+    /// let mutex = Mutex::new(1);
+    /// mutex.lock_with_local(&NODE, |guard| {
+    ///     thread::spawn(move || {
+    ///         let guard = guard;
+    ///     });
+    /// });
+    /// ```
+    #[cfg(not(tarpaulin_include))]
+    const fn __guard_cant_escape_closure() {}
 }
+
 // A thread local node definition used for testing.
 #[cfg(test)]
 #[cfg(not(tarpaulin_include))]
@@ -261,7 +289,7 @@ impl<T: ?Sized, P: Park> LockWith for MutexUnchecked<T, P> {
 #[cfg(all(not(loom), test))]
 mod test {
     use crate::parking::park::{ImmediatePark, YieldThanPark};
-    use crate::parking::MutexNode;
+    use crate::parking::raw::MutexNode;
     use crate::test::tests;
 
     type MutexPanic<T> = super::MutexPanic<T, ImmediatePark>;

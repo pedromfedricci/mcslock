@@ -1,9 +1,18 @@
 //! TODO: Docs
 
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
-use crate::wait::Wait;
 
-pub use crate::wait::Wait as Park;
+/// TODO: Docs
+pub trait Park: Default {
+    /// TODO: Docs
+    type Relax: Relax;
+
+    /// TODO: Docs
+    fn should_wait(&self) -> bool;
+
+    /// TODO: Dcos
+    fn relax(&mut self);
+}
 
 type Uint = u8;
 const DEFMAX: Uint = 100;
@@ -14,7 +23,7 @@ pub struct SpinThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Spin, MAX>,
 }
 
-impl<const MAX: Uint> Wait for SpinThanPark<MAX> {
+impl<const MAX: Uint> Park for SpinThanPark<MAX> {
     type Relax = Spin;
 
     #[inline(always)]
@@ -34,7 +43,7 @@ pub struct LoopThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Loop, MAX>,
 }
 
-impl<const MAX: Uint> Wait for LoopThanPark<MAX> {
+impl<const MAX: Uint> Park for LoopThanPark<MAX> {
     type Relax = Loop;
 
     #[inline(always)]
@@ -54,7 +63,7 @@ pub struct YieldThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Yield, MAX>,
 }
 
-impl<const MAX: Uint> Wait for YieldThanPark<MAX> {
+impl<const MAX: Uint> Park for YieldThanPark<MAX> {
     type Relax = Yield;
 
     #[inline(always)]
@@ -73,7 +82,7 @@ impl<const MAX: Uint> Wait for YieldThanPark<MAX> {
 #[non_exhaustive]
 pub struct ImmediatePark;
 
-impl Wait for ImmediatePark {
+impl Park for ImmediatePark {
     // We still want to apply some relax operation during `unlock_wait`, even
     // thought we don't want to run any before asking the thread to be parked.
     type Relax = Yield;
@@ -94,7 +103,7 @@ pub struct SpinBackoffThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<SpinBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Wait for SpinBackoffThanPark<MAX> {
+impl<const MAX: Uint> Park for SpinBackoffThanPark<MAX> {
     type Relax = SpinBackoff;
 
     #[inline(always)]
@@ -114,7 +123,7 @@ pub struct YieldBackoffThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<YieldBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Wait for YieldBackoffThanPark<MAX> {
+impl<const MAX: Uint> Park for YieldBackoffThanPark<MAX> {
     type Relax = YieldBackoff;
 
     #[inline(always)]
@@ -140,7 +149,7 @@ struct Bounded<R, const MAX: Uint> {
     attempts: Uint,
 }
 
-impl<R: Relax, const MAX: Uint> Wait for Bounded<R, MAX> {
+impl<R: Relax, const MAX: Uint> Park for Bounded<R, MAX> {
     type Relax = R;
 
     fn should_wait(&self) -> bool {
@@ -155,9 +164,9 @@ impl<R: Relax, const MAX: Uint> Wait for Bounded<R, MAX> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use super::{Uint, Wait};
+    use super::{Park, Uint};
 
-    trait Bounded<const MAX: Uint>: Wait {}
+    trait Bounded<const MAX: Uint>: Park {}
 
     use super::SpinThanPark;
     impl<const MAX: Uint> Bounded<MAX> for SpinThanPark<MAX> {}
@@ -174,7 +183,7 @@ mod test {
     use super::YieldBackoffThanPark;
     impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThanPark<MAX> {}
 
-    fn counter_loop<W: Wait>() -> (W, Uint) {
+    fn counter_loop<W: Park>() -> (W, Uint) {
         let mut wait = W::default();
         let mut counter = 0;
         while wait.should_wait() {
@@ -190,7 +199,7 @@ mod test {
         assert_eq!(MAX, counter);
     }
 
-    fn should_not_wait<W: Wait>() {
+    fn should_not_wait<W: Park>() {
         let (wait, counter): (W, Uint) = counter_loop();
         assert!(!wait.should_wait());
         assert_eq!(0, counter);

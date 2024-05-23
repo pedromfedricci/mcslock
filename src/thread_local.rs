@@ -8,14 +8,14 @@
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __thread_local_node_inner {
-    ($vis:vis $node:ident, $mod:ident) => {
-        $vis const $node: $crate::$mod::LocalMutexNode = {
+    ($vis:vis $node:ident, $($mod:ident$(::)?)+) => {
+        $vis const $node: $crate::$($mod::)+LocalMutexNode = {
             ::std::thread_local! {
-                static NODE: ::core::cell::RefCell<$crate::$mod::MutexNode> = const {
-                    ::core::cell::RefCell::new($crate::$mod::MutexNode::new())
+                static NODE: ::core::cell::RefCell<$crate::$($mod::)+MutexNode> = const {
+                    ::core::cell::RefCell::new($crate::$($mod::)+MutexNode::new())
                 };
             }
-            $crate::$mod::LocalMutexNode::__new(NODE)
+            $crate::$($mod::)+LocalMutexNode::__new(NODE)
         };
     };
 }
@@ -29,14 +29,14 @@ macro_rules! __thread_local_node_inner {
 #[cfg(all(loom, test))]
 #[macro_export]
 macro_rules! __thread_local_node_inner {
-    ($vis:vis $node:ident, $mod:ident) => {
-        $vis static $node: $crate::$mod::LocalMutexNode = {
+    ($vis:vis $node:ident, $($mod:ident)::+) => {
+        $vis static $node: $crate::$($mod::)+LocalMutexNode = {
             ::loom::thread_local! {
-                static NODE: ::core::cell::RefCell<$crate::$mod::MutexNode> = {
-                    ::core::cell::RefCell::new($crate::$mod::MutexNode::new())
+                static NODE: ::core::cell::RefCell<$crate::$($mod::)+MutexNode> = {
+                    ::core::cell::RefCell::new($crate::$($mod::)+MutexNode::new())
                 };
             }
-            $crate::$mod::LocalMutexNode::new(&NODE)
+            $crate::$($mod::)+LocalMutexNode::new(&NODE)
         };
     };
 }
