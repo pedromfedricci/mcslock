@@ -2,7 +2,7 @@ use core::cell::RefCell;
 
 use super::{Mutex, MutexGuard, MutexNode};
 use crate::cfg::thread::LocalKey;
-use crate::inner;
+use crate::inner::raw as inner;
 use crate::parking::park::Park;
 
 #[cfg(test)]

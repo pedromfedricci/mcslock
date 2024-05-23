@@ -88,7 +88,7 @@ pub mod tests {
     }
 
     pub fn node_waiter_drop_does_not_matter<W>() {
-        use crate::inner::{MutexNode, MutexNodeInit};
+        use crate::inner::raw::{MutexNode, MutexNodeInit};
         assert!(!core::mem::needs_drop::<W>());
         assert!(!core::mem::needs_drop::<MutexNode<W>>());
         assert!(!core::mem::needs_drop::<MutexNodeInit<W>>());

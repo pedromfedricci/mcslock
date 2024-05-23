@@ -4,7 +4,7 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::Ordering::{Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
-use crate::inner;
+use crate::inner::raw as inner;
 use crate::relax::Relax;
 use crate::wait::{Wait, Waiter};
 

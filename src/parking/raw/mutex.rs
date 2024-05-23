@@ -1,7 +1,7 @@
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::{Deref, DerefMut};
 
-use crate::inner;
+use crate::inner::raw as inner;
 use crate::parking::park::Park;
 use crate::parking::parker::Parker;
 use crate::wait::Wait;
