@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering::{self, Acquire, Release};
 
-use crate::wait::{Wait, Waiter};
+use crate::wait::{QueueWaiter, Wait, Waiter};
 
 #[cfg(not(all(loom, test)))]
 pub(super) use common::Parker;
@@ -25,23 +25,48 @@ const UNPARK_ORDERING: Ordering = Release;
 /// features. Should we choose to integrate with system's interfaces in the
 /// future, each Parker implementation should follow this same contract.
 pub trait ParkerT {
-    /// Creates a new Parker instance.
+    /// Creates a new Parker instance with locked state.
     ///
     /// It's expected for a implementing type to be compiler-time evaluable.
     #[cfg(not(all(loom, test)))]
-    const NEW: Self;
+    const LOCKED: Self;
 
-    /// Creates a new Parker instance with Loom primitives (non-const).
+    /// Creates a new Parker instance with unlocked state.
+    ///
+    /// It's expected for a implementing type to be compiler-time evaluable.
+    #[cfg(not(all(loom, test)))]
+    const UNLOCKED: Self;
+
+    /// Creates a new Parker locked instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
-    fn new() -> Self;
+    fn locked() -> Self;
+
+    /// Creates a new Parker unlocked instance with Loom primitives (non-const).
+    ///
+    /// Loom primitives are not compiler-time evaluable.
+    #[cfg(all(loom, test))]
+    #[cfg(not(tarpaulin_include))]
+    fn unlocked() -> Self;
 
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
     fn is_locked(&self) -> bool;
+
+    /// Tries to lock this mutex.
+    ///
+    /// Returns `true` if successfully moved from unlocked state to locked
+    /// state, `false` otherwise.
+    fn try_lock(&self) -> bool;
+
+    /// Tries to lock this mutex with a weak exchange.
+    ///
+    /// Returns `true` if successfully moved from unlocked state to locked
+    /// state, `false` otherwise.
+    fn try_lock_weak(&self) -> bool;
 
     /// Blocks unless or until the current thread's token is made availiable.
     ///
@@ -59,15 +84,33 @@ pub trait ParkerT {
     fn unpark(&self);
 }
 
-impl<T> Waiter<T> for Parker {
+impl Waiter for Parker {
     #[cfg(not(all(loom, test)))]
     #[allow(clippy::declare_interior_mutable_const)]
-    const NEW: Self = ParkerT::NEW;
+    const LOCKED: Self = ParkerT::LOCKED;
+
+    #[cfg(not(all(loom, test)))]
+    #[allow(clippy::declare_interior_mutable_const)]
+    const UNLOCKED: Self = ParkerT::UNLOCKED;
 
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
-    fn new() -> Self {
-        ParkerT::new()
+    fn locked() -> Self {
+        ParkerT::locked()
+    }
+
+    #[cfg(all(loom, test))]
+    #[cfg(not(tarpaulin_include))]
+    fn unlocked() -> Self {
+        ParkerT::unlocked()
+    }
+
+    fn try_lock(&self) -> bool {
+        ParkerT::try_lock(self)
+    }
+
+    fn try_lock_weak(&self) -> bool {
+        ParkerT::try_lock_weak(self)
     }
 
     fn lock_wait<W: Wait>(&self) {
@@ -77,11 +120,15 @@ impl<T> Waiter<T> for Parker {
         // then park the thread.
         let mut wait = W::default();
         while wait.should_wait() {
-            let true = self.is_locked() else { return };
+            let true = ParkerT::is_locked(self) else { return };
             wait.relax();
         }
         // Park the current thread. The parking loop will handle spurious wakeups.
         self.park_loop();
+    }
+
+    fn is_locked(&self) -> bool {
+        ParkerT::is_locked(self)
     }
 
     fn notify(&self) {
@@ -89,11 +136,13 @@ impl<T> Waiter<T> for Parker {
     }
 }
 
+impl<T> QueueWaiter<T> for Parker {}
+
 #[cfg(not(all(loom, test)))]
 mod common {
     use core::ptr;
     use core::sync::atomic::AtomicU32;
-    use core::sync::atomic::Ordering::Relaxed;
+    use core::sync::atomic::Ordering::{Acquire, Relaxed};
 
     use super::{ParkerT, PARK_ORDERING, UNPARK_ORDERING};
 
@@ -107,10 +156,24 @@ mod common {
 
     impl ParkerT for Parker {
         #[allow(clippy::declare_interior_mutable_const)]
-        const NEW: Self = {
+        const LOCKED: Self = {
             let state = AtomicU32::new(LOCKED);
             Self { state }
         };
+
+        #[allow(clippy::declare_interior_mutable_const)]
+        const UNLOCKED: Self = {
+            let state = AtomicU32::new(UNLOCKED);
+            Self { state }
+        };
+
+        fn try_lock(&self) -> bool {
+            self.state.compare_exchange(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+        }
+
+        fn try_lock_weak(&self) -> bool {
+            self.state.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+        }
 
         fn is_locked(&self) -> bool {
             self.state.load(Relaxed) == LOCKED
@@ -134,7 +197,7 @@ mod common {
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 mod loom {
-    use core::sync::atomic::Ordering::Relaxed;
+    use core::sync::atomic::Ordering::{Acquire, Relaxed};
 
     use loom::sync::atomic::AtomicBool;
     use loom::thread::{self, Thread};
@@ -151,10 +214,24 @@ mod loom {
     const LOCKED: bool = true;
 
     impl ParkerT for Parker {
-        fn new() -> Self {
+        fn locked() -> Self {
             let locked = AtomicBool::new(LOCKED);
             let thread = thread::current();
             Self { locked, thread }
+        }
+
+        fn unlocked() -> Self {
+            let locked = AtomicBool::new(UNLOCKED);
+            let thread = thread::current();
+            Self { locked, thread }
+        }
+
+        fn try_lock(&self) -> bool {
+            self.locked.compare_exchange(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+        }
+
+        fn try_lock_weak(&self) -> bool {
+            self.locked.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
         }
 
         fn is_locked(&self) -> bool {

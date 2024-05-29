@@ -1,55 +1,15 @@
 use core::fmt::{self, Debug, Display, Formatter};
-use core::ops::{Deref, DerefMut};
 
-use crate::inner::raw as inner;
+use crate::inner::barging as inner;
 use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
 use crate::test::{LockNew, LockWith};
 
-/// A locally-accessible record for forming the waiting queue.
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct MutexNode {
-    inner: inner::MutexNode<Parker>,
-}
-
-impl MutexNode {
-    /// Creates new `MutexNode` instance.
-    #[must_use]
-    #[inline(always)]
-    pub const fn new() -> Self {
-        Self { inner: inner::MutexNode::new() }
-    }
-}
-
-#[cfg(not(tarpaulin_include))]
-impl Deref for MutexNode {
-    type Target = inner::MutexNode<Parker>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for MutexNode {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-#[cfg(not(tarpaulin_include))]
-impl Default for MutexNode {
-    #[inline(always)]
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// A mutual exclusion primitive useful for protecting shared data.
 pub struct Mutex<T: ?Sized, P> {
-    pub(super) inner: inner::Mutex<T, Parker, ParkWait<P>>,
+    inner: inner::Mutex<T, Parker, Parker, ParkWait<P>>,
 }
 
 // Same unsafe impls as `crate::inner::raw::Mutex`.
@@ -79,26 +39,10 @@ impl<T, P> Mutex<T, P> {
 }
 
 impl<T: ?Sized, P: Park> Mutex<T, P> {
-    /// Attempts to acquire this mutex without blocking the thread.
-    #[inline]
-    pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode) -> Option<MutexGuard<'a, T, P>> {
-        self.inner.try_lock(&mut node.inner).map(From::from)
-    }
-
-    /// Attempts to acquire this mutex and then runs a closure against its guard.
-    #[inline]
-    pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
-    {
-        let mut node = MutexNode::new();
-        f(self.try_lock(&mut node))
-    }
-
     /// Acquires this mutex, blocking the current thread until it is able to do so.
     #[inline]
-    pub fn lock<'a>(&'a self, node: &'a mut MutexNode) -> MutexGuard<'a, T, P> {
-        self.inner.lock(&mut node.inner).into()
+    pub fn lock(&self) -> MutexGuard<'_, T, P> {
+        self.inner.lock().into()
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -107,12 +51,26 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     where
         F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
-        let mut node = MutexNode::new();
-        f(self.lock(&mut node))
+        f(self.lock())
     }
 }
 
 impl<T: ?Sized, P> Mutex<T, P> {
+    /// Attempts to acquire this mutex without blocking the thread.
+    #[inline]
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, P>> {
+        self.inner.try_lock().map(From::from)
+    }
+
+    /// Attempts to acquire this mutex and then runs a closure against its guard.
+    #[inline]
+    pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
+    {
+        f(self.try_lock())
+    }
+
     /// Returns `true` if the lock is currently held.
     #[inline]
     pub fn is_locked(&self) -> bool {
@@ -143,7 +101,7 @@ impl<T, R> From<T> for Mutex<T, R> {
     }
 }
 
-impl<T: ?Sized + Debug, P: Park> Debug for Mutex<T, P> {
+impl<T: ?Sized + Debug, P> Debug for Mutex<T, P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
@@ -201,39 +159,69 @@ impl<T: ?Sized, P> crate::test::LockData for Mutex<T, P> {
     }
 }
 
+#[cfg(all(feature = "lock_api", not(loom)))]
+unsafe impl<P: Park> lock_api::RawMutex for Mutex<(), P> {
+    type GuardMarker = lock_api::GuardSend;
+
+    // It is fine to const initialize `Mutex<(), R>` since the data is not going
+    // to be shared. And since it is a `Unit` type, copies will be optimized away.
+    #[allow(clippy::declare_interior_mutable_const)]
+    const INIT: Self = Self::new(());
+
+    #[inline]
+    fn lock(&self) {
+        core::mem::forget(Self::lock(self));
+    }
+
+    #[inline]
+    fn try_lock(&self) -> bool {
+        Self::try_lock(self).map(core::mem::forget).is_some()
+    }
+
+    #[inline]
+    unsafe fn unlock(&self) {
+        self.inner.unlock();
+    }
+
+    #[inline]
+    fn is_locked(&self) -> bool {
+        self.is_locked()
+    }
+}
+
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 #[must_use = "if unused the Mutex will immediately unlock"]
-pub struct MutexGuard<'a, T: ?Sized, P: Park> {
-    inner: inner::MutexGuard<'a, T, Parker, ParkWait<P>>,
+pub struct MutexGuard<'a, T: ?Sized, P> {
+    inner: inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>,
 }
 
 // Same unsafe impls as `crate::inner::raw::MutexGuard`.
-unsafe impl<T: ?Sized + Send, P: Park> Send for MutexGuard<'_, T, P> {}
-unsafe impl<T: ?Sized + Sync, P: Park> Sync for MutexGuard<'_, T, P> {}
+unsafe impl<T: ?Sized + Send, P> Send for MutexGuard<'_, T, P> {}
+unsafe impl<T: ?Sized + Sync, P> Sync for MutexGuard<'_, T, P> {}
 
-impl<'a, T: ?Sized, P: Park> From<inner::MutexGuard<'a, T, Parker, ParkWait<P>>>
+impl<'a, T: ?Sized, P> From<inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>>
     for MutexGuard<'a, T, P>
 {
-    fn from(inner: inner::MutexGuard<'a, T, Parker, ParkWait<P>>) -> Self {
+    fn from(inner: inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>) -> Self {
         Self { inner }
     }
 }
 
-impl<'a, T: ?Sized + Debug, P: Park> Debug for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized + Debug, P> Debug for MutexGuard<'a, T, P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + Display, P: Park> Display for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized + Display, P> Display for MutexGuard<'a, T, P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, P: Park> Deref for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized, P> core::ops::Deref for MutexGuard<'a, T, P> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -244,7 +232,7 @@ impl<'a, T: ?Sized, P: Park> Deref for MutexGuard<'a, T, P> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, P: Park> DerefMut for MutexGuard<'a, T, P> {
+impl<'a, T: ?Sized, P> core::ops::DerefMut for MutexGuard<'a, T, P> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -256,7 +244,7 @@ impl<'a, T: ?Sized, P: Park> DerefMut for MutexGuard<'a, T, P> {
 /// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
-unsafe impl<T: ?Sized, P: Park> crate::loom::Guard for MutexGuard<'_, T, P> {
+unsafe impl<T: ?Sized, P> crate::loom::Guard for MutexGuard<'_, T, P> {
     type Target = T;
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
@@ -266,7 +254,7 @@ unsafe impl<T: ?Sized, P: Park> crate::loom::Guard for MutexGuard<'_, T, P> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::raw::immediate::Mutex;
+    use crate::parking::barging::immediate::Mutex;
     use crate::test::tests;
 
     #[test]
@@ -276,13 +264,13 @@ mod test {
 
     #[test]
     fn lots_and_lots_immediate_park() {
-        use crate::parking::raw::immediate::Mutex;
+        use crate::parking::barging::immediate::Mutex;
         tests::lots_and_lots::<Mutex<_>>();
     }
 
     #[test]
     fn lots_and_lots_yield_than_park() {
-        use crate::parking::raw::yields::Mutex;
+        use crate::parking::barging::yields::Mutex;
         tests::lots_and_lots::<Mutex<_>>();
     }
 
@@ -355,7 +343,7 @@ mod test {
 #[cfg(all(loom, test))]
 mod model {
     use crate::loom::models;
-    use crate::parking::raw::{immediate, yields};
+    use crate::parking::barging::{immediate, yields};
 
     #[test]
     fn try_lock_join_immediate_park() {

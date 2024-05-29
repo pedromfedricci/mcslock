@@ -224,13 +224,13 @@ pub(crate) mod wait;
 #[cfg_attr(docsrs, doc(cfg(feature = "barging")))]
 pub mod barging;
 
-#[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
-pub mod lock_api;
-
 #[cfg(feature = "parking")]
 #[cfg_attr(docsrs, doc(cfg(feature = "parking")))]
 pub mod parking;
+
+#[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
+pub mod lock_api;
 
 #[cfg(test)]
 pub(crate) mod test;

@@ -4,7 +4,7 @@ use core::panic::Location;
 
 use super::{Mutex, MutexGuard, MutexNode, MutexNodeInit};
 use crate::cfg::thread::LocalKey;
-use crate::wait::{Wait, Waiter};
+use crate::wait::{QueueWaiter, Wait};
 
 type StaticNode<N> = &'static LocalMutexNode<N>;
 
@@ -42,7 +42,7 @@ fn panic_already_borrowed(caller: &Location<'static>) -> ! {
     panic!("{}, conflict at: {}", already_borrowed_error!(), caller)
 }
 
-impl<T: ?Sized, W: Waiter<MutexNodeInit<W>>, P: Wait> Mutex<T, W, P> {
+impl<T: ?Sized, W: QueueWaiter<MutexNodeInit<W>>, P: Wait> Mutex<T, W, P> {
     #[track_caller]
     /// Attempts to acquire this mutex with a thread local node and then runs
     /// a closure against its guard.

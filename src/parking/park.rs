@@ -1,6 +1,7 @@
 //! TODO: Docs
 
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
+use crate::wait::Wait;
 
 /// TODO: Docs
 pub trait Park: Default {
@@ -84,7 +85,7 @@ pub struct ImmediatePark;
 
 impl Park for ImmediatePark {
     // We still want to apply some relax operation during `unlock_wait`, even
-    // thought we don't want to run any before asking the thread to be parked.
+    // thought we don't want to relax before asking the thread to be parked.
     type Relax = Yield;
 
     #[inline(always)]
@@ -159,6 +160,23 @@ impl<R: Relax, const MAX: Uint> Park for Bounded<R, MAX> {
     fn relax(&mut self) {
         self.relax.relax();
         self.attempts += 1;
+    }
+}
+
+#[derive(Default)]
+pub(super) struct ParkWait<P> {
+    wait: P,
+}
+
+impl<P: Park> Wait for ParkWait<P> {
+    type Relax = P::Relax;
+
+    fn should_wait(&self) -> bool {
+        self.wait.should_wait()
+    }
+
+    fn relax(&mut self) {
+        self.wait.relax();
     }
 }
 

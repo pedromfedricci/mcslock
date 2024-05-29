@@ -1,12 +1,10 @@
 use core::fmt::{self, Debug, Display, Formatter};
-use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::Ordering::{Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
 use crate::inner::raw as inner;
 use crate::relax::Relax;
-use crate::wait::{Wait, Waiter};
+use crate::wait::SpinWait;
 
 #[cfg(test)]
 use crate::test::{LockNew, LockWith};
@@ -125,10 +123,10 @@ impl Default for MutexNode {
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
-    pub(super) inner: inner::Mutex<T, AtomicBool, RawWait<R>>,
+    pub(super) inner: inner::Mutex<T, AtomicBool, SpinWait<R>>,
 }
 
-// Same unsafe impls as `std::sync::Mutex`.
+// Same unsafe impls as `crate::inner::raw::Mutex`.
 unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
 unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
 
@@ -526,19 +524,17 @@ impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
 /// [`try_lock_with`]: Mutex::try_lock_with
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
-    inner: inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>,
+    inner: inner::MutexGuard<'a, T, AtomicBool, SpinWait<R>>,
 }
 
-// `std::sync::MutexGuard` is not Send for pthread compatibility, but this
-// implementation is safe to be Send.
+// Same unsafe impls as `crate::inner::raw::MutexGuard`.
 unsafe impl<T: ?Sized + Send, R: Relax> Send for MutexGuard<'_, T, R> {}
-// Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 
-impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>>
+impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, SpinWait<R>>>
     for MutexGuard<'a, T, R>
 {
-    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, RawWait<R>>) -> Self {
+    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, SpinWait<R>>) -> Self {
         Self { inner }
     }
 }
@@ -584,48 +580,6 @@ unsafe impl<T: ?Sized, R: Relax> crate::loom::Guard for MutexGuard<'_, T, R> {
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
         self.inner.get()
-    }
-}
-
-impl<T> Waiter<T> for AtomicBool {
-    #[cfg(not(all(loom, test)))]
-    #[allow(clippy::declare_interior_mutable_const)]
-    const NEW: Self = Self::new(true);
-
-    #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
-    fn new() -> Self {
-        Self::new(true)
-    }
-
-    fn lock_wait<W: Wait>(&self) {
-        // Block the thread with a relaxed loop until the load returns `false`,
-        // indicating that the lock was handed off to the current thread.
-        let mut relax = W::Relax::default();
-        while self.load(Relaxed) {
-            relax.relax();
-        }
-    }
-
-    fn notify(&self) {
-        self.store(false, Release);
-    }
-}
-
-#[derive(Default)]
-pub(super) struct RawWait<R> {
-    marker: PhantomData<R>,
-}
-
-impl<R: Relax> Wait for RawWait<R> {
-    type Relax = R;
-
-    fn should_wait(&self) -> bool {
-        unreachable!();
-    }
-
-    fn relax(&mut self) {
-        unreachable!();
     }
 }
 
