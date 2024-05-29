@@ -2,7 +2,7 @@ use core::fmt::{self, Debug, Display, Formatter};
 
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::inner::raw;
-use crate::wait::{QueueWaiter, Wait, Waiter};
+use crate::wait::{Wait, Waiter};
 
 pub struct Mutex<T: ?Sized, W, Q, P> {
     waiter: W,
@@ -13,13 +13,6 @@ pub struct Mutex<T: ?Sized, W, Q, P> {
 // Same unsafe impls as `crate::inner::raw::Mutex`.
 unsafe impl<T: ?Sized + Send, W: Send, Q, P> Send for Mutex<T, W, Q, P> {}
 unsafe impl<T: ?Sized + Send, W: Send, Q, P> Sync for Mutex<T, W, Q, P> {}
-
-impl<T, W, Q, P> Mutex<T, W, Q, P> {
-    /// Consumes this mutex, returning the underlying data.
-    pub fn into_inner(self) -> T {
-        self.data.into_inner()
-    }
-}
 
 impl<T, W: Waiter, Q, P> Mutex<T, W, Q, P> {
     /// Creates a new mutex in an unlocked state ready for use.
@@ -42,7 +35,7 @@ impl<T, W: Waiter, Q, P> Mutex<T, W, Q, P> {
     }
 }
 
-impl<T: ?Sized, W: Waiter, Q: QueueWaiter<raw::MutexNodeInit<Q>>, P: Wait> Mutex<T, W, Q, P> {
+impl<T: ?Sized, W: Waiter, Q: Waiter, P: Wait> Mutex<T, W, Q, P> {
     /// Acquires this mutex, blocking the current thread until it is able to do so.
     pub fn lock(&self) -> MutexGuard<'_, T, W, Q, P> {
         if self.waiter.try_lock() {
@@ -74,6 +67,13 @@ impl<T: ?Sized, W: Waiter, Q, P> Mutex<T, W, Q, P> {
     /// Unlocks this mutex.
     pub fn unlock(&self) {
         self.waiter.notify();
+    }
+}
+
+impl<T, W, Q, P> Mutex<T, W, Q, P> {
+    /// Consumes this mutex, returning the underlying data.
+    pub fn into_inner(self) -> T {
+        self.data.into_inner()
     }
 }
 

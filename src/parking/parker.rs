@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering::{self, Acquire, Release};
 
-use crate::wait::{QueueWaiter, Wait, Waiter};
+use crate::wait::{Wait, Waiter};
 
 #[cfg(not(all(loom, test)))]
 pub(super) use common::Parker;
@@ -8,14 +8,14 @@ pub(super) use common::Parker;
 #[cfg(all(loom, test))]
 pub(super) use loom::Parker;
 
-// We need the same exact park/unpark ordering relationship for both `common`
+// We need the same exact load/store ordering relationship for both `common`
 // and `loom`, else `loom` would not correctly represent our protocol's memory
 // ordering.
 //
-/// Parking ordering.
-const PARK_ORDERING: Ordering = Acquire;
-/// Unparking ordering.
-const UNPARK_ORDERING: Ordering = Release;
+/// Load ordering.
+const LOAD: Ordering = Acquire;
+/// Store ordering.
+const STORE: Ordering = Release;
 
 /// A trait the specifies the contract of use for Parker implementations.
 ///
@@ -120,11 +120,14 @@ impl Waiter for Parker {
         // then park the thread.
         let mut wait = W::default();
         while wait.should_wait() {
-            let true = ParkerT::is_locked(self) else { return };
-            wait.relax();
+            if ParkerT::is_locked(self) {
+                wait.relax();
+            } else {
+                return;
+            }
         }
         // Park the current thread. The parking loop will handle spurious wakeups.
-        self.park_loop();
+        ParkerT::park_loop(self);
     }
 
     fn is_locked(&self) -> bool {
@@ -132,19 +135,17 @@ impl Waiter for Parker {
     }
 
     fn notify(&self) {
-        self.unpark();
+        ParkerT::unpark(self);
     }
 }
-
-impl<T> QueueWaiter<T> for Parker {}
 
 #[cfg(not(all(loom, test)))]
 mod common {
     use core::ptr;
     use core::sync::atomic::AtomicU32;
-    use core::sync::atomic::Ordering::{Acquire, Relaxed};
+    use core::sync::atomic::Ordering::Relaxed;
 
-    use super::{ParkerT, PARK_ORDERING, UNPARK_ORDERING};
+    use super::{ParkerT, LOAD, STORE};
 
     #[derive(Debug)]
     pub struct Parker {
@@ -168,11 +169,11 @@ mod common {
         };
 
         fn try_lock(&self) -> bool {
-            self.state.compare_exchange(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+            self.state.compare_exchange(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
         fn try_lock_weak(&self) -> bool {
-            self.state.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+            self.state.compare_exchange_weak(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
         fn is_locked(&self) -> bool {
@@ -180,7 +181,7 @@ mod common {
         }
 
         fn park_loop(&self) {
-            while self.state.load(PARK_ORDERING) == LOCKED {
+            while self.state.load(LOAD) == LOCKED {
                 atomic_wait::wait(&self.state, LOCKED);
             }
         }
@@ -188,7 +189,7 @@ mod common {
         fn unpark(&self) {
             let state = &self.state;
             let ptr = ptr::addr_of!(*state);
-            state.store(UNLOCKED, UNPARK_ORDERING);
+            state.store(UNLOCKED, STORE);
             atomic_wait::wake_one(ptr);
         }
     }
@@ -197,17 +198,16 @@ mod common {
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 mod loom {
-    use core::sync::atomic::Ordering::{Acquire, Relaxed};
+    use core::sync::atomic::Ordering::Relaxed;
 
     use loom::sync::atomic::AtomicBool;
-    use loom::thread::{self, Thread};
+    use loom::thread;
 
-    use super::{ParkerT, PARK_ORDERING, UNPARK_ORDERING};
+    use super::{ParkerT, LOAD, STORE};
 
     #[derive(Debug)]
     pub struct Parker {
         locked: AtomicBool,
-        thread: Thread,
     }
 
     const UNLOCKED: bool = false;
@@ -216,22 +216,20 @@ mod loom {
     impl ParkerT for Parker {
         fn locked() -> Self {
             let locked = AtomicBool::new(LOCKED);
-            let thread = thread::current();
-            Self { locked, thread }
+            Self { locked }
         }
 
         fn unlocked() -> Self {
             let locked = AtomicBool::new(UNLOCKED);
-            let thread = thread::current();
-            Self { locked, thread }
+            Self { locked }
         }
 
         fn try_lock(&self) -> bool {
-            self.locked.compare_exchange(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+            self.locked.compare_exchange(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
         fn try_lock_weak(&self) -> bool {
-            self.locked.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
+            self.locked.compare_exchange_weak(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
         fn is_locked(&self) -> bool {
@@ -239,14 +237,14 @@ mod loom {
         }
 
         fn park_loop(&self) {
-            while self.locked.load(PARK_ORDERING) {
-                thread::park();
+            while self.locked.load(LOAD) == LOCKED {
+                thread::yield_now();
             }
         }
 
         fn unpark(&self) {
-            self.locked.store(UNLOCKED, UNPARK_ORDERING);
-            self.thread.unpark();
+            self.locked.store(UNLOCKED, STORE);
+            thread::yield_now();
         }
     }
 }

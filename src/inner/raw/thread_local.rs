@@ -2,9 +2,9 @@ use core::cell::{RefCell, RefMut};
 use core::ops::DerefMut;
 use core::panic::Location;
 
-use super::{Mutex, MutexGuard, MutexNode, MutexNodeInit};
+use super::{Mutex, MutexGuard, MutexNode};
 use crate::cfg::thread::LocalKey;
-use crate::wait::{QueueWaiter, Wait};
+use crate::wait::{Wait, Waiter};
 
 type StaticNode<N> = &'static LocalMutexNode<N>;
 
@@ -42,7 +42,7 @@ fn panic_already_borrowed(caller: &Location<'static>) -> ! {
     panic!("{}, conflict at: {}", already_borrowed_error!(), caller)
 }
 
-impl<T: ?Sized, W: QueueWaiter<MutexNodeInit<W>>, P: Wait> Mutex<T, W, P> {
+impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     #[track_caller]
     /// Attempts to acquire this mutex with a thread local node and then runs
     /// a closure against its guard.

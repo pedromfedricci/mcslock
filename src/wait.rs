@@ -1,9 +1,17 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
-use crate::cfg::atomic::{AtomicBool, AtomicPtr};
+use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
+/// A `Waiter` is some arbitrary data type used by a lock implementation to
+/// manage the state of the lock.
+///
+/// The `no_std` implementations (eg `raw` and `barging`) can simply use a
+/// `AtomicBool` to manage state. The parking variants thought, need platform
+/// specific data types. We are currently using the `atomic_wait` crate for
+/// easy parking integration. It uses `AtomicU32` as the data type for all
+/// major platforms.
 pub trait Waiter {
     /// Creates a new Waiter instance with the a locked state.
     ///
@@ -45,6 +53,10 @@ pub trait Waiter {
     /// state, `false` otherwise.
     fn try_lock_weak(&self) -> bool;
 
+    /// Blocks the thread untill the lock is acquired, applies some arbitrary
+    /// waiting policy while the lock is still on hold somewhere else.
+    ///
+    /// This function is only meant to return when the lock has been acquired.
     fn lock_wait<W: Wait>(&self);
 
     /// Returns `true` if the lock is currently held.
@@ -52,29 +64,27 @@ pub trait Waiter {
     /// This function does not guarantee strong ordering, only atomicity.
     fn is_locked(&self) -> bool;
 
+    /// Changes the state of the lock and, possibly, notifies that change
+    /// to some other interested party.
     fn notify(&self);
 }
 
-pub trait QueueWaiter<T>: Waiter {
-    fn unlock_relax<R: Relax>(next: &AtomicPtr<T>) -> *mut T {
-        let mut relax = R::default();
-        loop {
-            let ptr = next.load(Relaxed);
-            let true = ptr.is_null() else { return ptr };
-            relax.relax();
-        }
-    }
-}
-
-/// TODO: Docs
+/// The waiting policy that should be applied while lock state has not reached
+/// some target state.
 pub trait Wait: Default {
-    /// TODO: Docs
+    /// The relax operation that should be applied during spin loops.
     type Relax: Relax;
 
-    /// TODO: Docs
+    /// Wheter or not should the `relax` or `parking` operation be executed
+    /// at this time.
+    ///
+    /// Returning `true` means we are not ready yet to run the operation, there
+    /// is some other event that should occur first. Otherwise the operation
+    /// must be executed.
     fn should_wait(&self) -> bool;
 
-    /// TODO: Dcos
+    /// Executes the relax operation inside a waiting loop and also updates
+    /// any inner state required by the policy.
     fn relax(&mut self);
 }
 
@@ -124,8 +134,6 @@ impl Waiter for AtomicBool {
         self.store(false, Release);
     }
 }
-
-impl<T> QueueWaiter<T> for AtomicBool {}
 
 #[derive(Default)]
 pub struct SpinWait<R> {
