@@ -56,17 +56,17 @@ pub trait ParkerT {
     /// This function does not guarantee strong ordering, only atomicity.
     fn is_locked(&self) -> bool;
 
-    /// Tries to lock this mutex.
+    /// Tries to lock this mutex with acquire load.
     ///
     /// Returns `true` if successfully moved from unlocked state to locked
     /// state, `false` otherwise.
-    fn try_lock(&self) -> bool;
+    fn try_lock_acquire(&self) -> bool;
 
-    /// Tries to lock this mutex with a weak exchange.
+    /// Tries to lock this mutex with acquire load and weak exchange.
     ///
     /// Returns `true` if successfully moved from unlocked state to locked
     /// state, `false` otherwise.
-    fn try_lock_weak(&self) -> bool;
+    fn try_lock_acquire_weak(&self) -> bool;
 
     /// Blocks unless or until the current thread's token is made availiable.
     ///
@@ -105,15 +105,15 @@ impl Lock for Parker {
         ParkerT::unlocked()
     }
 
-    fn try_lock(&self) -> bool {
-        ParkerT::try_lock(self)
+    fn try_lock_acquire(&self) -> bool {
+        ParkerT::try_lock_acquire(self)
     }
 
-    fn try_lock_weak(&self) -> bool {
-        ParkerT::try_lock_weak(self)
+    fn try_lock_acquire_weak(&self) -> bool {
+        ParkerT::try_lock_acquire_weak(self)
     }
 
-    fn lock_wait<W: Wait>(&self) {
+    fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until either all attempts have
         // already been made or the lock has been handed off to this thread. If
         // the limit of attempts has been reached and the lock stills locked,
@@ -168,11 +168,11 @@ mod common {
             Self { state }
         };
 
-        fn try_lock(&self) -> bool {
+        fn try_lock_acquire(&self) -> bool {
             self.state.compare_exchange(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
-        fn try_lock_weak(&self) -> bool {
+        fn try_lock_acquire_weak(&self) -> bool {
             self.state.compare_exchange_weak(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
@@ -224,11 +224,11 @@ mod loom {
             Self { locked }
         }
 
-        fn try_lock(&self) -> bool {
+        fn try_lock_acquire(&self) -> bool {
             self.locked.compare_exchange(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 
-        fn try_lock_weak(&self) -> bool {
+        fn try_lock_acquire_weak(&self) -> bool {
             self.locked.compare_exchange_weak(UNLOCKED, LOCKED, LOAD, Relaxed).is_ok()
         }
 

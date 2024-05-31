@@ -145,7 +145,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
             // Acquire this mutex, applying some waiting policy.
-            node.lock.lock_wait::<W>();
+            node.lock.lock_wait_relaxed::<W>();
             fence(Acquire);
         }
         MutexGuard::new(self, node)
@@ -161,12 +161,25 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = unlock_relax::<L, W::UnlockRelax>(&node.next);
+            next = wait_next_relaxed::<L, W::UnlockRelax>(&node.next);
         }
         // Notify our successor that they hold the lock.
         fence(Acquire);
         // SAFETY: We already verified that our successor is not null.
         unsafe { &*next }.lock.notify();
+    }
+}
+
+/// A relaxed loop that returns a pointer to the successor once it finishes
+/// linking with the current thread.
+///
+/// The successor node is loaded with a relaxed ordering.
+fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
+    let mut relax = R::default();
+    loop {
+        let ptr = next.load(Relaxed);
+        let true = ptr.is_null() else { return ptr };
+        relax.relax();
     }
 }
 
@@ -269,15 +282,6 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
 impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
     fn drop(&mut self) {
         self.lock.unlock(self.node);
-    }
-}
-
-fn unlock_relax<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
-    let mut relax = R::default();
-    loop {
-        let ptr = next.load(Relaxed);
-        let true = ptr.is_null() else { return ptr };
-        relax.relax();
     }
 }
 

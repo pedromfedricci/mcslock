@@ -17,12 +17,12 @@ categories = ["no-std", "concurrency"]
 keywords = ["no_std", "mutex", "spin-lock", "mcs-lock"]
 
 [features]
-# NOTE: Features `yield` and `thread_local` require std.
+# NOTE: Features `yield`, `thread_local` and `parking` require std.
 yield = []
 thread_local = []
 barging = []
-parking = ["yield","thread_local", "dep:atomic-wait"]
 # NOTE: The `dep:` syntax requires Rust 1.60.
+parking = ["yield", "thread_local", "dep:atomic-wait"]
 lock_api = ["barging", "dep:lock_api"]
 
 [dependencies.atomic-wait]

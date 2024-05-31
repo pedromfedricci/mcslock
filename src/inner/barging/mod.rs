@@ -38,13 +38,13 @@ impl<T, L: Lock, Q, W> Mutex<T, L, Q, W> {
 impl<T: ?Sized, L: Lock, Q: Lock, W: Wait> Mutex<T, L, Q, W> {
     /// Acquires this mutex, blocking the current thread until it is able to do so.
     pub fn lock(&self) -> MutexGuard<'_, T, L, Q, W> {
-        if self.lock.try_lock() {
+        if self.lock.try_lock_acquire() {
             return MutexGuard::new(self);
         }
         let mut node = raw::MutexNode::<Q>::new();
         let guard = self.queue.lock(&mut node);
-        while !self.lock.try_lock_weak() {
-            self.lock.lock_wait::<W>();
+        while !self.lock.try_lock_acquire_weak() {
+            self.lock.lock_wait_relaxed::<W>();
         }
         drop(guard);
         MutexGuard::new(self)
@@ -54,7 +54,7 @@ impl<T: ?Sized, L: Lock, Q: Lock, W: Wait> Mutex<T, L, Q, W> {
 impl<T: ?Sized, L: Lock, Q, W> Mutex<T, L, Q, W> {
     /// Attempts to acquire this mutex without blocking the thread.
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T, L, Q, W>> {
-        self.lock.try_lock().then(|| MutexGuard::new(self))
+        self.lock.try_lock_acquire().then(|| MutexGuard::new(self))
     }
 
     /// Returns `true` if the lock is currently held.

@@ -40,23 +40,23 @@ pub trait Lock {
     #[cfg(all(loom, test))]
     fn unlocked() -> Self;
 
-    /// Tries to lock the mutex.
+    /// Tries to lock the mutex with acquire ordering.
     ///
     /// Returns `true` if successfully moved from unlocked state to locked
     /// state, `false` otherwise.
-    fn try_lock(&self) -> bool;
+    fn try_lock_acquire(&self) -> bool;
 
-    /// Tries to lock the mutex with a weak exchange.
+    /// Tries to lock the mutex with acquire ordering and weak exchange.
     ///
     /// Returns `true` if successfully moved from unlocked state to locked
     /// state, `false` otherwise.
-    fn try_lock_weak(&self) -> bool;
+    fn try_lock_acquire_weak(&self) -> bool;
 
     /// Blocks the thread untill the lock is acquired, applies some arbitrary
     /// waiting policy while the lock is still on hold somewhere else.
     ///
-    /// This function is only meant to return when the lock has been acquired.
-    fn lock_wait<W: Wait>(&self);
+    /// The lock is loaded with a relaxed ordering.
+    fn lock_wait_relaxed<W: Wait>(&self);
 
     /// Returns `true` if the lock is currently held.
     ///
@@ -83,7 +83,7 @@ pub trait Wait: Relax {
     /// park operation should be executed.
     ///
     /// `no_std` implementations will simply ignore this function and only use
-    /// the `Self::relax` and `Self::UnlockRelax::relax` functions.
+    /// `Self::relax` and `Self::UnlockRelax::relax` functions.
     fn should_wait(&self) -> bool;
 }
 
@@ -108,15 +108,15 @@ impl Lock for AtomicBool {
         Self::new(false)
     }
 
-    fn try_lock(&self) -> bool {
+    fn try_lock_acquire(&self) -> bool {
         self.compare_exchange(false, true, Acquire, Relaxed).is_ok()
     }
 
-    fn try_lock_weak(&self) -> bool {
+    fn try_lock_acquire_weak(&self) -> bool {
         self.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok()
     }
 
-    fn lock_wait<W: Wait>(&self) {
+    fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
         let mut wait = W::default();

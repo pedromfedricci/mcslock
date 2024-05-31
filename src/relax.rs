@@ -202,6 +202,7 @@ impl<R: Relax> Relax for RelaxWait<R> {
 impl<R: Relax> Wait for RelaxWait<R> {
     type UnlockRelax = R;
 
+    #[cfg(not(tarpaulin_include))]
     fn should_wait(&self) -> bool {
         false
     }
