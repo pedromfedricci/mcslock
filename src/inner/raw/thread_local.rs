@@ -4,7 +4,7 @@ use core::panic::Location;
 
 use super::{Mutex, MutexGuard, MutexNode};
 use crate::cfg::thread::LocalKey;
-use crate::wait::{Wait, Waiter};
+use crate::lock::{Lock, Wait};
 
 type StaticNode<N> = &'static LocalMutexNode<N>;
 
@@ -42,7 +42,7 @@ fn panic_already_borrowed(caller: &Location<'static>) -> ! {
     panic!("{}, conflict at: {}", already_borrowed_error!(), caller)
 }
 
-impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
+impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     #[track_caller]
     /// Attempts to acquire this mutex with a thread local node and then runs
     /// a closure against its guard.
@@ -52,8 +52,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     /// See: `with_local_node`.
     pub fn try_lock_with_local<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(Option<MutexGuard<'_, T, W, P>>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(Option<MutexGuard<'_, T, L, W>>) -> Ret,
     {
         self.with_local_node(node, |mutex, node| f(mutex.try_lock(node)))
     }
@@ -66,8 +66,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     /// See: `with_local_node_unchecked`.
     pub unsafe fn try_lock_with_local_unchecked<F, Ret, N>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(Option<MutexGuard<'_, T, W, P>>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(Option<MutexGuard<'_, T, L, W>>) -> Ret,
     {
         self.with_local_node_unchecked(node, |mutex, node| f(mutex.try_lock(node)))
     }
@@ -81,8 +81,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     #[track_caller]
     pub fn lock_with_local<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(MutexGuard<'_, T, W, P>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(MutexGuard<'_, T, L, W>) -> Ret,
     {
         self.with_local_node(node, |mutex, node| f(mutex.lock(node)))
     }
@@ -95,8 +95,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     /// See: `with_local_node_unchecked`.
     pub unsafe fn lock_with_local_unchecked<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(MutexGuard<'_, T, W, P>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(MutexGuard<'_, T, L, W>) -> Ret,
     {
         self.with_local_node_unchecked(node, |mutex, node| f(mutex.lock(node)))
     }
@@ -112,8 +112,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     #[track_caller]
     fn with_local_node<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(&Self, &mut MutexNode<W>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(&Self, &mut MutexNode<L>) -> Ret,
     {
         let caller = Location::caller();
         let panic = |_| panic_already_borrowed(caller);
@@ -133,8 +133,8 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     /// f closure runs out of scope.
     unsafe fn with_local_node_unchecked<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
-        N: DerefMut<Target = MutexNode<W>>,
-        F: FnOnce(&Self, &mut MutexNode<W>) -> Ret,
+        N: DerefMut<Target = MutexNode<L>>,
+        F: FnOnce(&Self, &mut MutexNode<L>) -> Ret,
     {
         // SAFETY: Caller guaranteed that no other references are live.
         node.key.with(|node| f(self, unsafe { &mut *node.as_ptr() }))

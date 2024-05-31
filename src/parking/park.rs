@@ -1,21 +1,24 @@
 //! TODO: Docs
 
+use crate::lock::Wait;
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
-use crate::wait::Wait;
 
-/// TODO: Docs
-pub trait Park: Default {
-    /// TODO: Docs
-    type Relax: Relax;
+/// A thread parking waiting policy to be applied when the lock is contended.
+pub trait Park: Relax {
+    /// The relax operation that should be applied during unlock waiting loops.
+    type UnlockRelax: Relax;
 
-    /// TODO: Docs
+    /// Hints whether or not should the parking operation be executed at this
+    /// time.
+    ///
+    /// Returning `true` means we are not ready to run the park operation yet,
+    /// there is some other event that should occur first. Returning `false`
+    /// indicates that the thread is no longer waiting for any event, and so
+    /// it is hinting that it should be parked.
     fn should_wait(&self) -> bool;
-
-    /// TODO: Dcos
-    fn relax(&mut self);
 }
 
-type Uint = u8;
+type Uint = u16;
 const DEFMAX: Uint = 100;
 
 /// TODO: Docs
@@ -24,17 +27,19 @@ pub struct SpinThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Spin, MAX>,
 }
 
+impl<const MAX: Uint> Relax for SpinThanPark<MAX> {
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
+    }
+}
+
 impl<const MAX: Uint> Park for SpinThanPark<MAX> {
-    type Relax = Spin;
+    type UnlockRelax = Spin;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         self.bounded.should_wait()
-    }
-
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
     }
 }
 
@@ -44,17 +49,19 @@ pub struct LoopThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Loop, MAX>,
 }
 
+impl<const MAX: Uint> Relax for LoopThanPark<MAX> {
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
+    }
+}
+
 impl<const MAX: Uint> Park for LoopThanPark<MAX> {
-    type Relax = Loop;
+    type UnlockRelax = Loop;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         self.bounded.should_wait()
-    }
-
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
     }
 }
 
@@ -64,17 +71,19 @@ pub struct YieldThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Yield, MAX>,
 }
 
+impl<const MAX: Uint> Relax for YieldThanPark<MAX> {
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
+    }
+}
+
 impl<const MAX: Uint> Park for YieldThanPark<MAX> {
-    type Relax = Yield;
+    type UnlockRelax = Yield;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         self.bounded.should_wait()
-    }
-
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
     }
 }
 
@@ -83,19 +92,19 @@ impl<const MAX: Uint> Park for YieldThanPark<MAX> {
 #[non_exhaustive]
 pub struct ImmediatePark;
 
+impl Relax for ImmediatePark {
+    #[cfg(not(tarpaulin_include))]
+    #[inline(always)]
+    fn relax(&mut self) {}
+}
+
 impl Park for ImmediatePark {
-    // We still want to apply some relax operation during `unlock_wait`, even
-    // thought we don't want to relax before asking the thread to be parked.
-    type Relax = Yield;
+    type UnlockRelax = Yield;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         false
     }
-
-    #[cfg(not(tarpaulin_include))]
-    #[inline(always)]
-    fn relax(&mut self) {}
 }
 
 /// TODO: Docs
@@ -104,17 +113,19 @@ pub struct SpinBackoffThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<SpinBackoff, MAX>,
 }
 
+impl<const MAX: Uint> Relax for SpinBackoffThanPark<MAX> {
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
+    }
+}
+
 impl<const MAX: Uint> Park for SpinBackoffThanPark<MAX> {
-    type Relax = SpinBackoff;
+    type UnlockRelax = SpinBackoff;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         self.bounded.should_wait()
-    }
-
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
     }
 }
 
@@ -124,17 +135,19 @@ pub struct YieldBackoffThanPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<YieldBackoff, MAX>,
 }
 
+impl<const MAX: Uint> Relax for YieldBackoffThanPark<MAX> {
+    #[inline(always)]
+    fn relax(&mut self) {
+        self.bounded.relax();
+    }
+}
+
 impl<const MAX: Uint> Park for YieldBackoffThanPark<MAX> {
-    type Relax = YieldBackoff;
+    type UnlockRelax = YieldBackoff;
 
     #[inline(always)]
     fn should_wait(&self) -> bool {
         self.bounded.should_wait()
-    }
-
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
     }
 }
 
@@ -150,10 +163,8 @@ struct Bounded<R, const MAX: Uint> {
     attempts: Uint,
 }
 
-impl<R: Relax, const MAX: Uint> Park for Bounded<R, MAX> {
-    type Relax = R;
-
-    fn should_wait(&self) -> bool {
+impl<R: Relax, const MAX: Uint> Bounded<R, MAX> {
+    const fn should_wait(&self) -> bool {
         self.attempts < MAX
     }
 
@@ -168,15 +179,17 @@ pub(super) struct ParkWait<P> {
     wait: P,
 }
 
+impl<P: Park> Relax for ParkWait<P> {
+    fn relax(&mut self) {
+        self.wait.relax();
+    }
+}
+
 impl<P: Park> Wait for ParkWait<P> {
-    type Relax = P::Relax;
+    type UnlockRelax = P::UnlockRelax;
 
     fn should_wait(&self) -> bool {
         self.wait.should_wait()
-    }
-
-    fn relax(&mut self) {
-        self.wait.relax();
     }
 }
 
@@ -201,8 +214,8 @@ mod test {
     use super::YieldBackoffThanPark;
     impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThanPark<MAX> {}
 
-    fn counter_loop<W: Park>() -> (W, Uint) {
-        let mut wait = W::default();
+    fn counter_loop<P: Park>() -> (P, Uint) {
+        let mut wait = P::default();
         let mut counter = 0;
         while wait.should_wait() {
             wait.relax();
@@ -211,14 +224,14 @@ mod test {
         (wait, counter)
     }
 
-    fn should_wait<W: Bounded<MAX>, const MAX: Uint>() {
-        let (wait, counter): (W, Uint) = counter_loop();
+    fn should_wait<P: Bounded<MAX>, const MAX: Uint>() {
+        let (wait, counter): (P, Uint) = counter_loop();
         assert!(!wait.should_wait());
         assert_eq!(MAX, counter);
     }
 
-    fn should_not_wait<W: Park>() {
-        let (wait, counter): (W, Uint) = counter_loop();
+    fn should_not_wait<P: Park>() {
+        let (wait, counter): (P, Uint) = counter_loop();
         assert!(!wait.should_wait());
         assert_eq!(0, counter);
     }

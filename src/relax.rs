@@ -14,7 +14,7 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
-use crate::cfg::hint;
+use crate::{cfg::hint, lock::Wait};
 
 #[cfg(any(feature = "yield", test))]
 use crate::cfg::thread;
@@ -185,6 +185,25 @@ impl Step {
         if self.0 <= end {
             self.0 += 1;
         }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct RelaxWait<R> {
+    relax: R,
+}
+
+impl<R: Relax> Relax for RelaxWait<R> {
+    fn relax(&mut self) {
+        self.relax.relax();
+    }
+}
+
+impl<R: Relax> Wait for RelaxWait<R> {
+    type UnlockRelax = R;
+
+    fn should_wait(&self) -> bool {
+        false
     }
 }
 

@@ -218,7 +218,7 @@ pub mod relax;
 
 pub(crate) mod cfg;
 pub(crate) mod inner;
-pub(crate) mod wait;
+pub(crate) mod lock;
 
 #[cfg(feature = "barging")]
 #[cfg_attr(docsrs, doc(cfg(feature = "barging")))]

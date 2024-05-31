@@ -2,8 +2,7 @@ use core::fmt;
 
 use crate::cfg::atomic::AtomicBool;
 use crate::inner::barging as inner;
-use crate::relax::Relax;
-use crate::wait::SpinWait;
+use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
 use crate::test::{LockNew, LockWith};
@@ -63,7 +62,7 @@ use crate::test::{LockNew, LockWith};
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, R> {
-    inner: inner::Mutex<T, AtomicBool, AtomicBool, SpinWait<R>>,
+    inner: inner::Mutex<T, AtomicBool, AtomicBool, RelaxWait<R>>,
 }
 
 // Same unsafe impls as `crate::raw::Mutex`.
@@ -466,17 +465,17 @@ unsafe impl<R: Relax> lock_api::RawMutex for Mutex<(), R> {
 /// [`try_lock_with`]: Mutex::try_lock_with
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, R> {
-    inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, SpinWait<R>>,
+    inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>,
 }
 
 // Same unsafe impls as `crate::raw::MutexGuard`.
 unsafe impl<T: ?Sized + Send, R> Send for MutexGuard<'_, T, R> {}
 unsafe impl<T: ?Sized + Sync, R> Sync for MutexGuard<'_, T, R> {}
 
-impl<'a, T: ?Sized, R> From<inner::MutexGuard<'a, T, AtomicBool, AtomicBool, SpinWait<R>>>
+impl<'a, T: ?Sized, R> From<inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>>
     for MutexGuard<'a, T, R>
 {
-    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, SpinWait<R>>) -> Self {
+    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>) -> Self {
         Self { inner }
     }
 }

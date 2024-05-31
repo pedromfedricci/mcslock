@@ -1,10 +1,9 @@
-use core::marker::PhantomData;
 use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
-/// A `Waiter` is some arbitrary data type used by a lock implementation to
+/// A `Lock` is some arbitrary data type used by a lock implementation to
 /// manage the state of the lock.
 ///
 /// The `no_std` implementations (eg `raw` and `barging`) can simply use a
@@ -12,8 +11,8 @@ use crate::relax::Relax;
 /// specific data types. We are currently using the `atomic_wait` crate for
 /// easy parking integration. It uses `AtomicU32` as the data type for all
 /// major platforms.
-pub trait Waiter {
-    /// Creates a new Waiter instance with the a locked state.
+pub trait Lock {
+    /// Creates a new locked `Lock` instance.
     ///
     /// It's expected for a implementing type to be compiler-time evaluable,
     /// since they compose node types that do require it (except Loom based
@@ -21,7 +20,7 @@ pub trait Waiter {
     #[cfg(not(all(loom, test)))]
     const LOCKED: Self;
 
-    /// Creates a new Waiter instance with the a locked state.
+    /// Creates a new unlocked `Lock` instance.
     ///
     /// It's expected for a implementing type to be compiler-time evaluable,
     /// since they compose node types that do require it (except Loom based
@@ -29,13 +28,13 @@ pub trait Waiter {
     #[cfg(not(all(loom, test)))]
     const UNLOCKED: Self;
 
-    /// Creates a new Waiter locked instance with Loom primitives (non-const).
+    /// Creates a new locked `Lock` instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
     fn locked() -> Self;
 
-    /// Creates a new Waiter unlocked instance with Loom primitives (non-const).
+    /// Creates a new unlocked `Lock` instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
@@ -69,26 +68,26 @@ pub trait Waiter {
     fn notify(&self);
 }
 
-/// The waiting policy that should be applied while lock state has not reached
-/// some target state.
-pub trait Wait: Default {
-    /// The relax operation that should be applied during spin loops.
-    type Relax: Relax;
+/// The waiting policy that should be applied while the lock state has not
+/// reached some target state.
+pub trait Wait: Relax {
+    /// The relax operation that should be applied during unlock waiting loops.
+    type UnlockRelax: Relax;
 
-    /// Wheter or not should the `relax` or `parking` operation be executed
-    /// at this time.
+    /// Hints whether or not should the `parking` operation be executed at this
+    /// time.
     ///
-    /// Returning `true` means we are not ready yet to run the operation, there
-    /// is some other event that should occur first. Otherwise the operation
-    /// must be executed.
+    /// Returning `true` means we are not ready to run the park operation yet,
+    /// there is some other event that should occur first. Returning `false`
+    /// indicates that we are no longer waiting for any event, hinting that the
+    /// park operation should be executed.
+    ///
+    /// `no_std` implementations will simply ignore this function and only use
+    /// the `Self::relax` and `Self::UnlockRelax::relax` functions.
     fn should_wait(&self) -> bool;
-
-    /// Executes the relax operation inside a waiting loop and also updates
-    /// any inner state required by the policy.
-    fn relax(&mut self);
 }
 
-impl Waiter for AtomicBool {
+impl Lock for AtomicBool {
     #[cfg(not(all(loom, test)))]
     #[allow(clippy::declare_interior_mutable_const)]
     const LOCKED: Self = Self::new(true);
@@ -120,9 +119,9 @@ impl Waiter for AtomicBool {
     fn lock_wait<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        let mut relax = W::Relax::default();
+        let mut wait = W::default();
         while self.load(Relaxed) {
-            relax.relax();
+            wait.relax();
         }
     }
 
@@ -132,22 +131,5 @@ impl Waiter for AtomicBool {
 
     fn notify(&self) {
         self.store(false, Release);
-    }
-}
-
-#[derive(Default)]
-pub struct SpinWait<R> {
-    marker: PhantomData<R>,
-}
-
-impl<R: Relax> Wait for SpinWait<R> {
-    type Relax = R;
-
-    fn should_wait(&self) -> bool {
-        unreachable!();
-    }
-
-    fn relax(&mut self) {
-        unreachable!();
     }
 }

@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering::{self, Acquire, Release};
 
-use crate::wait::{Wait, Waiter};
+use crate::lock::{Lock, Wait};
 
 #[cfg(not(all(loom, test)))]
 pub(super) use common::Parker;
@@ -25,26 +25,26 @@ const STORE: Ordering = Release;
 /// features. Should we choose to integrate with system's interfaces in the
 /// future, each Parker implementation should follow this same contract.
 pub trait ParkerT {
-    /// Creates a new Parker instance with locked state.
+    /// Creates a new locked `Parker` instance.
     ///
     /// It's expected for a implementing type to be compiler-time evaluable.
     #[cfg(not(all(loom, test)))]
     const LOCKED: Self;
 
-    /// Creates a new Parker instance with unlocked state.
+    /// Creates a new unlocked `Parker` instance.
     ///
     /// It's expected for a implementing type to be compiler-time evaluable.
     #[cfg(not(all(loom, test)))]
     const UNLOCKED: Self;
 
-    /// Creates a new Parker locked instance with Loom primitives (non-const).
+    /// Creates a new locked `Parker` instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
     fn locked() -> Self;
 
-    /// Creates a new Parker unlocked instance with Loom primitives (non-const).
+    /// Creates a new unlocked `Parker` instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
@@ -84,7 +84,7 @@ pub trait ParkerT {
     fn unpark(&self);
 }
 
-impl Waiter for Parker {
+impl Lock for Parker {
     #[cfg(not(all(loom, test)))]
     #[allow(clippy::declare_interior_mutable_const)]
     const LOCKED: Self = ParkerT::LOCKED;

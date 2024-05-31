@@ -6,8 +6,8 @@ use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::{fence, AtomicPtr};
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
+use crate::lock::{Lock, Wait};
 use crate::relax::Relax;
-use crate::wait::{Wait, Waiter};
 
 #[cfg(feature = "thread_local")]
 mod thread_local;
@@ -17,9 +17,9 @@ pub use thread_local::LocalMutexNode;
 /// The inner definition of [`MutexNode`], which is known to be in a initialized
 /// state.
 #[derive(Debug)]
-pub struct MutexNodeInit<W> {
+pub struct MutexNodeInit<L> {
     next: AtomicPtr<Self>,
-    waiter: W,
+    lock: L,
 }
 
 impl<W> MutexNodeInit<W> {
@@ -29,13 +29,13 @@ impl<W> MutexNodeInit<W> {
     }
 }
 
-impl<W: Waiter> MutexNodeInit<W> {
+impl<L: Lock> MutexNodeInit<L> {
     /// Crates a new `MutexNodeInit` instance.
     #[cfg(not(all(loom, test)))]
     pub const fn new() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
-        let waiter = Waiter::LOCKED;
-        Self { next, waiter }
+        let lock = Lock::LOCKED;
+        Self { next, lock }
     }
 
     /// Creates a new Loom based `MutexNodeInit` instance (non-const).
@@ -43,13 +43,13 @@ impl<W: Waiter> MutexNodeInit<W> {
     #[cfg(not(tarpaulin_include))]
     pub fn new() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
-        let waiter = Waiter::locked();
-        Self { next, waiter }
+        let lock = Lock::locked();
+        Self { next, lock }
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<W: Waiter> Default for MutexNodeInit<W> {
+impl<L: Lock> Default for MutexNodeInit<L> {
     fn default() -> Self {
         Self::new()
     }
@@ -63,11 +63,11 @@ impl<W: Waiter> Default for MutexNodeInit<W> {
 ///
 /// `W` must fail [`core::mem::needs_drop`] check, else `W` will leak.
 #[derive(Debug)]
-pub struct MutexNode<W> {
-    inner: MaybeUninit<MutexNodeInit<W>>,
+pub struct MutexNode<L> {
+    inner: MaybeUninit<MutexNodeInit<L>>,
 }
 
-impl<W> MutexNode<W> {
+impl<L> MutexNode<L> {
     /// Creates new `MutexNode` instance.
     #[must_use]
     pub const fn new() -> Self {
@@ -75,16 +75,16 @@ impl<W> MutexNode<W> {
     }
 }
 
-impl<W: Waiter> MutexNode<W> {
+impl<L: Lock> MutexNode<L> {
     /// Initializes this node's inner state, returning an exclusive reference
     /// pointing to it.
-    fn initialize(&mut self) -> &mut MutexNodeInit<W> {
+    fn initialize(&mut self) -> &mut MutexNodeInit<L> {
         self.inner.write(MutexNodeInit::new())
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<W> Default for MutexNode<W> {
+impl<L> Default for MutexNode<L> {
     fn default() -> Self {
         Self::new()
     }
@@ -92,17 +92,17 @@ impl<W> Default for MutexNode<W> {
 
 /// A mutual exclusion primitive implementing the MCS lock protocol, useful for
 /// protecting shared data.
-pub struct Mutex<T: ?Sized, W, P> {
-    tail: AtomicPtr<MutexNodeInit<W>>,
-    marker: PhantomData<P>,
+pub struct Mutex<T: ?Sized, L, W> {
+    tail: AtomicPtr<MutexNodeInit<L>>,
+    marker: PhantomData<W>,
     data: UnsafeCell<T>,
 }
 
 // Same unsafe impls as `std::sync::Mutex`.
-unsafe impl<T: ?Sized + Send, W, P> Send for Mutex<T, W, P> {}
-unsafe impl<T: ?Sized + Send, W, P> Sync for Mutex<T, W, P> {}
+unsafe impl<T: ?Sized + Send, L, W> Send for Mutex<T, L, W> {}
+unsafe impl<T: ?Sized + Send, L, W> Sync for Mutex<T, L, W> {}
 
-impl<T, W, P> Mutex<T, W, P> {
+impl<T, L, W> Mutex<T, L, W> {
     /// Creates a new mutex in an unlocked state ready for use.
     #[cfg(not(all(loom, test)))]
     pub const fn new(value: T) -> Self {
@@ -126,9 +126,9 @@ impl<T, W, P> Mutex<T, W, P> {
     }
 }
 
-impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
+impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     /// Attempts to acquire this mutex without blocking the thread.
-    pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode<W>) -> Option<MutexGuard<'a, T, W, P>> {
+    pub fn try_lock<'a>(&'a self, node: &'a mut MutexNode<L>) -> Option<MutexGuard<'a, T, L, W>> {
         let node = node.initialize();
         self.tail
             .compare_exchange(ptr::null_mut(), node.as_ptr(), AcqRel, Relaxed)
@@ -137,7 +137,7 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
     }
 
     /// Acquires this mutex, blocking the current thread until it is able to do so.
-    pub fn lock<'a>(&'a self, node: &'a mut MutexNode<W>) -> MutexGuard<'a, T, W, P> {
+    pub fn lock<'a>(&'a self, node: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
         let node = node.initialize();
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
         // If we have a predecessor, complete the link so it will notify us.
@@ -145,7 +145,7 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
             // Acquire this mutex, applying some waiting policy.
-            node.waiter.lock_wait::<P>();
+            node.lock.lock_wait::<W>();
             fence(Acquire);
         }
         MutexGuard::new(self, node)
@@ -153,7 +153,7 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
 
     /// Unlocks this mutex. If there is a successor node in the queue, the lock
     /// is passed directly to them.
-    pub fn unlock(&self, node: &MutexNodeInit<W>) {
+    pub fn unlock(&self, node: &MutexNodeInit<L>) {
         let mut next = node.next.load(Relaxed);
         // If we don't have a known successor currently,
         if next.is_null() {
@@ -161,16 +161,16 @@ impl<T: ?Sized, W: Waiter, P: Wait> Mutex<T, W, P> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = unlock_relax::<W, P::Relax>(&node.next);
+            next = unlock_relax::<L, W::UnlockRelax>(&node.next);
         }
         // Notify our successor that they hold the lock.
         fence(Acquire);
         // SAFETY: We already verified that our successor is not null.
-        unsafe { &*next }.waiter.notify();
+        unsafe { &*next }.lock.notify();
     }
 }
 
-impl<T: ?Sized, W, P> Mutex<T, W, P> {
+impl<T: ?Sized, L, W> Mutex<T, L, W> {
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
@@ -186,12 +186,12 @@ impl<T: ?Sized, W, P> Mutex<T, W, P> {
     }
 
     /// Unlocks the lock if the candidate node is the queue's tail.
-    fn try_unlock(&self, node: *mut MutexNodeInit<W>) -> bool {
+    fn try_unlock(&self, node: *mut MutexNodeInit<L>) -> bool {
         self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 }
 
-impl<T: ?Sized + Debug, W: Waiter, P: Wait> Debug for Mutex<T, W, P> {
+impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut node = MutexNode::new();
         let mut d = f.debug_struct("Mutex");
@@ -206,21 +206,21 @@ impl<T: ?Sized + Debug, W: Waiter, P: Wait> Debug for Mutex<T, W, P> {
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 #[must_use = "if unused the Mutex will immediately unlock"]
-pub struct MutexGuard<'a, T: ?Sized, W: Waiter, P: Wait> {
-    lock: &'a Mutex<T, W, P>,
-    node: &'a MutexNodeInit<W>,
+pub struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
+    lock: &'a Mutex<T, L, W>,
+    node: &'a MutexNodeInit<L>,
 }
 
 // `std::sync::MutexGuard` is not Send for pthread compatibility, but this
 // implementation is safe to be Send.
-unsafe impl<T: ?Sized + Send, W: Waiter, P: Wait> Send for MutexGuard<'_, T, W, P> {}
+unsafe impl<T: ?Sized + Send, L: Lock, W: Wait> Send for MutexGuard<'_, T, L, W> {}
 
 // Same unsafe Sync impl as `std::sync::MutexGuard`.
-unsafe impl<T: ?Sized + Sync, W: Waiter, P: Wait> Sync for MutexGuard<'_, T, W, P> {}
+unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
 
-impl<'a, T: ?Sized, W: Waiter, P: Wait> MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
     /// Creates a new `MutexGuard` instance.
-    const fn new(lock: &'a Mutex<T, W, P>, node: &'a MutexNodeInit<W>) -> Self {
+    const fn new(lock: &'a Mutex<T, L, W>, node: &'a MutexNodeInit<L>) -> Self {
         Self { lock, node }
     }
 
@@ -234,20 +234,20 @@ impl<'a, T: ?Sized, W: Waiter, P: Wait> MutexGuard<'a, T, W, P> {
     }
 }
 
-impl<'a, T: ?Sized + Debug, W: Waiter, P: Wait> Debug for MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'a, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
-impl<'a, T: ?Sized + Display, W: Waiter, P: Wait> Display for MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'a, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, W: Waiter, P: Wait> core::ops::Deref for MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, W> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -258,7 +258,7 @@ impl<'a, T: ?Sized, W: Waiter, P: Wait> core::ops::Deref for MutexGuard<'a, T, W
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, W: Waiter, P: Wait> core::ops::DerefMut for MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, L, W> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
@@ -266,13 +266,13 @@ impl<'a, T: ?Sized, W: Waiter, P: Wait> core::ops::DerefMut for MutexGuard<'a, T
     }
 }
 
-impl<'a, T: ?Sized, W: Waiter, P: Wait> Drop for MutexGuard<'a, T, W, P> {
+impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
     fn drop(&mut self) {
         self.lock.unlock(self.node);
     }
 }
 
-fn unlock_relax<W, R: Relax>(next: &AtomicPtr<MutexNodeInit<W>>) -> *mut MutexNodeInit<W> {
+fn unlock_relax<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
     let mut relax = R::default();
     loop {
         let ptr = next.load(Relaxed);
@@ -285,7 +285,7 @@ fn unlock_relax<W, R: Relax>(next: &AtomicPtr<MutexNodeInit<W>>) -> *mut MutexNo
 /// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
-unsafe impl<T: ?Sized, W: Waiter, P: Wait> crate::loom::Guard for MutexGuard<'_, T, W, P> {
+unsafe impl<T: ?Sized, L: Lock, W: Wait> crate::loom::Guard for MutexGuard<'_, T, L, W> {
     type Target = T;
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
