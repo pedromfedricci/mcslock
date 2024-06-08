@@ -25,7 +25,7 @@ pub struct MutexNodeInit<L> {
 impl<L> MutexNodeInit<L> {
     /// Returns a raw mutable pointer of this node.
     const fn as_ptr(&self) -> *mut Self {
-        (ptr::from_ref(self)).cast_mut()
+        (self as *const Self).cast_mut()
     }
 }
 
