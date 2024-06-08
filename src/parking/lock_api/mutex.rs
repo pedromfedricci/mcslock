@@ -67,19 +67,42 @@ impl<T: ?Sized, P: Park> LockData for Mutex<T, P> {
 
 #[cfg(test)]
 mod test {
-    use crate::parking::lock_api::immediate::Mutex;
+    use crate::parking::lock_api::{immediate, yields};
     use crate::test::tests;
 
+    type Mutex<T> = immediate::Mutex<T>;
+
+    type ImmediateMutex<T> = immediate::Mutex<T>;
+    type YieldThanParkMutex<T> = yields::Mutex<T>;
+
     #[test]
-    fn lots_and_lots_immediate_park() {
-        use crate::parking::lock_api::immediate::Mutex;
-        tests::lots_and_lots::<Mutex<_>>();
+    fn lots_and_lots_lock_immediate_park() {
+        tests::lots_and_lots_lock::<ImmediateMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_yield_than_park() {
-        use crate::parking::lock_api::yields::Mutex;
-        tests::lots_and_lots::<Mutex<_>>();
+    fn lots_and_lots_lock_yield_than_park() {
+        tests::lots_and_lots_lock::<YieldThanParkMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock_immediate_park() {
+        tests::lots_and_lots_try_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock_yield_than_park() {
+        tests::lots_and_lots_try_lock::<YieldThanParkMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_immediate_park() {
+        tests::lots_and_lots_mixed_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_yield_than_park() {
+        tests::lots_and_lots_mixed_lock::<YieldThanParkMutex<_>>();
     }
 
     #[test]

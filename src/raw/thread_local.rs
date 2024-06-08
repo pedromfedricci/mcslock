@@ -613,13 +613,33 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots() {
-        tests::lots_and_lots::<MutexPanic<_>>();
+    fn lots_and_lots_lock() {
+        tests::lots_and_lots_lock::<MutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_unchecked() {
-        tests::lots_and_lots::<MutexUnchecked<_>>();
+    fn lots_and_lots_lock_unchecked() {
+        tests::lots_and_lots_lock::<MutexUnchecked<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock() {
+        tests::lots_and_lots_try_lock::<MutexPanic<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock_unchecked() {
+        tests::lots_and_lots_try_lock::<MutexUnchecked<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock() {
+        tests::lots_and_lots_mixed_lock::<MutexPanic<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_unchecked() {
+        tests::lots_and_lots_mixed_lock::<MutexUnchecked<_>>();
     }
 
     #[test]

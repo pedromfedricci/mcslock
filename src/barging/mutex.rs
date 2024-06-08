@@ -535,8 +535,18 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots() {
-        tests::lots_and_lots::<Mutex<_>>();
+    fn lots_and_lots_lock() {
+        tests::lots_and_lots_lock::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock() {
+        tests::lots_and_lots_try_lock::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock() {
+        tests::lots_and_lots_mixed_lock::<Mutex<_>>();
     }
 
     #[test]

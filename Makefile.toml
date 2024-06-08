@@ -23,9 +23,9 @@ args = ["rustdoc", "--all-features", "--open", "--", "--default-theme", "ayu"]
 
 # Check MSRV.
 [tasks.msrv]
-# NOTE: We actually installing the first nightly 1.66.0. It should be
-# equivalent to stable 1.65.0. We need the nightly version to use the
-# sparse registry feature. This massively improves the index download.
+# NOTE: We are actually installing the first nightly 1.66.0. It should be
+# equivalent to stable 1.65.0. We need the nightly version to use the sparse
+# registry feature. This massively improves the index download.
 # Link: https://blog.rust-lang.org/2022/06/22/sparse-registry-testing.html
 toolchain = "nightly-2022-09-18"
 command = "cargo"
@@ -58,7 +58,7 @@ args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
 command = "cargo"
-args = ["miri", "test", "--all-features", "${@}"]
+args = ["miri", "nextest", "run", "--all-features", "${@}"]
 
 # Check code coverage with tarpaulin (all features).
 [tasks.tarpaulin]

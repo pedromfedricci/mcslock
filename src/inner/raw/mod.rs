@@ -22,17 +22,17 @@ pub struct MutexNodeInit<L> {
     lock: L,
 }
 
-impl<W> MutexNodeInit<W> {
+impl<L> MutexNodeInit<L> {
     /// Returns a raw mutable pointer of this node.
     const fn as_ptr(&self) -> *mut Self {
-        (self as *const Self).cast_mut()
+        (ptr::from_ref(self)).cast_mut()
     }
 }
 
 impl<L: Lock> MutexNodeInit<L> {
     /// Crates a new `MutexNodeInit` instance.
     #[cfg(not(all(loom, test)))]
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
         let lock = Lock::LOCKED;
         Self { next, lock }
@@ -41,7 +41,7 @@ impl<L: Lock> MutexNodeInit<L> {
     /// Creates a new Loom based `MutexNodeInit` instance (non-const).
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
-    pub fn new() -> Self {
+    fn new() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
         let lock = Lock::locked();
         Self { next, lock }
@@ -153,18 +153,18 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
 
     /// Unlocks this mutex. If there is a successor node in the queue, the lock
     /// is passed directly to them.
-    pub fn unlock(&self, node: &MutexNodeInit<L>) {
-        let mut next = node.next.load(Relaxed);
+    fn unlock(&self, head: &MutexNodeInit<L>) {
+        let mut next = head.next.load(Relaxed);
         // If we don't have a known successor currently,
         if next.is_null() {
             // and we are the tail, then dequeue and free the lock.
-            let false = self.try_unlock(node.as_ptr()) else { return };
+            let false = self.try_unlock_release(head.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = wait_next_relaxed::<L, W::UnlockRelax>(&node.next);
+            next = wait_next_relaxed::<L, W::UnlockRelax>(&head.next);
         }
-        // Notify our successor that they hold the lock.
         fence(Acquire);
+        // Notify our successor that they hold the lock.
         // SAFETY: We already verified that our successor is not null.
         unsafe { &*next }.lock.notify();
     }
@@ -199,7 +199,7 @@ impl<T: ?Sized, L, W> Mutex<T, L, W> {
     }
 
     /// Unlocks the lock if the candidate node is the queue's tail.
-    fn try_unlock(&self, node: *mut MutexNodeInit<L>) -> bool {
+    fn try_unlock_release(&self, node: *mut MutexNodeInit<L>) -> bool {
         self.tail.compare_exchange(node, ptr::null_mut(), Release, Relaxed).is_ok()
     }
 }
@@ -221,7 +221,7 @@ impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
 #[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     lock: &'a Mutex<T, L, W>,
-    node: &'a MutexNodeInit<L>,
+    head: &'a MutexNodeInit<L>,
 }
 
 // `std::sync::MutexGuard` is not Send for pthread compatibility, but this
@@ -233,8 +233,8 @@ unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W>
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
     /// Creates a new `MutexGuard` instance.
-    const fn new(lock: &'a Mutex<T, L, W>, node: &'a MutexNodeInit<L>) -> Self {
-        Self { lock, node }
+    const fn new(lock: &'a Mutex<T, L, W>, head: &'a MutexNodeInit<L>) -> Self {
+        Self { lock, head }
     }
 
     /// Runs `f` against a shared reference pointing to the underlying data.
@@ -281,7 +281,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
     fn drop(&mut self) {
-        self.lock.unlock(self.node);
+        self.lock.unlock(self.head);
     }
 }
 

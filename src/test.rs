@@ -66,6 +66,7 @@ pub mod tests {
     // option. This file may not be copied, modified, or distributed
     // except according to those terms.
 
+    use core::ops::RangeInclusive;
     use std::fmt::{Debug, Display};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
@@ -87,39 +88,55 @@ pub mod tests {
         }
     }
 
-    pub fn node_waiter_drop_does_not_matter<W>() {
-        use crate::inner::raw::{MutexNode, MutexNodeInit};
-        assert!(!core::mem::needs_drop::<W>());
-        assert!(!core::mem::needs_drop::<MutexNode<W>>());
-        assert!(!core::mem::needs_drop::<MutexNodeInit<W>>());
+    const ITERS: Int = 1000;
+    const CONCURRENCY: Int = 3;
+    const EXPECTED_VALUE: Int = ITERS * CONCURRENCY * 2;
+    const EXPECTED_RANGE: RangeInclusive<Int> = 1..=EXPECTED_VALUE;
+
+    fn inc<L: LockWith<Target = Int>>(data: &Arc<L>) {
+        data.lock_with(|mut guard| *guard += 1);
     }
 
-    pub fn lots_and_lots<L>()
+    fn try_inc<L: LockWith<Target = Int>>(data: &Arc<L>) {
+        data.try_lock_with(|opt| opt.map(|mut guard| *guard += 1));
+    }
+
+    fn inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
+        for _ in 0..ITERS {
+            inc::<L>(data)
+        }
+    }
+
+    fn try_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
+        for _ in 0..ITERS {
+            try_inc::<L>(data)
+        }
+    }
+
+    fn mixed_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
+        for run in 0..ITERS {
+            let f = if run % 2 == 0 { inc } else { try_inc };
+            f(data)
+        }
+    }
+
+    fn lots_and_lots<L>(f: fn(&Arc<L>)) -> Int
     where
         L: LockWith<Target = Int> + Send + Sync + 'static,
     {
-        const ITERS: u32 = 1000;
-        const CONCURRENCY: u32 = 3;
-
-        fn inc<L: LockWith<Target = Int>>(data: &Arc<L>) {
-            for _ in 0..ITERS {
-                data.lock_with(|mut guard| *guard += 1);
-            }
-        }
-
         let data = Arc::new(L::new(0));
         let (tx, rx) = channel();
         for _ in 0..CONCURRENCY {
             let data1 = Arc::clone(&data);
             let tx2 = tx.clone();
             thread::spawn(move || {
-                inc(&data1);
+                f(&data1);
                 tx2.send(()).unwrap();
             });
             let data2 = Arc::clone(&data);
             let tx2 = tx.clone();
             thread::spawn(move || {
-                inc(&data2);
+                f(&data2);
                 tx2.send(()).unwrap();
             });
         }
@@ -128,8 +145,38 @@ pub mod tests {
         for _ in 0..2 * CONCURRENCY {
             rx.recv().unwrap();
         }
-        let value = data.lock_with(|guard| *guard);
-        assert_eq!(value, ITERS * CONCURRENCY * 2);
+        data.lock_with(|guard| *guard)
+    }
+
+    pub fn node_waiter_drop_does_not_matter<W>() {
+        use crate::inner::raw::{MutexNode, MutexNodeInit};
+        assert!(!core::mem::needs_drop::<W>());
+        assert!(!core::mem::needs_drop::<MutexNode<W>>());
+        assert!(!core::mem::needs_drop::<MutexNodeInit<W>>());
+    }
+
+    pub fn lots_and_lots_lock<L>()
+    where
+        L: LockWith<Target = Int> + Send + Sync + 'static,
+    {
+        let value = lots_and_lots(inc_for::<L>);
+        assert_eq!(value, EXPECTED_VALUE);
+    }
+
+    pub fn lots_and_lots_try_lock<L>()
+    where
+        L: LockWith<Target = Int> + Send + Sync + 'static,
+    {
+        let value = lots_and_lots(try_inc_for::<L>);
+        assert!(EXPECTED_RANGE.contains(&value));
+    }
+
+    pub fn lots_and_lots_mixed_lock<L>()
+    where
+        L: LockWith<Target = Int> + Send + Sync + 'static,
+    {
+        let value = lots_and_lots(mixed_inc_for::<L>);
+        assert!(EXPECTED_RANGE.contains(&value));
     }
 
     pub fn smoke<L>()

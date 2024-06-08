@@ -1,0 +1,3 @@
+[profile.default-miri]
+test-threads = "num-cpus"
+slow-timeout = { period = "60s", terminate-after = 2 }
