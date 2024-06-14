@@ -1,10 +1,13 @@
 //! TODO: Docs
 
-mod thread_local;
-pub use thread_local::LocalMutexNode;
-
 mod mutex;
 pub use mutex::{Mutex, MutexGuard, MutexNode};
+
+#[cfg(feature = "thread_local")]
+#[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
+mod thread_local;
+#[cfg(feature = "thread_local")]
+pub use thread_local::LocalMutexNode;
 
 /// TODO: Docs
 pub mod spins {
