@@ -30,7 +30,7 @@ impl<L> MutexNodeInit<L> {
 }
 
 impl<L: Lock> MutexNodeInit<L> {
-    /// Crates a new `MutexNodeInit` instance.
+    /// Creates a new `MutexNodeInit` instance.
     #[cfg(not(all(loom, test)))]
     const fn new() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
@@ -59,9 +59,9 @@ impl<L: Lock> Default for MutexNodeInit<L> {
 ///
 /// The inner state is never dropped, only overwritten. This is desirable and
 /// well suited for our use cases, since all `W` types used are only composed
-/// of `no drop needed` types (eg. atomic types).
+/// of `no drop glue` types (eg. atomic types).
 ///
-/// `W` must fail [`core::mem::needs_drop`] check, else `W` will leak.
+/// `L` must fail [`core::mem::needs_drop`] check, else `L` will leak.
 #[derive(Debug)]
 pub struct MutexNode<L> {
     inner: MaybeUninit<MutexNodeInit<L>>,
@@ -142,7 +142,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
         // If we have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
-            // SAFETY: Already verified that predecessor is not null.
+            // SAFETY: Already verified that our predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
             // Acquire this mutex, applying some waiting policy.
             node.lock.lock_wait_relaxed::<W>();

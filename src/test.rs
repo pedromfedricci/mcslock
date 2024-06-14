@@ -103,20 +103,20 @@ pub mod tests {
 
     fn inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
         for _ in 0..ITERS {
-            inc::<L>(data)
+            inc::<L>(data);
         }
     }
 
     fn try_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
         for _ in 0..ITERS {
-            try_inc::<L>(data)
+            try_inc::<L>(data);
         }
     }
 
     fn mixed_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
         for run in 0..ITERS {
             let f = if run % 2 == 0 { inc } else { try_inc };
-            f(data)
+            f(data);
         }
     }
 
