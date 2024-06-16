@@ -170,19 +170,6 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     }
 }
 
-/// A relaxed loop that returns a pointer to the successor once it finishes
-/// linking with the current thread.
-///
-/// The successor node is loaded with a relaxed ordering.
-fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
-    let mut relax = R::default();
-    loop {
-        let ptr = next.load(Relaxed);
-        let true = ptr.is_null() else { return ptr };
-        relax.relax();
-    }
-}
-
 impl<T: ?Sized, L, W> Mutex<T, L, W> {
     /// Returns `true` if the lock is currently held.
     ///
@@ -213,6 +200,19 @@ impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
             None => d.field("data", &format_args!("<locked>")),
         };
         d.finish()
+    }
+}
+
+/// A relaxed loop that returns a pointer to the successor once it finishes
+/// linking with the current thread.
+///
+/// The successor node is loaded with a relaxed ordering.
+fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
+    let mut relax = R::default();
+    loop {
+        let ptr = next.load(Relaxed);
+        let true = ptr.is_null() else { return ptr };
+        relax.relax();
     }
 }
 

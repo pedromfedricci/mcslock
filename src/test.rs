@@ -315,7 +315,9 @@ pub mod tests {
             });
         }
         drop(tx);
-        rx.recv().unwrap();
+        for _ in 0..4 {
+            rx.recv().unwrap();
+        }
     }
 
     pub fn test_lock_arc_access_in_unwind<L>()

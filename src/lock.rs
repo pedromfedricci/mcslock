@@ -77,14 +77,15 @@ pub trait Wait: Relax {
     /// Hints whether or not should the `parking` operation be executed at this
     /// time.
     ///
-    /// Returning `true` means we are not ready to run the park operation yet,
-    /// there is some other event that should occur first. Returning `false`
+    /// Returning `false` means we are not ready to run the park operation yet,
+    /// there is some other event that should occur first. Returning `true`
     /// indicates that we are no longer waiting for any event, hinting that the
     /// park operation should be executed.
     ///
-    /// `no_std` implementations will simply ignore this function and only use
-    /// `Self::relax` and `Self::UnlockRelax::relax` functions.
-    fn should_wait(&self) -> bool;
+    /// Note that `no_std` implementations will simply ignore this function and
+    /// will only use `Self::relax` and `Self::UnlockRelax::relax` functions
+    /// instead.
+    fn should_park(&self) -> bool;
 }
 
 impl Lock for AtomicBool {
@@ -119,9 +120,9 @@ impl Lock for AtomicBool {
     fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        let mut wait = W::default();
+        let mut relaxed_waiter = W::default();
         while self.load(Relaxed) {
-            wait.relax();
+            relaxed_waiter.relax();
         }
     }
 

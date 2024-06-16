@@ -188,14 +188,21 @@ impl Step {
     }
 }
 
+/// A generic relaxed waiter, that implements [`Relax`] so long as `R`
+/// implements it too.
+///
+/// This saves us from defining a blanket [`Wait`] impl for a generic `T` where
+/// `T` implements [`Relax`], because that would prevent us from implementing
+/// `Wait` for `T` when it implements [`Park`], since they would conflict. We
+/// need both `Relax` and `Park` types to implement `Wait`.
 #[derive(Default)]
 pub(crate) struct RelaxWait<R> {
-    relax: R,
+    waiter: R,
 }
 
 impl<R: Relax> Relax for RelaxWait<R> {
     fn relax(&mut self) {
-        self.relax.relax();
+        self.waiter.relax();
     }
 }
 
@@ -203,8 +210,8 @@ impl<R: Relax> Wait for RelaxWait<R> {
     type UnlockRelax = R;
 
     #[cfg(not(tarpaulin_include))]
-    fn should_wait(&self) -> bool {
-        false
+    fn should_park(&self) -> bool {
+        unimplemented!("should_park` should not be called by `RelaxWait`");
     }
 }
 

@@ -107,10 +107,10 @@ impl Lock for Parker {
         // already been made or the lock has been handed off to this thread. If
         // the limit of attempts has been reached and the lock stills locked,
         // then park the thread.
-        let mut wait = W::default();
-        while wait.should_wait() {
+        let mut parking_waiter = W::default();
+        while !parking_waiter.should_park() {
             if ParkerT::is_locked(self) {
-                wait.relax();
+                parking_waiter.relax();
             } else {
                 return;
             }
