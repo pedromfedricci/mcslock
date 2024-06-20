@@ -19,7 +19,7 @@
 //!
 //! It is noteworthy to mention that [spinlocks are usually not what you want].
 //! The majority of use cases are well covered by OS-based mutexes like
-//! [`std::sync::Mutex`], [`parking_lot::Mutex`] or even this crate's [`mod@parking`]
+//! [`std::sync::Mutex`], [`parking_lot::Mutex`] or even this crate's [`parking`]
 //! Mutex. These implementations will notify the system that the waiting thread should
 //! be parked, freeing the processor to work on something else.
 //!
@@ -36,7 +36,7 @@
 //! This implementation operates under FIFO. Raw locking APIs require exclusive
 //! access to a locally accessible queue node. This node is represented by the
 //! [`raw::MutexNode`] type. Callers are responsible for instantiating the queue
-//! nodes themselves. This implementation is `no_std` compatible. See [`mod@raw`]
+//! nodes themselves. This implementation is `no_std` compatible. See the [`raw`]
 //! module for more information.
 //!
 //! ```
@@ -105,7 +105,7 @@
 //! the front of the waiting queue thread, which means this it is an unfair lock.
 //! This implementation can be enabled through the `barging` feature, it is
 //! suitable for `no_std` environments, and the locking APIs are compatible with
-//! the `lock_api` crate. See [`mod@barging`] and [`mod@lock_api`] modules for
+//! the `lock_api` crate. See [`barging`] and [`lock_api`] modules for
 //! more information.
 //!
 //! ```
@@ -136,9 +136,9 @@
 //!
 //! This crate also supports MCS lock implementations that will put the blocking
 //! threads to sleep. All `no_std` flavors: `raw`, `barging` and `lock_api` have
-//! matching `Mutex` types under the [`mod@parking`] module, with corresponding
+//! matching `Mutex` types under the [`parking`] module, with corresponding
 //! paths and public APIs, that are thread parking capable. These implementations
-//! are not `no_std` compatible. See [`mod@parking`] module for more information.
+//! are not `no_std` compatible. See [`parking`] module for more information.
 //!
 //! ```
 //! # #[cfg(all(feature = "thread_local", feature = "parking"))]
@@ -200,25 +200,24 @@
 //!
 //! The `barging` feature provides locking APIs that are compatible with the
 //! [lock_api] crate. It does not require node allocations from the caller. The
-//! [`mod@barging`] is suitable for `no_std` environments, but [`mod@parking::barging`]
-//! is not. These implementations are not fair (they do not guarantee FIFO), but
-//! can improve throughput when the lock is heavily contended.
+//! [`barging`] module is suitable for `no_std` environments, but
+//! [`parking::barging`] is not. These implementations are not fair (they do
+//! not guarantee FIFO), but can improve throughput when the lock is heavily contended.
 //!
 //! ### lock_api
 //!
 //! This feature implements the [`RawMutex`] trait from the [lock_api]
 //! crate for both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases
-//! are provided by the [`mod@lock_api`] and [`mod@parking::lock_api`] modules.
-//! This feature is `no_std` compatible and automatically enables the `barging`
-//! feature.
+//! are provided by the [`lock_api`] (`no_std`) and [`parking::lock_api`]
+//! modules. This feature is automatically enables the `barging` feature.
 //!
 //! ### parking
 //!
 //! The `parking` feature provides Mutex implementations that are capable of putting
 //! blocking threads waiting for the lock to sleep. These implementations are
-//! published under the [`mod@parking`] module. Each `no_std` mutex flavors provided
+//! published under the [`parking`] module. Each `no_std` mutex flavors provided
 //! by this crate have corresponding parking implementations under that module.
-//! Users may select a out of the box parking policy at [`mod@parking::park`].
+//! Users may select a out of the box parking policy at [`parking::park`].
 //!
 //! ## Related projects
 //!

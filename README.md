@@ -69,7 +69,7 @@ RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --open
 This implementation operates under FIFO. Raw locking APIs require exclusive
 access to a locally accessible queue node. This node is represented by the
 [`raw::MutexNode`] type. Callers are responsible for instantiating the queue
-nodes themselves. This implementation is `no_std` compatible. See [`raw`]
+nodes themselves. This implementation is `no_std` compatible. See the [`raw`]
 module for more information.
 
 ```rust
@@ -222,16 +222,25 @@ feature is not `no_std` compatible.
 ### barging
 
 The `barging` feature provides locking APIs that are compatible with the
-[lock_api] crate. It does not require node allocations from the caller,
-and it is suitable for `no_std` environments. This implementation is not
-fair (does not guarantee FIFO), but can improve throughput when the lock
-is heavily contended.
+[lock_api] crate. It does not require node allocations from the caller.
+The [`barging`] module is suitable for `no_std` environments, but
+[`parking::baging`] is not. This implementation is not fair (does not guarantee
+FIFO), but can improve throughput when the lock is heavily contended.
 
 ### lock_api
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
-[`barging::Mutex`]. Aliases are provided by the [`lock_api`] module. This feature
-is `no_std` compatible and automatically enables the `barging` feature.
+both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases are provided by
+the [`lock_api`] (`no_std`) and [`parking::lock_api`] modules. This feature
+automatically enables the `barging` feature.
+
+### parking
+
+The `parking` feature provides Mutex implementations that are capable of putting
+blocking threads waiting for the lock to sleep. These implementations are
+published under the [`parking`] module. Each `no_std` mutex flavors provided
+by this crate have corresponding parking implementations under that module.
+Users may select a out of the box parking policy at [`parking::park`].
 
 ## Minimum Supported Rust Version (MSRV)
 
@@ -294,6 +303,7 @@ each of your dependencies, including this one.
 [`raw::MutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.MutexNode.html
 [`raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.LocalMutexNode.html
 [`parking`]: https://docs.rs/mcslock/latest/mcslock/parking/index.html
+[`parking::park`]: https://docs.rs/mcslock/latest/mcslock/parking/park/index.html
 [`parking::raw::MutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.MutexNode.html
 [`parking::raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.LocalMutexNode.html
 [`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
