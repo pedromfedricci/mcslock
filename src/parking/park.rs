@@ -11,10 +11,10 @@ pub trait Park: Relax {
     /// Hints whether or not should the parking operation be executed at this
     /// time.
     ///
-    /// Returning `false` means we are not ready to run the park operation yet,
-    /// there is some other event that should occur first. Returning `true`
-    /// indicates that the thread is no longer waiting for any event, and so
-    /// it is hinting that it should be parked.
+    /// Returning `false` means that the thread is not ready to be put to sleep
+    /// yet, there is some other event that should occur first. Returning `true`
+    /// indicates that the thread is no longer waiting for any event, and so it
+    /// is hinting that it should be parked.
     fn should_park(&self) -> bool;
 }
 

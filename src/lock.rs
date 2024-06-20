@@ -77,10 +77,10 @@ pub trait Wait: Relax {
     /// Hints whether or not should the `parking` operation be executed at this
     /// time.
     ///
-    /// Returning `false` means we are not ready to run the park operation yet,
-    /// there is some other event that should occur first. Returning `true`
-    /// indicates that we are no longer waiting for any event, hinting that the
-    /// park operation should be executed.
+    /// Returning `false` means that the thread is not ready to be put to sleep
+    /// yet, there is some other event that should occur first. Returning `true`
+    /// indicates that the thread is no longer waiting for any event, and so it
+    /// is hinting that it should be parked.
     ///
     /// Note that `no_std` implementations will simply ignore this function and
     /// will only use `Self::relax` and `Self::UnlockRelax::relax` functions

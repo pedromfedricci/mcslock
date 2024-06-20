@@ -46,6 +46,10 @@ name = "barging"
 required-features = ["barging"]
 
 [[example]]
+name = "parking"
+required-features = ["parking"]
+
+[[example]]
 name = "thread_local"
 required-features = ["thread_local"]
 
