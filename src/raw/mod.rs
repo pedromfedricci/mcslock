@@ -1,5 +1,4 @@
-//! A MCS lock implementation that requires exclusive access to a locally
-//! accessible queue node.
+//! MCS lock implementation.
 //!
 //! The `raw` implementation of MCS lock is fair, that is, it guarantees that
 //! thread that have waited for longer will be scheduled first (FIFO). Each
@@ -15,11 +14,11 @@
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
 //!
-//! The Mutex is generic over the relax policy. User may choose a policy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
+//! The Mutex is generic over the relax policy. User may choose a policy as long
+//! as it implements the [`Relax`] trait. There is a number of relax policies
 //! provided by the [`relax`] module. Each module in `raw` provides type aliases
-//! for [`Mutex`] and [`MutexGuard`] associated with one relax policy. See
-//! their documentation for more information.
+//! for [`Mutex`] and [`MutexGuard`] associated with one relax policy. See their
+//! documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
@@ -151,7 +150,8 @@ pub mod yields {
         /// [`raw::Mutex`]: mutex::Mutex
         pub type Mutex<T> = mutex::Mutex<T, YieldBackoff>;
 
-        /// A MCS guard that implements the [`YieldBackoff`] relax policy.
+        /// A [`raw::MutexGuard`] that implements the [`YieldBackoff`] relax
+        /// policy.
         ///
         /// [`raw::MutexGuard`]: mutex::MutexGuard
         pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff>;
@@ -181,7 +181,7 @@ pub mod loops {
     /// [`raw::Mutex`]: mutex::Mutex
     pub type Mutex<T> = mutex::Mutex<T, Loop>;
 
-    /// A `raw` MCS guard that implements the [`Loop`] relax policy.
+    /// A [`raw::MutexGuard`] that implements the [`Loop`] relax policy.
     ///
     /// [`raw::MutexGuard`]: mutex::MutexGuard
     pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop>;

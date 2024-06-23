@@ -1,7 +1,7 @@
 [package]
 description = """
 An implementation of Mellor-Crummey and Scott contention-free
-spin-lock for mutual exclusion, referred to as MCS lock.
+lock for mutual exclusion, referred to as MCS lock.
 """
 name = "mcslock"
 version = "0.2.0"

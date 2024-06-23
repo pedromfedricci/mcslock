@@ -73,7 +73,29 @@ macro_rules! thread_local_parking_node {
     };
 }
 
-/// TODO: Docs
+/// A handle to a [`MutexNode`] stored at the thread local storage.
+///
+/// Thread local nodes can be claimed for temporary, exclusive access during
+/// runtime for locking purposes. Node handles refer to the node stored at
+/// the current running thread.
+///
+/// Just like `MutexNode`, this is an opaque type that holds metadata for the
+/// [`parking::raw::Mutex`]'s waiting queue. You must declare a thread local node
+/// with the [`thread_local_parking_node!`] macro, and provide the generated
+/// handle to the appropriate [`parking::raw::Mutex`] locking APIs. Attempting to
+/// lock a mutex with a thread local node that already is in use for the locking
+/// thread will cause a panic. Handles are provided by reference to functions.
+///
+/// See: [`try_lock_with_local`], [`lock_with_local`],
+/// [`try_lock_with_local_unchecked`] or [`lock_with_local_unchecked`].
+///
+/// [`MutexNode`]: MutexNode
+/// [`parking::raw::Mutex`]: Mutex
+/// [`thread_local_node!`]: crate::thread_local_node
+/// [`try_lock_with_local`]: Mutex::try_lock_with_local
+/// [`lock_with_local`]: Mutex::lock_with_local
+/// [`try_lock_with_local_unchecked`]: Mutex::try_lock_with_local_unchecked
+/// [`lock_with_local_unchecked`]: Mutex::lock_with_local_unchecked
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct LocalMutexNode {
@@ -288,7 +310,7 @@ impl<T: ?Sized, P: Park> LockWith for MutexUnchecked<T, P> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::park::{ImmediatePark, YieldThanPark};
+    use crate::parking::park::{ImmediatePark, YieldThenPark};
     use crate::parking::raw::MutexNode;
     use crate::test::tests;
 
@@ -296,10 +318,10 @@ mod test {
     type MutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
 
     type ImmediateMutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
-    type YieldThanParkMutexPanic<T> = super::MutexPanic<T, YieldThanPark>;
+    type YieldThenParkMutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
 
     type ImmediateMutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
-    type YieldThanParkMutexUnchecked<T> = super::MutexUnchecked<T, YieldThanPark>;
+    type YieldThenParkMutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
 
     #[test]
     fn ref_cell_node_drop_does_not_matter() {
@@ -314,7 +336,7 @@ mod test {
 
     #[test]
     fn lots_and_lots_lock_yield_than_park() {
-        tests::lots_and_lots_lock::<YieldThanParkMutexPanic<_>>();
+        tests::lots_and_lots_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
@@ -324,7 +346,7 @@ mod test {
 
     #[test]
     fn lots_and_lots_lock_yield_than_park_unchecked() {
-        tests::lots_and_lots_lock::<YieldThanParkMutexUnchecked<_>>();
+        tests::lots_and_lots_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
@@ -339,12 +361,12 @@ mod test {
 
     #[test]
     fn lots_and_lots_try_lock_yield_than_park() {
-        tests::lots_and_lots_try_lock::<YieldThanParkMutexPanic<_>>();
+        tests::lots_and_lots_try_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
     fn lots_and_lots_try_lock_yield_than_park_unchecked() {
-        tests::lots_and_lots_try_lock::<YieldThanParkMutexUnchecked<_>>();
+        tests::lots_and_lots_try_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
@@ -359,12 +381,12 @@ mod test {
 
     #[test]
     fn lots_and_lots_mixed_lock_yield_than_park() {
-        tests::lots_and_lots_mixed_lock::<YieldThanParkMutexPanic<_>>();
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
     fn lots_and_lots_mixed_lock_yield_than_park_unchecked() {
-        tests::lots_and_lots_mixed_lock::<YieldThanParkMutexUnchecked<_>>();
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
@@ -423,13 +445,13 @@ mod test {
 #[cfg(all(loom, test))]
 mod model {
     use crate::loom::models;
-    use crate::parking::park::{ImmediatePark, YieldThanPark};
+    use crate::parking::park::{ImmediatePark, YieldThenPark};
 
     type MutexImmediatePanic<T> = super::MutexPanic<T, ImmediatePark>;
     type MutexImmediateUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
 
-    type MutexYieldPanic<T> = super::MutexPanic<T, YieldThanPark>;
-    type MutexYieldUnchecked<T> = super::MutexUnchecked<T, YieldThanPark>;
+    type MutexYieldPanic<T> = super::MutexPanic<T, YieldThenPark>;
+    type MutexYieldUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
 
     #[test]
     fn try_lock_join_immediate_park() {

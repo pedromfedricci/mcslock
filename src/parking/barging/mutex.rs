@@ -260,7 +260,7 @@ mod test {
     type Mutex<T> = immediate::Mutex<T>;
 
     type ImmediateMutex<T> = immediate::Mutex<T>;
-    type YieldThanParkMutex<T> = yields::Mutex<T>;
+    type YieldThenParkMutex<T> = yields::Mutex<T>;
 
     #[test]
     fn node_waiter_drop_does_not_matter() {
@@ -274,7 +274,7 @@ mod test {
 
     #[test]
     fn lots_and_lots_lock_yield_than_park() {
-        tests::lots_and_lots_lock::<YieldThanParkMutex<_>>();
+        tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
@@ -284,7 +284,7 @@ mod test {
 
     #[test]
     fn lots_and_lots_try_lock_yield_than_park() {
-        tests::lots_and_lots_try_lock::<YieldThanParkMutex<_>>();
+        tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
@@ -294,7 +294,7 @@ mod test {
 
     #[test]
     fn lots_and_lots_mixed_lock_yield_than_park() {
-        tests::lots_and_lots_mixed_lock::<YieldThanParkMutex<_>>();
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]

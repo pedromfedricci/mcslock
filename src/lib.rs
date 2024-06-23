@@ -150,7 +150,7 @@
 //! // `spins::Mutex` spins for a while then parks during contention.
 //! use mcslock::parking::raw::{spins::Mutex, MutexNode};
 //!
-//! // Requires `thread_local` feature.
+//! // Requires `parking` and `thread_local` features.
 //! mcslock::thread_local_parking_node!(static NODE);
 //!
 //! let mutex = Arc::new(Mutex::new(0));

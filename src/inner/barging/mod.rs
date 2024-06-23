@@ -38,7 +38,7 @@ impl<T, L: Lock, Q, W> Mutex<T, L, Q, W> {
 impl<T: ?Sized, L: Lock, Q: Lock, W: Wait> Mutex<T, L, Q, W> {
     /// Acquires this mutex, blocking the current thread until it is able to do so.
     pub fn lock(&self) -> MutexGuard<'_, T, L, Q, W> {
-        if self.lock.try_lock_acquire() {
+        if self.lock.try_lock_acquire_weak() {
             return MutexGuard::new(self);
         }
         let mut node = raw::MutexNode::<Q>::new();

@@ -23,18 +23,18 @@ const DEFMAX: Uint = 100;
 
 /// TODO: Docs
 #[derive(Default)]
-pub struct SpinThanPark<const MAX: Uint = DEFMAX> {
+pub struct SpinThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Spin, MAX>,
 }
 
-impl<const MAX: Uint> Relax for SpinThanPark<MAX> {
+impl<const MAX: Uint> Relax for SpinThenPark<MAX> {
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for SpinThanPark<MAX> {
+impl<const MAX: Uint> Park for SpinThenPark<MAX> {
     type UnlockRelax = Spin;
 
     #[inline(always)]
@@ -45,18 +45,18 @@ impl<const MAX: Uint> Park for SpinThanPark<MAX> {
 
 /// TODO: Docs
 #[derive(Default)]
-pub struct LoopThanPark<const MAX: Uint = DEFMAX> {
+pub struct LoopThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Loop, MAX>,
 }
 
-impl<const MAX: Uint> Relax for LoopThanPark<MAX> {
+impl<const MAX: Uint> Relax for LoopThenPark<MAX> {
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for LoopThanPark<MAX> {
+impl<const MAX: Uint> Park for LoopThenPark<MAX> {
     type UnlockRelax = Loop;
 
     #[inline(always)]
@@ -67,18 +67,18 @@ impl<const MAX: Uint> Park for LoopThanPark<MAX> {
 
 /// TODO: Docs
 #[derive(Default)]
-pub struct YieldThanPark<const MAX: Uint = DEFMAX> {
+pub struct YieldThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Yield, MAX>,
 }
 
-impl<const MAX: Uint> Relax for YieldThanPark<MAX> {
+impl<const MAX: Uint> Relax for YieldThenPark<MAX> {
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for YieldThanPark<MAX> {
+impl<const MAX: Uint> Park for YieldThenPark<MAX> {
     type UnlockRelax = Yield;
 
     #[inline(always)]
@@ -109,18 +109,18 @@ impl Park for ImmediatePark {
 
 /// TODO: Docs
 #[derive(Default)]
-pub struct SpinBackoffThanPark<const MAX: Uint = DEFMAX> {
+pub struct SpinBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<SpinBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Relax for SpinBackoffThanPark<MAX> {
+impl<const MAX: Uint> Relax for SpinBackoffThenPark<MAX> {
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for SpinBackoffThanPark<MAX> {
+impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
     type UnlockRelax = SpinBackoff;
 
     #[inline(always)]
@@ -131,18 +131,18 @@ impl<const MAX: Uint> Park for SpinBackoffThanPark<MAX> {
 
 /// TODO: Docs
 #[derive(Default)]
-pub struct YieldBackoffThanPark<const MAX: Uint = DEFMAX> {
+pub struct YieldBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<YieldBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Relax for YieldBackoffThanPark<MAX> {
+impl<const MAX: Uint> Relax for YieldBackoffThenPark<MAX> {
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for YieldBackoffThanPark<MAX> {
+impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
     type UnlockRelax = YieldBackoff;
 
     #[inline(always)]
@@ -206,20 +206,20 @@ mod test {
 
     trait Bounded<const MAX: Uint>: Park {}
 
-    use super::SpinThanPark;
-    impl<const MAX: Uint> Bounded<MAX> for SpinThanPark<MAX> {}
+    use super::SpinThenPark;
+    impl<const MAX: Uint> Bounded<MAX> for SpinThenPark<MAX> {}
 
-    use super::YieldThanPark;
-    impl<const MAX: Uint> Bounded<MAX> for YieldThanPark<MAX> {}
+    use super::YieldThenPark;
+    impl<const MAX: Uint> Bounded<MAX> for YieldThenPark<MAX> {}
 
-    use super::LoopThanPark;
-    impl<const MAX: Uint> Bounded<MAX> for LoopThanPark<MAX> {}
+    use super::LoopThenPark;
+    impl<const MAX: Uint> Bounded<MAX> for LoopThenPark<MAX> {}
 
-    use super::SpinBackoffThanPark;
-    impl<const MAX: Uint> Bounded<MAX> for SpinBackoffThanPark<MAX> {}
+    use super::SpinBackoffThenPark;
+    impl<const MAX: Uint> Bounded<MAX> for SpinBackoffThenPark<MAX> {}
 
-    use super::YieldBackoffThanPark;
-    impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThanPark<MAX> {}
+    use super::YieldBackoffThenPark;
+    impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThenPark<MAX> {}
 
     fn parking_policy_loop<P: Park>() -> (P, Uint) {
         let mut parking_waiter = P::default();
@@ -245,37 +245,37 @@ mod test {
 
     #[test]
     fn spins() {
-        should_park_eventually::<SpinThanPark<0>, 0>();
-        should_park_eventually::<SpinThanPark<1>, 1>();
-        should_park_eventually::<SpinThanPark<10>, 10>();
+        should_park_eventually::<SpinThenPark<0>, 0>();
+        should_park_eventually::<SpinThenPark<1>, 1>();
+        should_park_eventually::<SpinThenPark<10>, 10>();
     }
 
     #[test]
     fn yields() {
-        should_park_eventually::<YieldThanPark<0>, 0>();
-        should_park_eventually::<YieldThanPark<1>, 1>();
-        should_park_eventually::<YieldThanPark<10>, 10>();
+        should_park_eventually::<YieldThenPark<0>, 0>();
+        should_park_eventually::<YieldThenPark<1>, 1>();
+        should_park_eventually::<YieldThenPark<10>, 10>();
     }
 
     #[test]
     fn loops() {
-        should_park_eventually::<LoopThanPark<0>, 0>();
-        should_park_eventually::<LoopThanPark<1>, 1>();
-        should_park_eventually::<LoopThanPark<10>, 10>();
+        should_park_eventually::<LoopThenPark<0>, 0>();
+        should_park_eventually::<LoopThenPark<1>, 1>();
+        should_park_eventually::<LoopThenPark<10>, 10>();
     }
 
     #[test]
     fn spin_backoff() {
-        should_park_eventually::<SpinBackoffThanPark<0>, 0>();
-        should_park_eventually::<SpinBackoffThanPark<1>, 1>();
-        should_park_eventually::<SpinBackoffThanPark<10>, 10>();
+        should_park_eventually::<SpinBackoffThenPark<0>, 0>();
+        should_park_eventually::<SpinBackoffThenPark<1>, 1>();
+        should_park_eventually::<SpinBackoffThenPark<10>, 10>();
     }
 
     #[test]
     fn yield_backoff() {
-        should_park_eventually::<YieldBackoffThanPark<0>, 0>();
-        should_park_eventually::<YieldBackoffThanPark<1>, 1>();
-        should_park_eventually::<YieldBackoffThanPark<10>, 10>();
+        should_park_eventually::<YieldBackoffThenPark<0>, 0>();
+        should_park_eventually::<YieldBackoffThenPark<1>, 1>();
+        should_park_eventually::<YieldBackoffThenPark<10>, 10>();
     }
 
     #[test]

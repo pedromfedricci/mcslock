@@ -1,5 +1,4 @@
-//! A `parking` MCS lock implementation that requires exclusive access to
-//! a locally accessible queue node.
+//! MCS lock implementation with thread parking support.
 //!
 //! The `raw` implementation of MCS lock is fair, that is, it guarantees that
 //! thread that have waited for longer will be scheduled first (FIFO). Each
@@ -14,12 +13,12 @@
 //! the guard is dropped, the mutex is freed. Mutex guards are returned by
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
-
+//!
 //! The Mutex is generic over the parking policy. User may choose a policy
-//! as long as it implements the [`Park`] trait. There is a number of policies
-//! provided by the [`park`] module. Each module in `parking::raw` provides type
-//! aliases for [`Mutex`] and [`MutexGuard`] associated with one parking policy.
-//! See their documentation for more information.
+//! as long as it implements the [`Park`] trait. There is a number of parking
+//! policies provided by the [`park`] module. Each module in `parking::raw`
+//! provides type aliases for [`Mutex`] and [`MutexGuard`] associated with one
+//! parking policy. See their documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock
@@ -37,16 +36,16 @@ mod thread_local;
 #[cfg(feature = "thread_local")]
 pub use thread_local::LocalMutexNode;
 
-/// A `parking` MCS lock that implements a `spin than park` parking policy.
+/// A MCS lock that implements a `spin then park` parking policy.
 ///
 /// During lock contention, and for a certain amount of attempts, this lock spins
 /// while signaling the processor that it is running a busy-wait spin-loop. Once
 /// all attempts have been tried, puts the thread to sleep.
 pub mod spins {
     use super::mutex;
-    use crate::parking::park::SpinThanPark;
+    use crate::parking::park::SpinThenPark;
 
-    /// A [`parking::raw::Mutex`] alias that implements the [`SpinThanPark`]
+    /// A [`parking::raw::Mutex`] that implements the [`SpinThenPark`]
     /// parking policy.
     ///
     /// # Example
@@ -60,15 +59,15 @@ pub mod spins {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`parking::raw::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, SpinThanPark>;
+    pub type Mutex<T> = mutex::Mutex<T, SpinThenPark>;
 
-    /// A [`parking::raw::MutexGuard`] that implements the [`SpinThanPark`]
+    /// A [`parking::raw::MutexGuard`] that implements the [`SpinThenPark`]
     /// parking policy.
     ///
     /// [`parking::raw::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinThanPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinThenPark>;
 
-    /// A `parking` MCS lock that implements a `spin with backoff than park`
+    /// A MCS lock that implements a `spin with backoff then park`
     /// policy.
     ///
     /// During lock contention, and for a certain amount of attempts, this lock
@@ -77,9 +76,9 @@ pub mod spins {
     /// puts the thread to sleep.
     pub mod backoff {
         use super::mutex;
-        use crate::parking::park::SpinBackoffThanPark;
+        use crate::parking::park::SpinBackoffThenPark;
 
-        /// A [`parking::raw::Mutex`] that implements the [`SpinBackoffThanPark`]
+        /// A [`parking::raw::Mutex`] that implements the [`SpinBackoffThenPark`]
         /// parking policy.
         ///
         /// # Example
@@ -93,26 +92,26 @@ pub mod spins {
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`parking::raw::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, SpinBackoffThanPark>;
+        pub type Mutex<T> = mutex::Mutex<T, SpinBackoffThenPark>;
 
-        /// A [`parking::raw::MutexGuard`] that implements the [`SpinBackoffThanPark`]
+        /// A [`parking::raw::MutexGuard`] that implements the [`SpinBackoffThenPark`]
         /// parking policy.
         ///
         /// [`parking::raw::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoffThanPark>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoffThenPark>;
     }
 }
 
-/// A `parking` MCS lock that implements a `yield than park` parking policy.
+/// A MCS lock that implements a `yield then park` parking policy.
 ///
 /// During lock contention, and for a certain amount of attempts, this lock will
 /// yield the current time slice to the OS scheduler. Once all attempts have
 /// been tried, puts the thread to sleep.
 pub mod yields {
     use super::mutex;
-    use crate::parking::park::YieldThanPark;
+    use crate::parking::park::YieldThenPark;
 
-    /// A [`parking::raw::Mutex`] that implements the [`YieldThanPark`] parking
+    /// A [`parking::raw::Mutex`] that implements the [`YieldThenPark`] parking
     /// policy.
     ///
     /// # Example
@@ -126,15 +125,15 @@ pub mod yields {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`parking::raw::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, YieldThanPark>;
+    pub type Mutex<T> = mutex::Mutex<T, YieldThenPark>;
 
-    /// A [`parking::raw::MutexGuard`] that implements the [`YieldThanPark`]
+    /// A [`parking::raw::MutexGuard`] that implements the [`YieldThenPark`]
     /// parking policy.
     ///
     /// [`parking::raw::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldThanPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldThenPark>;
 
-    /// A `parking` MCS lock that implements a `yield with backoff than park`
+    /// A MCS lock that implements a `yield with backoff then park`
     /// parking policy.
     ///
     /// During lock contention, and for a certain amount of attempts, this lock
@@ -143,9 +142,9 @@ pub mod yields {
     /// will then put the thread to sleep.
     pub mod backoff {
         use super::mutex;
-        use crate::parking::park::YieldBackoffThanPark;
+        use crate::parking::park::YieldBackoffThenPark;
 
-        /// A [`parking::raw::Mutex`] that implements the [`YieldBackoffThanPark`]
+        /// A [`parking::raw::Mutex`] that implements the [`YieldBackoffThenPark`]
         /// parking policy.
         ///
         /// # Example
@@ -159,25 +158,25 @@ pub mod yields {
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`parking::raw::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, YieldBackoffThanPark>;
+        pub type Mutex<T> = mutex::Mutex<T, YieldBackoffThenPark>;
 
-        /// A [`parking::raw::MutexGuard`] that implements the [`YieldBackoffThanPark`]
+        /// A [`parking::raw::MutexGuard`] that implements the [`YieldBackoffThenPark`]
         /// parking policy.
         ///
         /// [`parking::raw::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoffThanPark>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoffThenPark>;
     }
 }
-/// A `parking` MCS lock that implements a `loop than park` parking policy.
+/// A MCS lock that implements a `loop then park` parking policy.
 ///
 /// During lock contention, and for a certain amount of attempts, this lock
 /// will rapidly spin without telling the CPU to do any power down. Once all
 /// attempts have been tried, it will then put the thread to sleep.
 pub mod loops {
     use super::mutex;
-    use crate::parking::park::LoopThanPark;
+    use crate::parking::park::LoopThenPark;
 
-    /// A [`parking::raw::Mutex`] that implements the [`LoopThanPark`] parking
+    /// A [`parking::raw::Mutex`] that implements the [`LoopThenPark`] parking
     /// policy.
     ///
     /// # Example
@@ -191,16 +190,16 @@ pub mod loops {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`parking::raw::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, LoopThanPark>;
+    pub type Mutex<T> = mutex::Mutex<T, LoopThenPark>;
 
-    /// A [`parking::raw::MutexGuard`] that implements the [`LoopThanPark`] parking
-    /// policy.
+    /// A [`parking::raw::MutexGuard`] that implements the [`LoopThenPark`]
+    /// parking policy.
     ///
     /// [`parking::raw::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThanPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThenPark>;
 }
 
-/// A `parking` MCS lock that implements a `immediate park` parking policy.
+/// A MCS lock that implements a `immediate park` parking policy.
 ///
 /// During lock contention, this lock will immediately put the thread to sleep.
 pub mod immediate {
