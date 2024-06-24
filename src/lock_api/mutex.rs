@@ -5,12 +5,14 @@ use crate::relax::Relax;
 #[cfg(test)]
 use crate::test::{LockData, LockNew, LockWith};
 
-/// A lock that provides mutually exclusive data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
+/// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
+///
+/// [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 pub type Mutex<T, R> = lock_api::Mutex<barging::Mutex<(), R>, T>;
 
-/// A guard that provides mutable data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
+/// A [`lock_api::MutexGuard`] alias that wraps a [`barging::MutexGuard`].
+///
+/// [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
 pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, barging::Mutex<(), R>, T>;
 
 #[cfg(test)]

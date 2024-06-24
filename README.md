@@ -225,7 +225,7 @@ feature is not `no_std` compatible.
 The `barging` feature provides locking APIs that are compatible with the
 [lock_api] crate. It does not require node allocations from the caller.
 The [`barging`] module is suitable for `no_std` environments, but
-[`parking::baging`] is not. This implementation is not fair (does not guarantee
+[`parking::barging`] is not. This implementation is not fair (does not guarantee
 FIFO), but can improve throughput when the lock is heavily contended.
 
 ### lock_api

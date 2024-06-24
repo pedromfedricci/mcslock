@@ -1,17 +1,19 @@
-use crate::parking::barging;
+use crate::parking;
 
 #[cfg(test)]
 use crate::parking::park::Park;
 #[cfg(test)]
 use crate::test::{LockData, LockNew, LockWith};
 
-/// A lock that provides mutually exclusive data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
-pub type Mutex<T, R> = lock_api::Mutex<barging::Mutex<(), R>, T>;
+/// A [`lock_api::Mutex`] alias that wraps a [`parking::barging::Mutex`].
+///
+/// [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
+pub type Mutex<T, R> = lock_api::Mutex<parking::barging::Mutex<(), R>, T>;
 
-/// A guard that provides mutable data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
-pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, barging::Mutex<(), R>, T>;
+/// A [`lock_api::MutexGuard`] alias that wraps a [`parking::barging::MutexGuard`].
+///
+/// [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
+pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, parking::barging::Mutex<(), R>, T>;
 
 #[cfg(test)]
 impl<T: ?Sized, P: Park> LockNew for Mutex<T, P> {
