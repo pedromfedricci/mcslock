@@ -1,8 +1,8 @@
-use core::fmt;
+use core::fmt::{self, Debug, Display, Formatter};
 
-use crate::cfg::atomic::AtomicBool;
 use crate::inner::barging as inner;
-use crate::relax::{Relax, RelaxWait};
+use crate::parking::park::{Park, ParkWait};
+use crate::parking::parker::Parker;
 
 #[cfg(test)]
 use crate::test::{LockNew, LockWith};
@@ -23,10 +23,10 @@ use crate::test::{LockNew, LockWith};
 /// use std::thread;
 /// use std::sync::mpsc::channel;
 ///
-/// use mcslock::barging;
-/// use mcslock::relax::Spin;
+/// use mcslock::parking::barging;
+/// use mcslock::parking::park::SpinThenPark;
 ///
-/// type Mutex<T> = barging::Mutex<T, Spin>;
+/// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
 ///
 /// const N: usize = 10;
 ///
@@ -61,24 +61,24 @@ use crate::test::{LockNew, LockWith};
 /// [`new`]: Mutex::new
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
-pub struct Mutex<T: ?Sized, R> {
-    inner: inner::Mutex<T, AtomicBool, AtomicBool, RelaxWait<R>>,
+pub struct Mutex<T: ?Sized, P> {
+    inner: inner::Mutex<T, Parker, Parker, ParkWait<P>>,
 }
 
-// Same unsafe impls as `crate::raw::Mutex`.
-unsafe impl<T: ?Sized + Send, R> Send for Mutex<T, R> {}
-unsafe impl<T: ?Sized + Send, R> Sync for Mutex<T, R> {}
+// Same unsafe impls as `crate::inner::raw::Mutex`.
+unsafe impl<T: ?Sized + Send, P> Send for Mutex<T, P> {}
+unsafe impl<T: ?Sized + Send, P> Sync for Mutex<T, P> {}
 
-impl<T, R> Mutex<T, R> {
+impl<T, P> Mutex<T, P> {
     /// Creates a new mutex in an unlocked state ready for use.
     ///
     /// # Examples
     ///
     /// ```
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// const MUTEX: Mutex<i32> = Mutex::new(0);
     /// let mutex = Mutex::new(0);
@@ -101,10 +101,10 @@ impl<T, R> Mutex<T, R> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Mutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
@@ -115,7 +115,8 @@ impl<T, R> Mutex<T, R> {
     }
 }
 
-impl<T: ?Sized, R: Relax> Mutex<T, R> {
+impl<T: ?Sized, P: Park> Mutex<T, P> {
+    #[inline]
     /// Acquires this mutex, blocking the current thread until it is able to do so.
     ///
     /// This function will block the local thread until it is available to acquire
@@ -131,10 +132,10 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -146,8 +147,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
-    #[inline]
-    pub fn lock(&self) -> MutexGuard<'_, T, R> {
+    pub fn lock(&self) -> MutexGuard<'_, T, P> {
         self.inner.lock().into()
     }
 
@@ -166,10 +166,10 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -186,7 +186,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::barging::spins::Mutex;
+    /// use mcslock::parking::barging::spins::Mutex;
     ///
     /// let mutex = Mutex::new(1);
     /// let data = mutex.lock_with(|guard| &*guard);
@@ -194,13 +194,14 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     #[inline]
     pub fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
         f(self.lock())
     }
 }
 
-impl<T: ?Sized, R> Mutex<T, R> {
+impl<T: ?Sized, P> Mutex<T, P> {
+    #[inline]
     /// Attempts to acquire this mutex without blocking the thread.
     ///
     /// If the lock could not be acquired at this time, then [`None`] is returned.
@@ -215,10 +216,10 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -235,8 +236,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     ///
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
-    #[inline]
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, R>> {
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, P>> {
         self.inner.try_lock().map(From::from)
     }
 
@@ -255,10 +255,10 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Arc::new(Mutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -281,7 +281,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::barging::spins::Mutex;
+    /// use mcslock::parking::barging::spins::Mutex;
     ///
     /// let mutex = Mutex::new(1);
     /// let data = mutex.try_lock_with(|guard| &*guard.unwrap());
@@ -289,7 +289,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     #[inline]
     pub fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
     {
         f(self.try_lock())
     }
@@ -302,10 +302,10 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// # Example
     ///
     /// ```
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -326,10 +326,10 @@ impl<T: ?Sized, R> Mutex<T, R> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::barging;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::parking::barging;
+    /// use mcslock::parking::park::SpinThenPark;
     ///
-    /// type Mutex<T> = barging::Mutex<T, Spin>;
+    /// type Mutex<T> = barging::Mutex<T, SpinThenPark>;
     ///
     /// let mut mutex = Mutex::new(0);
     /// *mutex.get_mut() = 10;
@@ -343,30 +343,30 @@ impl<T: ?Sized, R> Mutex<T, R> {
     }
 }
 
-impl<T: Default, R> Default for Mutex<T, R> {
-    /// Creates a `Mutex<T, R>`, with the `Default` value for `T`.
+impl<T: Default, P> Default for Mutex<T, P> {
+    /// Creates a `Mutex<T, P>`, with the `Default` value for `T`.
     #[inline]
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
-impl<T, R> From<T> for Mutex<T, R> {
-    /// Creates a `Mutex<T, R>` from a instance of `T`.
+impl<T, P> From<T> for Mutex<T, P> {
+    /// Creates a `Mutex<T, P>` from a instance of `T`.
     #[inline]
     fn from(data: T) -> Self {
         Self::new(data)
     }
 }
 
-impl<T: ?Sized + fmt::Debug, R: Relax> fmt::Debug for Mutex<T, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T: ?Sized + Debug, P> Debug for Mutex<T, P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R> LockNew for Mutex<T, R> {
+impl<T: ?Sized, P> LockNew for Mutex<T, P> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -378,22 +378,22 @@ impl<T: ?Sized, R> LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
-    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+impl<T: ?Sized, P: Park> LockWith for Mutex<T, P> {
+    type Guard<'a> = MutexGuard<'a, Self::Target, P>
     where
         Self: 'a,
         Self::Target: 'a;
 
     fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
     {
         self.try_lock_with(f)
     }
 
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
         self.lock_with(f)
     }
@@ -404,7 +404,7 @@ impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
 }
 
 #[cfg(all(not(loom), test))]
-impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
+impl<T: ?Sized, P> crate::test::LockData for Mutex<T, P> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,
@@ -418,7 +418,7 @@ impl<T: ?Sized, R> crate::test::LockData for Mutex<T, R> {
 }
 
 #[cfg(all(feature = "lock_api", not(loom)))]
-unsafe impl<R: Relax> lock_api::RawMutex for Mutex<(), R> {
+unsafe impl<P: Park> lock_api::RawMutex for Mutex<(), P> {
     type GuardMarker = lock_api::GuardSend;
 
     // It is fine to const initialize `Mutex<(), R>` since the data is not going
@@ -464,36 +464,36 @@ unsafe impl<R: Relax> lock_api::RawMutex for Mutex<(), R> {
 /// [`lock_with`]: Mutex::lock_with
 /// [`try_lock_with`]: Mutex::try_lock_with
 #[must_use = "if unused the Mutex will immediately unlock"]
-pub struct MutexGuard<'a, T: ?Sized, R> {
-    inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>,
+pub struct MutexGuard<'a, T: ?Sized, P> {
+    inner: inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>,
 }
 
-// Same unsafe impls as `crate::raw::MutexGuard`.
-unsafe impl<T: ?Sized + Send, R> Send for MutexGuard<'_, T, R> {}
-unsafe impl<T: ?Sized + Sync, R> Sync for MutexGuard<'_, T, R> {}
+// Same unsafe impls as `crate::inner::raw::MutexGuard`.
+unsafe impl<T: ?Sized + Send, P> Send for MutexGuard<'_, T, P> {}
+unsafe impl<T: ?Sized + Sync, P> Sync for MutexGuard<'_, T, P> {}
 
-impl<'a, T: ?Sized, R> From<inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>>
-    for MutexGuard<'a, T, R>
+impl<'a, T: ?Sized, P> From<inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>>
+    for MutexGuard<'a, T, P>
 {
-    fn from(inner: inner::MutexGuard<'a, T, AtomicBool, AtomicBool, RelaxWait<R>>) -> Self {
+    fn from(inner: inner::MutexGuard<'a, T, Parker, Parker, ParkWait<P>>) -> Self {
         Self { inner }
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug, R> fmt::Debug for MutexGuard<'a, T, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<'a, T: ?Sized + Debug, P> Debug for MutexGuard<'a, T, P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display, R> fmt::Display for MutexGuard<'a, T, R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<'a, T: ?Sized + Display, P> Display for MutexGuard<'a, T, P> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R> core::ops::Deref for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, P> core::ops::Deref for MutexGuard<'a, T, P> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -504,7 +504,7 @@ impl<'a, T: ?Sized, R> core::ops::Deref for MutexGuard<'a, T, R> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, R> core::ops::DerefMut for MutexGuard<'a, T, R> {
+impl<'a, T: ?Sized, P> core::ops::DerefMut for MutexGuard<'a, T, P> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -516,7 +516,7 @@ impl<'a, T: ?Sized, R> core::ops::DerefMut for MutexGuard<'a, T, R> {
 /// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
-unsafe impl<T: ?Sized, R> crate::loom::Guard for MutexGuard<'_, T, R> {
+unsafe impl<T: ?Sized, P> crate::loom::Guard for MutexGuard<'_, T, P> {
     type Target = T;
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {
@@ -526,27 +526,47 @@ unsafe impl<T: ?Sized, R> crate::loom::Guard for MutexGuard<'_, T, R> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::barging::yields::Mutex;
+    use crate::parking::barging::{immediate, yields};
     use crate::test::tests;
+
+    type Mutex<T> = immediate::Mutex<T>;
+
+    type ImmediateMutex<T> = immediate::Mutex<T>;
+    type YieldThenParkMutex<T> = yields::Mutex<T>;
 
     #[test]
     fn node_waiter_drop_does_not_matter() {
-        tests::node_waiter_drop_does_not_matter::<super::AtomicBool>();
+        tests::node_waiter_drop_does_not_matter::<super::Parker>();
     }
 
     #[test]
-    fn lots_and_lots_lock() {
-        tests::lots_and_lots_lock::<Mutex<_>>();
+    fn lots_and_lots_lock_immediate_park() {
+        tests::lots_and_lots_lock::<ImmediateMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock() {
-        tests::lots_and_lots_try_lock::<Mutex<_>>();
+    fn lots_and_lots_lock_yield_than_park() {
+        tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock() {
-        tests::lots_and_lots_mixed_lock::<Mutex<_>>();
+    fn lots_and_lots_try_lock_immediate_park() {
+        tests::lots_and_lots_try_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock_yield_than_park() {
+        tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_immediate_park() {
+        tests::lots_and_lots_mixed_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_yield_than_park() {
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
@@ -617,21 +637,36 @@ mod test {
 
 #[cfg(all(loom, test))]
 mod model {
-    use crate::barging::yields::Mutex;
     use crate::loom::models;
+    use crate::parking::barging::{immediate, yields};
 
     #[test]
-    fn try_lock_join() {
-        models::try_lock_join::<Mutex<_>>();
+    fn try_lock_join_immediate_park() {
+        models::try_lock_join::<immediate::Mutex<_>>();
     }
 
     #[test]
-    fn lock_join() {
-        models::lock_join::<Mutex<_>>();
+    fn lock_join_immediate_park() {
+        models::lock_join::<immediate::Mutex<_>>();
     }
 
     #[test]
-    fn mixed_lock_join() {
-        models::mixed_lock_join::<Mutex<_>>();
+    fn mixed_lock_join_immediate_park() {
+        models::mixed_lock_join::<immediate::Mutex<_>>();
+    }
+
+    #[test]
+    fn try_lock_join_yield_than_park() {
+        models::try_lock_join::<yields::Mutex<_>>();
+    }
+
+    #[test]
+    fn lock_join_yield_than_park() {
+        models::lock_join::<yields::Mutex<_>>();
+    }
+
+    #[test]
+    fn mixed_lock_join_yield_than_park() {
+        models::mixed_lock_join::<yields::Mutex<_>>();
     }
 }

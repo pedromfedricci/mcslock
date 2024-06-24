@@ -1,22 +1,22 @@
-use crate::barging;
+use crate::parking;
 
 #[cfg(test)]
-use crate::relax::Relax;
+use crate::parking::park::Park;
 #[cfg(test)]
 use crate::test::{LockData, LockNew, LockWith};
 
-/// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
+/// A [`lock_api::Mutex`] alias that wraps a [`parking::barging::Mutex`].
 ///
 /// [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
-pub type Mutex<T, R> = lock_api::Mutex<barging::Mutex<(), R>, T>;
+pub type Mutex<T, R> = lock_api::Mutex<parking::barging::Mutex<(), R>, T>;
 
-/// A [`lock_api::MutexGuard`] alias that wraps a [`barging::MutexGuard`].
+/// A [`lock_api::MutexGuard`] alias that wraps a [`parking::barging::MutexGuard`].
 ///
 /// [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
-pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, barging::Mutex<(), R>, T>;
+pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, parking::barging::Mutex<(), R>, T>;
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockNew for Mutex<T, R> {
+impl<T: ?Sized, P: Park> LockNew for Mutex<T, P> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -28,22 +28,22 @@ impl<T: ?Sized, R: Relax> LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
-    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+impl<T: ?Sized, P: Park> LockWith for Mutex<T, P> {
+    type Guard<'a> = MutexGuard<'a, Self::Target, P>
     where
         Self: 'a,
         Self::Target: 'a;
 
     fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
     {
         f(self.try_lock())
     }
 
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
         f(self.lock())
     }
@@ -54,7 +54,7 @@ impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockData for Mutex<T, R> {
+impl<T: ?Sized, P: Park> LockData for Mutex<T, P> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,
@@ -69,22 +69,42 @@ impl<T: ?Sized, R: Relax> LockData for Mutex<T, R> {
 
 #[cfg(test)]
 mod test {
-    use crate::lock_api::yields::Mutex;
+    use crate::parking::lock_api::{immediate, yields};
     use crate::test::tests;
 
+    type Mutex<T> = immediate::Mutex<T>;
+
+    type ImmediateMutex<T> = immediate::Mutex<T>;
+    type YieldThenParkMutex<T> = yields::Mutex<T>;
+
     #[test]
-    fn lots_and_lots_lock() {
-        tests::lots_and_lots_lock::<Mutex<_>>();
+    fn lots_and_lots_lock_immediate_park() {
+        tests::lots_and_lots_lock::<ImmediateMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock() {
-        tests::lots_and_lots_try_lock::<Mutex<_>>();
+    fn lots_and_lots_lock_yield_than_park() {
+        tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock() {
-        tests::lots_and_lots_mixed_lock::<Mutex<_>>();
+    fn lots_and_lots_try_lock_immediate_park() {
+        tests::lots_and_lots_try_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock_yield_than_park() {
+        tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_immediate_park() {
+        tests::lots_and_lots_mixed_lock::<ImmediateMutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock_yield_than_park() {
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]

@@ -43,7 +43,7 @@ jobs:
           --target ${{ env.NO_STD_TARGET }}
           --no-dev-deps
           --feature-powerset
-          --skip yield,thread_local
+          --skip yield,thread_local,parking
 
   msrv:
     name: MSRV
@@ -54,9 +54,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Install Rust 1.65.0
-        # NOTE: We actually installing the first nightly 1.66.0. It should be
-        # equivalent to stable 1.65.0. We need the nightly version to use the
+        # NOTE: We are actually installing the first nightly 1.66.0. It should
+        # be equivalent to stable 1.65.0. We need the nightly version to use the
         # sparse registry feature. This massively improves the index download.
+        # Link: https://blog.rust-lang.org/2022/06/22/sparse-registry-testing.html
         run: rustup toolchain install nightly-2022-09-18
       - name: Set Rust 1.65.0 as default
         run: rustup default nightly-2022-09-18
@@ -94,6 +95,8 @@ jobs:
         run: cargo run --example thread_local --features thread_local
       - name: Run lock_api example
         run: cargo run --example lock_api --features lock_api,barging
+      - name: Run parking with thread_local example
+        run: cargo run --example parking --features parking,thread_local
 
   linter:
     name: Linter
@@ -146,8 +149,11 @@ jobs:
         run: rustup toolchain install nightly --component miri
       - name: Set Rust nightly as default
         run: rustup default nightly
+        # NOTE: Nextest is configure to run Miri against `num-cpus` threads.
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
       - name: Miri test
-        run: cargo miri test --all-features
+        run: cargo miri nextest run --all-features
 
   loom:
     name: Loom

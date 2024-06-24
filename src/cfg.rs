@@ -23,7 +23,7 @@ pub mod cell {
         where
             F: FnOnce(&Self::Target) -> Ret,
         {
-            // SAFETY: Caller must guarantee there are no mutable aliases.
+            // SAFETY: Caller guaranteed that there are no mutable aliases.
             f(unsafe { &*self.get() })
         }
     }
@@ -37,7 +37,7 @@ pub mod cell {
         where
             F: FnOnce(&Self::Target) -> Ret,
         {
-            // SAFETY: Caller must guarantee there are no mutable aliases.
+            // SAFETY: Caller guaranteed that there are no mutable aliases.
             self.with(|ptr| f(unsafe { &*ptr }))
         }
     }
