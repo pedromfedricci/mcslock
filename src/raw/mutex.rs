@@ -431,7 +431,7 @@ impl<T: ?Sized, R> Mutex<T, R> {
     }
 }
 
-impl<T: ?Sized + Default, R> Default for Mutex<T, R> {
+impl<T: Default, R> Default for Mutex<T, R> {
     /// Creates a `Mutex<T, R>`, with the `Default` value for `T`.
     #[inline]
     fn default() -> Self {

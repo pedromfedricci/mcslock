@@ -8,9 +8,9 @@
 [![Codecov][codecov-badge]][codecov]
 ![No_std][no_std-badge]
 
-MCS lock is a List-Based Queuing Lock that avoids network contention by
-having threads spin and/or park on local memory locations. The main properties of
-this mechanism are:
+MCS lock is a List-Based Queuing Lock that avoids network contention by having
+threads spin and/or park on local memory locations. The main properties of this
+mechanism are:
 
 - guarantees FIFO ordering of lock acquisitions;
 - spins on locally-accessible flag variables only;
@@ -18,16 +18,17 @@ this mechanism are:
 - works equally well (requiring only O(1) network transactions per lock
   acquisition) on machines with and without coherent caches.
 
-This algorithm and several others were introduced by [Mellor-Crummey and Scott] paper.
-And a simpler correctness proof of the MCS lock was proposed by [Johnson and Harathi].
+This algorithm and several others were introduced by [Mellor-Crummey and Scott]
+paper. And a simpler correctness proof of the MCS lock was proposed by
+[Johnson and Harathi].
 
 ## Spinlock use cases
 
 It is noteworthy to mention that [spinlocks are usually not what you want]. The
 majority of use cases are well covered by OS-based mutexes like
-[`std::sync::Mutex`] or [`parking_lot::Mutex`] or even this crate's [`parking`] Mutex.
-These implementations will notify the system that the waiting thread should be parked,
-freeing the processor to work on something else.
+[`std::sync::Mutex`] or [`parking_lot::Mutex`] or even this crate's [`parking`]
+Mutexes. These implementations will notify the system that the waiting thread
+should be parked, freeing the processor to work on something else.
 
 Spinlocks are only efficient in very few circumstances where the overhead
 of context switching or process rescheduling are greater than busy waiting
@@ -304,8 +305,11 @@ each of your dependencies, including this one.
 [`raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.LocalMutexNode.html
 [`parking`]: https://docs.rs/mcslock/latest/mcslock/parking/index.html
 [`parking::park`]: https://docs.rs/mcslock/latest/mcslock/parking/park/index.html
-[`parking::raw::MutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.MutexNode.html
+[`parking::barging`]: https://docs.rs/mcslock/latest/mcslock/parking/barging/index.html
+[`parking::lock_api`]: https://docs.rs/mcslock/latest/mcslock/parking/lock_api/index.html
+[`parking::raw::Mutex`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.Mutex.html
 [`parking::raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.LocalMutexNode.html
+[`parking::barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/parking/barging/struct.Mutex.html
 [`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
 [`barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/barging/struct.Mutex.html
 [`lock_api`]: https://docs.rs/mcslock/latest/mcslock/lock_api/index.html

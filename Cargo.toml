@@ -41,13 +41,17 @@ version = "0.7"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = ["cfg(tarpaulin_include)", "cfg(loom)"]
+
 [[example]]
 name = "barging"
 required-features = ["barging"]
 
 [[example]]
 name = "parking"
-required-features = ["parking"]
+required-features = ["parking", "thread_local"]
 
 [[example]]
 name = "thread_local"
