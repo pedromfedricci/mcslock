@@ -531,6 +531,7 @@ pub struct MutexGuard<'a, T: ?Sized, P: Park> {
 unsafe impl<T: ?Sized + Send, P: Park> Send for MutexGuard<'_, T, P> {}
 unsafe impl<T: ?Sized + Sync, P: Park> Sync for MutexGuard<'_, T, P> {}
 
+#[doc(hidden)]
 impl<'a, T: ?Sized, P: Park> From<inner::MutexGuard<'a, T, Parker, ParkWait<P>>>
     for MutexGuard<'a, T, P>
 {

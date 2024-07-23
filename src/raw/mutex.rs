@@ -532,6 +532,7 @@ pub struct MutexGuard<'a, T: ?Sized, R: Relax> {
 unsafe impl<T: ?Sized + Send, R: Relax> Send for MutexGuard<'_, T, R> {}
 unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 
+#[doc(hidden)]
 impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, RelaxWait<R>>>
     for MutexGuard<'a, T, R>
 {

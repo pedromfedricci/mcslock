@@ -53,7 +53,7 @@ Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 
 [dependencies]
 # Available features: `yield`, `barging`, `parking`, `thread_local` and `lock_api`.
-mcslock = { version = "0.2", features = ["barging"] }
+mcslock = { version = "0.2", features = ["parking"] }
 ```
 
 ## Documentation

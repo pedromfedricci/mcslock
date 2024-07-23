@@ -1,5 +1,3 @@
-//! TODO: Docs
-
 use crate::lock::Wait;
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 
@@ -19,9 +17,9 @@ pub trait Park: Relax {
 }
 
 type Uint = u16;
-const DEFMAX: Uint = 100;
 
-/// TODO: Docs
+pub const DEFMAX: Uint = 100;
+
 #[derive(Default)]
 pub struct SpinThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Spin, MAX>,
@@ -43,7 +41,6 @@ impl<const MAX: Uint> Park for SpinThenPark<MAX> {
     }
 }
 
-/// TODO: Docs
 #[derive(Default)]
 pub struct LoopThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Loop, MAX>,
@@ -65,7 +62,6 @@ impl<const MAX: Uint> Park for LoopThenPark<MAX> {
     }
 }
 
-/// TODO: Docs
 #[derive(Default)]
 pub struct YieldThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Yield, MAX>,
@@ -87,7 +83,7 @@ impl<const MAX: Uint> Park for YieldThenPark<MAX> {
     }
 }
 
-/// Immediately inform that the current should be parked.
+// Immediately inform that the current should be parked.
 #[derive(Default)]
 #[non_exhaustive]
 pub struct ImmediatePark;
@@ -107,7 +103,6 @@ impl Park for ImmediatePark {
     }
 }
 
-/// TODO: Docs
 #[derive(Default)]
 pub struct SpinBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<SpinBackoff, MAX>,
@@ -129,7 +124,6 @@ impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
     }
 }
 
-/// TODO: Docs
 #[derive(Default)]
 pub struct YieldBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<YieldBackoff, MAX>,
@@ -151,12 +145,8 @@ impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
     }
 }
 
-/// A bounded, relaxed waiting policy that will block the thread against a
-/// condition for at most some number of attempts.
-///
-/// While the condition holds `true`, we are signaling to the Parker than it
-/// should not park the current thread yet. Once all attempts have been made,
-/// return `false`, indicating to the Parker that it should park the thread.
+/// A bounded, relaxed waiting policy that will block the thread for at most
+/// some number of attempts.
 #[derive(Default)]
 struct Bounded<R, const MAX: Uint> {
     relax: R,

@@ -30,35 +30,28 @@ impl<L> MutexNodeInit<L> {
 }
 
 impl<L: Lock> MutexNodeInit<L> {
-    /// Creates a new `MutexNodeInit` instance.
+    /// Creates a new locked `MutexNodeInit` instance.
     #[cfg(not(all(loom, test)))]
-    const fn new() -> Self {
+    const fn locked() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
         let lock = Lock::LOCKED;
         Self { next, lock }
     }
 
-    /// Creates a new Loom based `MutexNodeInit` instance (non-const).
+    /// Creates a new locked, Loom based `MutexNodeInit` instance (non-const).
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
-    fn new() -> Self {
+    fn locked() -> Self {
         let next = AtomicPtr::new(ptr::null_mut());
         let lock = Lock::locked();
         Self { next, lock }
     }
 }
 
-#[cfg(not(tarpaulin_include))]
-impl<L: Lock> Default for MutexNodeInit<L> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// A locally-accessible record for forming the waiting queue.
 ///
 /// The inner state is never dropped, only overwritten. This is desirable and
-/// well suited for our use cases, since all `W` types used are only composed
+/// well suited for our use cases, since all `L` types used are only composed
 /// of `no drop glue` types (eg. atomic types).
 ///
 /// `L` must fail [`core::mem::needs_drop`] check, else `L` will leak.
@@ -79,7 +72,7 @@ impl<L: Lock> MutexNode<L> {
     /// Initializes this node's inner state, returning an exclusive reference
     /// pointing to it.
     fn initialize(&mut self) -> &mut MutexNodeInit<L> {
-        self.inner.write(MutexNodeInit::new())
+        self.inner.write(MutexNodeInit::locked())
     }
 }
 
