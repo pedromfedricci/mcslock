@@ -1,5 +1,5 @@
-// Modified version of relax.rs from spin-rs to support Loom yielding and
-// exponential backoff.
+// Modified version of relax.rs from spin-rs to support Loom yielding,
+// exponential backoff and requires unsafe for `Relax`.
 //
 // Original file at its most recent change (at the time of writing):
 // https://github.com/mvdnes/spin-rs/blob/5860ee114094cf200b97348ff332155fbd7159b4/src/relax.rs
@@ -19,8 +19,38 @@ use crate::cfg::hint;
 use crate::cfg::thread;
 
 /// A trait implemented by spinning relax strategies.
-pub trait Relax: Default {
-    /// Perform the relaxing operation during a period of contention.
+///
+/// # Example
+///
+/// ```
+/// use mcslock::relax::Relax;
+///
+/// struct Spin;
+///
+/// unsafe impl Relax for Spin {
+///     #[inline(always)]
+///     fn new() -> Self {
+///         Self
+///     }
+///
+///     #[inline(always)]
+///     fn relax(&mut self) {
+///         core::hint::spin_loop();
+///     }
+/// }
+/// ```
+///
+/// # Safety
+///
+/// All associated function implementations **must not** cause a thread exit,
+/// such as envoking a uncaught [`core::panic!`] call, or any other operation
+/// that will panic the thread. Exiting the thread will result in undefined
+/// behiavior.
+pub unsafe trait Relax {
+    /// Returns the initial value for this relaxing strategy.
+    fn new() -> Self;
+
+    /// Performs the relaxing operation during a period of contention.
     fn relax(&mut self);
 }
 
@@ -40,10 +70,16 @@ pub trait Relax: Default {
 /// all possible.
 ///
 /// [priority inversion]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
-#[derive(Default)]
 pub struct Spin;
 
-impl Relax for Spin {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl Relax for Spin {
+    #[inline(always)]
+    fn new() -> Self {
+        Self
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         hint::spin_loop();
@@ -59,11 +95,17 @@ impl Relax for Spin {
 /// and you should generally use these instead, except in rare circumstances.
 #[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-#[derive(Default)]
 pub struct Yield;
 
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
 #[cfg(any(feature = "yield", test))]
-impl Relax for Yield {
+unsafe impl Relax for Yield {
+    #[inline(always)]
+    fn new() -> Self {
+        Self
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         thread::yield_now();
@@ -76,10 +118,16 @@ impl Relax for Yield {
 /// for completeness and for targets that, for some reason, miscompile or do not
 /// support spin hint intrinsics despite attempting to generate code for them
 /// (i.e: this is a workaround for possible compiler bugs).
-#[derive(Default)]
 pub struct Loop;
 
-impl Relax for Loop {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl Relax for Loop {
+    #[inline(always)]
+    fn new() -> Self {
+        Self
+    }
+
     #[inline(always)]
     fn relax(&mut self) {}
 }
@@ -104,7 +152,6 @@ impl Relax for Loop {
 /// any significant improvement. As with [`Spin`], this implementation is
 /// subject to priority inversion problems, you may want to consider a yielding
 /// strategy or using a scheduler-aware lock.
-#[derive(Default)]
 pub struct SpinBackoff {
     step: Step,
 }
@@ -113,7 +160,14 @@ impl SpinBackoff {
     const SPIN_LIMIT: u32 = 6;
 }
 
-impl Relax for SpinBackoff {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl Relax for SpinBackoff {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { step: Step::default() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.step.spin_to(Self::SPIN_LIMIT);
@@ -132,7 +186,6 @@ impl Relax for SpinBackoff {
 /// locks if you have access to the standard library.
 #[cfg(any(feature = "yield", test))]
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
-#[derive(Default)]
 pub struct YieldBackoff {
     step: Step,
 }
@@ -143,8 +196,15 @@ impl YieldBackoff {
     const YIELD_LIMIT: u32 = 10;
 }
 
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
 #[cfg(any(feature = "yield", test))]
-impl Relax for YieldBackoff {
+unsafe impl Relax for YieldBackoff {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { step: Step::default() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         if self.step.0 <= Self::SPIN_LIMIT {
@@ -190,7 +250,7 @@ impl Step {
 #[cfg(all(not(loom), test))]
 mod test {
     fn returns<R: super::Relax>() {
-        let mut relax = R::default();
+        let mut relax = R::new();
         for _ in 0..10 {
             relax.relax();
         }

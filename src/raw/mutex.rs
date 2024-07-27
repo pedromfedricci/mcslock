@@ -356,7 +356,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         if !pred.is_null() {
             // SAFETY: Already verified that predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
-            let mut relax = R::default();
+            let mut relax = R::new();
             while node.locked.load(Relaxed) {
                 relax.relax();
             }
@@ -430,7 +430,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
             let false = self.try_unlock(node.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            let mut relax = R::default();
+            let mut relax = R::new();
             loop {
                 next = node.next.load(Relaxed);
                 let true = next.is_null() else { break };
