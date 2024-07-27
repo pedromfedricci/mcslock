@@ -161,7 +161,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
         let mut node = MutexNode::new();
         let guard = self.raw.lock(&mut node);
         while !self.try_lock_fast() {
-            let mut relax = R::default();
+            let mut relax = R::new();
             while self.locked.load(Relaxed) {
                 relax.relax();
             }
