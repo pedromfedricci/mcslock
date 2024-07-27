@@ -24,9 +24,9 @@ use crate::relax::Relax;
 /// use std::sync::mpsc::channel;
 ///
 /// use mcslock::barging::Mutex;
-/// use mcslock::relax::Spin;
+/// use mcslock::relax::{Spin, SpinBackoff};
 ///
-/// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+/// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
 ///
 /// const N: usize = 10;
 ///
@@ -79,9 +79,9 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// ```
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
     /// const MUTEX: SpinMutex<i32> = SpinMutex::new(0);
     /// let mutex = SpinMutex::new(0);
@@ -111,9 +111,9 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// ```
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
     /// let mutex = SpinMutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
@@ -141,9 +141,9 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// use std::thread;
     ///
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
     /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -188,9 +188,9 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// use std::thread;
     ///
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
     /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -237,9 +237,9 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     /// use std::thread;
     ///
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
     /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -280,9 +280,9 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     /// use std::thread;
     ///
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
     /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
@@ -327,9 +327,9 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// ```
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
     /// let mutex = SpinMutex::new(0);
     /// let guard = mutex.lock();
@@ -352,9 +352,9 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// ```
     /// use mcslock::barging::Mutex;
-    /// use mcslock::relax::Spin;
+    /// use mcslock::relax::{Spin, SpinBackoff};
     ///
-    /// type SpinMutex<T> = Mutex<T, Spin, Spin>;
+    /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
     /// let mut mutex = SpinMutex::new(0);
     /// *mutex.get_mut() = 10;

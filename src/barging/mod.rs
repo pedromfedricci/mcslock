@@ -13,11 +13,16 @@
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
 //!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. Each submodule provides type aliases for
-//! [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See their
-//! documentation for more information.
+//! This Mutex is generic over the two layers of relax strategies. User may
+//! choose a strategy as long as it implements the [`Relax`] trait. The shared
+//! lock relax strategy is associated with the `Rs` generic paramater. The
+//! handoff relax strategy is then associated with the `Rq` generic parameter.
+//! Backoff relax strategies are usually prefered for shared lock contention,
+//! while non-backoff relax strategies are usually prefered for handoffs.
+//!
+//! There is a number of strategies provided by the [`relax`] module. Each
+//! submodule provides type aliases for [`Mutex`] and [`MutexGuard`] associated
+//! with one relax strategy. See their documentation for more information.
 //!
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock`]: Mutex::lock

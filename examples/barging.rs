@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires that the `barging` feature is enabled.
-use mcslock::barging::spins::Mutex;
+use mcslock::barging::spins::backoff::Mutex;
 
 fn main() {
     const N: usize = 10;
