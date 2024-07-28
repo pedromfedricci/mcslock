@@ -103,8 +103,8 @@
 //! the front of the waiting queue thread, which means this it is an unfair lock.
 //! This implementation can be enabled through the `barging` feature, it is
 //! suitable for `no_std` environments, and the locking APIs are compatible with
-//! the `lock_api` crate. See [`mod@barging`] and [`mod@lock_api`] modules for
-//! more information.
+//! the `lock_api` crate. See [`mod@barging`] and [`lock_api`] modules for more
+//! information.
 //!
 //! ```
 //! # #[cfg(feature = "barging")]
@@ -112,7 +112,7 @@
 //! use std::sync::Arc;
 //! use std::thread;
 //!
-//! use mcslock::barging::spins::Mutex;
+//! use mcslock::barging::spins::backoff::Mutex;
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
@@ -163,7 +163,7 @@
 //!
 //! This feature implements the [`RawMutex`] trait from the [lock_api]
 //! crate for [`barging::Mutex`]. Aliases are provided by the
-//! [`mod@lock_api`] module. This feature is `no_std` compatible.
+//! [`lock_api`] module. This feature is `no_std` compatible.
 //!
 //! ## Related projects
 //!
@@ -177,6 +177,7 @@
 //! [`MutexNode`]: raw::MutexNode
 //! [`LocalMutexNode`]: raw::LocalMutexNode
 //! [`thread_local_node!`]: crate::thread_local_node
+//! [`lock_api`]: barging::lock_api
 //! [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 //! [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
 //! [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
@@ -208,10 +209,6 @@ pub mod relax;
 #[cfg(feature = "barging")]
 #[cfg_attr(docsrs, doc(cfg(feature = "barging")))]
 pub mod barging;
-
-#[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
-pub mod lock_api;
 
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]

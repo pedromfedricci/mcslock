@@ -142,7 +142,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `barging` feature.
-use mcslock::barging::spins::Mutex;
+use mcslock::barging::spins::backoff::Mutex;
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -251,7 +251,7 @@ each of your dependencies, including this one.
 [`barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/barging/struct.Mutex.html
 [`raw`]: https://docs.rs/mcslock/latest/mcslock/raw/index.html
 [`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
-[`lock_api`]: https://docs.rs/mcslock/latest/mcslock/lock_api/index.html
+[`lock_api`]: https://docs.rs/mcslock/latest/mcslock/barging/lock_api/index.html
 [`thread_local_node!`]: https://docs.rs/mcslock/latest/mcslock/macro.thread_local_node.html
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html

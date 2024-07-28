@@ -5,11 +5,9 @@
 //! [`barging::Mutex`] type will implement the [`lock_api::RawMutex`] trait when
 //! this feature is enabled.
 //!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. The following modules provide type aliases
-//! for [`lock_api::Mutex`] and [`lock_api::MutexGuard`] associated with one
-//! relax strategy. See their documentation for more information.
+//! The following modules provide type aliases for [`lock_api::Mutex`] and
+//! [`lock_api::MutexGuard`] that are associated with a relax strategy. See
+//! their documentation for more information.
 //!
 //! [`relax`]: crate::relax
 //! [`Relax`]: crate::relax::Relax
@@ -35,7 +33,7 @@ pub mod spins {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::spins::Mutex;
+    /// use mcslock::barging::lock_api::spins::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -60,7 +58,7 @@ pub mod spins {
         /// # Example
         ///
         /// ```
-        /// use mcslock::lock_api::spins::backoff::Mutex;
+        /// use mcslock::barging::lock_api::spins::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
@@ -88,7 +86,7 @@ pub mod yields {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::yields::Mutex;
+    /// use mcslock::barging::lock_api::yields::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -114,7 +112,7 @@ pub mod yields {
         /// # Example
         ///
         /// ```
-        /// use mcslock::lock_api::yields::backoff::Mutex;
+        /// use mcslock::barging::lock_api::yields::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
@@ -140,7 +138,7 @@ pub mod loops {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::loops::Mutex;
+    /// use mcslock::barging::lock_api::loops::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
