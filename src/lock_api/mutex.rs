@@ -7,14 +7,14 @@ use crate::test::{LockData, LockNew, LockWith};
 
 /// A lock that provides mutually exclusive data access that is compatible with
 /// [`lock_api`](https://crates.io/crates/lock_api).
-pub type Mutex<T, R> = lock_api::Mutex<barging::Mutex<(), R>, T>;
+pub type Mutex<T, Rs, Rq> = lock_api::Mutex<barging::Mutex<(), Rs, Rq>, T>;
 
 /// A guard that provides mutable data access that is compatible with
 /// [`lock_api`](https://crates.io/crates/lock_api).
-pub type MutexGuard<'a, T, R> = lock_api::MutexGuard<'a, barging::Mutex<(), R>, T>;
+pub type MutexGuard<'a, T, Rs, Rq> = lock_api::MutexGuard<'a, barging::Mutex<(), Rs, Rq>, T>;
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockNew for Mutex<T, R> {
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockNew for Mutex<T, Rs, Rq> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
@@ -26,22 +26,22 @@ impl<T: ?Sized, R: Relax> LockNew for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
-    type Guard<'a> = MutexGuard<'a, Self::Target, R>
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWith for Mutex<T, Rs, Rq> {
+    type Guard<'a> = MutexGuard<'a, Self::Target, Rs, Rq>
     where
         Self: 'a,
         Self::Target: 'a;
 
     fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
     {
         f(self.try_lock())
     }
 
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
         f(self.lock())
     }
@@ -52,7 +52,7 @@ impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockData for Mutex<T, R> {
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockData for Mutex<T, Rs, Rq> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,

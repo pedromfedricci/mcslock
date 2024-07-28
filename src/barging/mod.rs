@@ -13,11 +13,16 @@
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
 //!
-//! The Mutex is generic over the relax strategy. User may choose a strategy
-//! as long as it implements the [`Relax`] trait. There is a number of strategies
-//! provided by the [`relax`] module. Each submodule provides type aliases for
-//! [`Mutex`] and [`MutexGuard`] associated with one relax strategy. See their
-//! documentation for more information.
+//! This Mutex is generic over the two layers of relax strategies. User may
+//! choose a strategy as long as it implements the [`Relax`] trait. The shared
+//! lock relax strategy is associated with the `Rs` generic paramater. The
+//! handoff relax strategy is then associated with the `Rq` generic parameter.
+//! Backoff relax strategies are usually prefered for shared lock contention,
+//! while non-backoff relax strategies are usually prefered for handoffs.
+//!
+//! There is a number of strategies provided by the [`relax`] module. Each
+//! submodule provides type aliases for [`Mutex`] and [`MutexGuard`] associated
+//! with one relax strategy. See their documentation for more information.
 //!
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock`]: Mutex::lock
@@ -47,17 +52,17 @@ pub mod spins {
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
-    pub type Mutex<T> = mutex::Mutex<T, Spin>;
+    pub type Mutex<T> = mutex::Mutex<T, Spin, Spin>;
 
     /// A `barging` MCS guard that implements the [`Spin`] relax strategy.
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Spin>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Spin, Spin>;
 
     /// A `barging` MCS lock alias that, during lock contention, will perform
     /// exponential backoff while signaling the processor that it is running a
     /// busy-wait spin-loop.
     pub mod backoff {
         use super::mutex;
-        use crate::relax::SpinBackoff;
+        use crate::relax::{Spin, SpinBackoff};
 
         /// A `barging` MCS lock that implements the [`SpinBackoff`] relax
         /// strategy.
@@ -71,11 +76,11 @@ pub mod spins {
         /// let guard = mutex.lock();
         /// assert_eq!(*guard, 0);
         /// ```
-        pub type Mutex<T> = mutex::Mutex<T, SpinBackoff>;
+        pub type Mutex<T> = mutex::Mutex<T, SpinBackoff, Spin>;
 
         /// A `barging` MCS guard that implements the [`SpinBackoff`] relax
         /// strategy.
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoff>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoff, Spin>;
     }
 }
 
@@ -98,10 +103,10 @@ pub mod yields {
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
-    pub type Mutex<T> = mutex::Mutex<T, Yield>;
+    pub type Mutex<T> = mutex::Mutex<T, Yield, Yield>;
 
     /// A `barging` MCS guard that implements the [`Yield`] relax strategy.
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Yield>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Yield, Yield>;
 
     /// A `barging` MCS lock alias that, during lock contention, will perform
     /// exponential backoff while spinning up to a threshold, then yields back
@@ -109,7 +114,7 @@ pub mod yields {
     #[cfg(feature = "yield")]
     pub mod backoff {
         use super::mutex;
-        use crate::relax::YieldBackoff;
+        use crate::relax::{Yield, YieldBackoff};
 
         /// A `barging` MCS lock that implements the [`YieldBackoff`] relax
         /// strategy.
@@ -123,11 +128,11 @@ pub mod yields {
         /// let guard = mutex.lock();
         /// assert_eq!(*guard, 0);
         /// ```
-        pub type Mutex<T> = mutex::Mutex<T, YieldBackoff>;
+        pub type Mutex<T> = mutex::Mutex<T, YieldBackoff, Yield>;
 
         /// A `barging` MCS guard that implements the [`YieldBackoff`] relax
         /// strategy.
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff, Yield>;
     }
 }
 
@@ -148,8 +153,8 @@ pub mod loops {
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
-    pub type Mutex<T> = mutex::Mutex<T, Loop>;
+    pub type Mutex<T> = mutex::Mutex<T, Loop, Loop>;
 
     /// A `barging` MCS guard that implements the [`Loop`] relax strategy.
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop, Loop>;
 }
