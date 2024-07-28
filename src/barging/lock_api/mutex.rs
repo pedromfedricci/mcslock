@@ -67,7 +67,7 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockData for Mutex<T, Rs, Rq> {
 
 #[cfg(test)]
 mod test {
-    use crate::lock_api::yields::Mutex;
+    use crate::barging::lock_api::yields::Mutex;
     use crate::test::tests;
 
     #[test]

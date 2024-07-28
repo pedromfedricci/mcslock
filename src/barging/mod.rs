@@ -35,6 +35,10 @@
 mod mutex;
 pub use mutex::{Mutex, MutexGuard};
 
+#[cfg(all(feature = "lock_api", not(loom)))]
+#[cfg_attr(docsrs, doc(cfg(feature = "lock_api")))]
+pub mod lock_api;
+
 /// A `barging` MCS lock alias that signals the processor that it is running
 /// a busy-wait spin-loop during lock contention.
 pub mod spins {
