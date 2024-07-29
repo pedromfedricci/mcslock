@@ -4,7 +4,7 @@ An implementation of Mellor-Crummey and Scott contention-free
 spin-lock for mutual exclusion, referred to as MCS lock.
 """
 name = "mcslock"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 # NOTE: Rust 1.65 is required for GATs and let-else statements.
 rust-version = "1.65.0"

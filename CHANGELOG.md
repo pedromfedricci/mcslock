@@ -7,9 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.2.0..HEAD
+[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.3.0..HEAD
 
-## [0.2.0] - 2024-04-09
+## [0.3.0] - 2024-07-29
+
+### Changed
+
+- **BREAKING**: Require `unsafe` for `Relax`. `Relax` no longer requires `Default`.
+  `Relax` now requires implementing the `new` function. All types under the
+  `relax` module no longer implement `Default` ([#14]).
+
+- **BREAKING**: `barging::Mutex` has now two generic parameters for relax
+  strategies as oppose to one: `Rs` and `Rq` ([#15]).
+
+- **BREAKING**: The root level `lock_api` module has been moved under the `barging`
+  module ([#16]).
+
+[#14]: https://github.com/pedromfedricci/mcslock/pull/14
+[#15]: https://github.com/pedromfedricci/mcslock/pull/15
+[#16]: https://github.com/pedromfedricci/mcslock/pull/16
+
+## [0.2.0] - 2024-04-09 [YANKED]
+
+### Yanked
+
+- Please use 0.3.0, see [#14].
 
 ### Added
 
@@ -23,7 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#12]: https://github.com/pedromfedricci/mcslock/pull/12
 
-## [0.1.2] - 2024-03-24
+## [0.1.2] - 2024-03-24 [YANKED]
+
+### Yanked
+
+- Please use 0.3.0, see [#11] and [#14].
 
 ### Added
 
@@ -37,7 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [`fda47a7`]: https://github.com/pedromfedricci/mcslock/commit/fda47a7195d0a74f215cfa8fd0d41f1ffd0c9bea
 
-## [0.1.1] - 2024-01-05
+## [0.1.1] - 2024-01-05 [YANKED]
+
+### Yanked
+
+- Please use 0.3.0, see [#11] and [#14].
 
 ### Added
 
@@ -46,7 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#9]: https://github.com/pedromfedricci/mcslock/pull/9
 
-## [0.1.0] - 2023-12-14
+## [0.1.0] - 2023-12-14 [YANKED]
+
+### Yanked
+
+- Please use 0.3.0, see [#11] and [#14].
 
 ### Added
 

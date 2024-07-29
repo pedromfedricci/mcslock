@@ -52,7 +52,7 @@ Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 
 [dependencies]
 # Available features: `yield`, `barging`, `thread_local` and `lock_api`.
-mcslock = { version = "0.2", features = ["barging"] }
+mcslock = { version = "0.3", features = ["barging"] }
 ```
 
 ## Documentation
@@ -218,7 +218,7 @@ Licensed under either of
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
-## Contribution
+## Contributing
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall
