@@ -11,15 +11,22 @@
 //! the guard is dropped, the mutex is freed. Mutex guards are returned by
 //! [`lock`] and [`try_lock`].
 //!
-//! The Mutex is generic over the relax policy. User may choose a policy as long
-//! as it implements the [`Relax`] trait. There is a number of relax policies
-//! provided by the [`relax`] module. The following modules provide type aliases
-//! for [`lock_api::Mutex`] and [`lock_api::MutexGuard`] associated with one
-//! relax policy. See their documentation for more information.
+//! This Mutex is generic over the two layers of relax policies. User may
+//! choose a policy as long as it implements the [`Relax`] trait. The shared
+//! lock relax policy is associated with the `Rs` generic paramater. The
+//! handoff relax policy is then associated with the `Rq` generic parameter.
+//! Backoff relax policies are usually prefered for shared lock contention,
+//! while non-backoff relax policies are usually prefered for handoffs.
+//!
+//! There is a number of relax policies provided by the [`relax`] module. The
+//! following modules provide type aliases for [`lock_api::Mutex`] and
+//! [`lock_api::MutexGuard`] associated with a relax policy. See their
+//! documentation for more information.
 //!
 //! [`relax`]: crate::relax
 //! [`Relax`]: crate::relax::Relax
 //! [`barging::Mutex`]: crate::barging::Mutex
+//!
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 //! [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
@@ -43,19 +50,19 @@ pub mod spins {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::spins::Mutex;
+    /// use mcslock::barging::lock_api::spins::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, Spin>;
+    pub type Mutex<T> = mutex::Mutex<T, Spin, Spin>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`Spin`] relax policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Spin>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Spin, Spin>;
 
     /// An unfair MCS lock that implements a `spin with backoff` relax policy.
     ///
@@ -64,7 +71,7 @@ pub mod spins {
     /// spin-loop.
     pub mod backoff {
         use super::mutex;
-        use crate::relax::SpinBackoff;
+        use crate::relax::{Spin, SpinBackoff};
 
         /// A [`lock_api::Mutex`] that implements the [`SpinBackoff`] relax
         /// policy.
@@ -72,20 +79,20 @@ pub mod spins {
         /// # Example
         ///
         /// ```
-        /// use mcslock::lock_api::spins::backoff::Mutex;
+        /// use mcslock::barging::lock_api::spins::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`lock_api::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, SpinBackoff>;
+        pub type Mutex<T> = mutex::Mutex<T, SpinBackoff, Spin>;
 
         /// A [`lock_api::MutexGuard`] that implements the [`SpinBackoff`] relax
         /// policy.
         ///
         /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoff>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoff, Spin>;
     }
 }
 
@@ -104,19 +111,19 @@ pub mod yields {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::yields::Mutex;
+    /// use mcslock::barging::lock_api::yields::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, Yield>;
+    pub type Mutex<T> = mutex::Mutex<T, Yield, Yield>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`Yield`] relax policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Yield>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Yield, Yield>;
 
     /// An unfair MCS lock that implements a `yield with backoff` relax policy.
     ///
@@ -125,7 +132,7 @@ pub mod yields {
     #[cfg(feature = "yield")]
     pub mod backoff {
         use super::mutex;
-        use crate::relax::YieldBackoff;
+        use crate::relax::{Yield, YieldBackoff};
 
         /// A [`lock_api::Mutex`] that implements the [`YieldBackoff`] relax
         /// policy.
@@ -133,20 +140,20 @@ pub mod yields {
         /// # Example
         ///
         /// ```
-        /// use mcslock::lock_api::yields::backoff::Mutex;
+        /// use mcslock::barging::lock_api::yields::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`lock_api::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, YieldBackoff>;
+        pub type Mutex<T> = mutex::Mutex<T, YieldBackoff, Yield>;
 
         /// A [`lock_api::MutexGuard`] that implements the [`YieldBackoff`]
         /// relax policy.
         ///
         /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoff, Yield>;
     }
 }
 
@@ -163,17 +170,17 @@ pub mod loops {
     /// # Example
     ///
     /// ```
-    /// use mcslock::lock_api::loops::Mutex;
+    /// use mcslock::barging::lock_api::loops::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, Loop>;
+    pub type Mutex<T> = mutex::Mutex<T, Loop, Loop>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`Loop`] relax policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, Loop, Loop>;
 }

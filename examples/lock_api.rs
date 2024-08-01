@@ -9,8 +9,8 @@ use std::thread;
 // their code.
 //
 // Maybe spin::lock_api::{Mutex, MutexGuard} is better for your use case? Switch it!
-pub type Mutex<T> = mcslock::lock_api::spins::Mutex<T>;
-pub type MutexGuard<'a, T> = mcslock::lock_api::spins::MutexGuard<'a, T>;
+pub type Mutex<T> = mcslock::barging::lock_api::spins::Mutex<T>;
+pub type MutexGuard<'a, T> = mcslock::barging::lock_api::spins::MutexGuard<'a, T>;
 
 fn main() {
     const N: usize = 10;

@@ -1,27 +1,29 @@
 use core::fmt::{self, Debug, Display, Formatter};
+use core::marker::PhantomData;
 
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::inner::raw;
 use crate::lock::{Lock, Wait};
 
-pub struct Mutex<T: ?Sized, L, Q, W> {
+pub struct Mutex<T: ?Sized, L, Ws, Wq> {
     lock: L,
-    queue: raw::Mutex<(), Q, W>,
+    queue: raw::Mutex<(), L, Wq>,
+    marker: PhantomData<Ws>,
     data: UnsafeCell<T>,
 }
 
 // Same unsafe impls as `crate::inner::raw::Mutex`.
-unsafe impl<T: ?Sized + Send, L: Send, Q, W> Send for Mutex<T, L, Q, W> {}
-unsafe impl<T: ?Sized + Send, L: Send, Q, W> Sync for Mutex<T, L, Q, W> {}
+unsafe impl<T: ?Sized + Send, L: Send, Ws, Wq> Send for Mutex<T, L, Ws, Wq> {}
+unsafe impl<T: ?Sized + Send, L: Send, Ws, Wq> Sync for Mutex<T, L, Ws, Wq> {}
 
-impl<T, L: Lock, Q, W> Mutex<T, L, Q, W> {
+impl<T, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
     /// Creates a new mutex in an unlocked state ready for use.
     #[cfg(not(all(loom, test)))]
     pub const fn new(value: T) -> Self {
         let lock = Lock::UNLOCKED;
         let queue = raw::Mutex::new(());
         let data = UnsafeCell::new(value);
-        Self { lock, queue, data }
+        Self { lock, queue, data, marker: PhantomData }
     }
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
@@ -31,29 +33,29 @@ impl<T, L: Lock, Q, W> Mutex<T, L, Q, W> {
         let lock = Lock::unlocked();
         let queue = raw::Mutex::new(());
         let data = UnsafeCell::new(value);
-        Self { lock, queue, data }
+        Self { lock, queue, data, marker: PhantomData }
     }
 }
 
-impl<T: ?Sized, L: Lock, Q: Lock, W: Wait> Mutex<T, L, Q, W> {
+impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     /// Acquires this mutex, blocking the current thread until it is able to do so.
-    pub fn lock(&self) -> MutexGuard<'_, T, L, Q, W> {
+    pub fn lock(&self) -> MutexGuard<'_, T, L, Ws, Wq> {
         if self.lock.try_lock_acquire_weak() {
             return MutexGuard::new(self);
         }
-        let mut node = raw::MutexNode::<Q>::new();
+        let mut node = raw::MutexNode::new();
         let guard = self.queue.lock(&mut node);
         while !self.lock.try_lock_acquire_weak() {
-            self.lock.lock_wait_relaxed::<W>();
+            self.lock.lock_wait_relaxed::<Ws>();
         }
         drop(guard);
         MutexGuard::new(self)
     }
 }
 
-impl<T: ?Sized, L: Lock, Q, W> Mutex<T, L, Q, W> {
+impl<T: ?Sized, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
     /// Attempts to acquire this mutex without blocking the thread.
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, L, Q, W>> {
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, L, Ws, Wq>> {
         self.lock.try_lock_acquire().then(|| MutexGuard::new(self))
     }
 
@@ -70,14 +72,14 @@ impl<T: ?Sized, L: Lock, Q, W> Mutex<T, L, Q, W> {
     }
 }
 
-impl<T, L, Q, W> Mutex<T, L, Q, W> {
+impl<T, L, Ws, Wq> Mutex<T, L, Ws, Wq> {
     /// Consumes this mutex, returning the underlying data.
     pub fn into_inner(self) -> T {
         self.data.into_inner()
     }
 }
 
-impl<T: ?Sized, L, Q, W> Mutex<T, L, Q, W> {
+impl<T: ?Sized, L, Ws, Wq> Mutex<T, L, Ws, Wq> {
     /// Returns a mutable reference to the underlying data.
     #[cfg(not(all(loom, test)))]
     pub fn get_mut(&mut self) -> &mut T {
@@ -86,7 +88,7 @@ impl<T: ?Sized, L, Q, W> Mutex<T, L, Q, W> {
     }
 }
 
-impl<T: ?Sized + Debug, L: Lock, Q, W> Debug for Mutex<T, L, Q, W> {
+impl<T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for Mutex<T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("Mutex");
         match self.try_lock() {
@@ -97,17 +99,17 @@ impl<T: ?Sized + Debug, L: Lock, Q, W> Debug for Mutex<T, L, Q, W> {
     }
 }
 
-pub struct MutexGuard<'a, T: ?Sized, L: Lock, Q, W> {
-    lock: &'a Mutex<T, L, Q, W>,
+pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
+    lock: &'a Mutex<T, L, Ws, Wq>,
 }
 
 // Same unsafe impls as `crate::inner::raw::MutexGuard`.
-unsafe impl<T: ?Sized + Send, L: Lock, Q, W> Send for MutexGuard<'_, T, L, Q, W> {}
-unsafe impl<T: ?Sized + Sync, L: Lock, Q, W> Sync for MutexGuard<'_, T, L, Q, W> {}
+unsafe impl<T: ?Sized + Send, L: Lock, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
+unsafe impl<T: ?Sized + Sync, L: Lock, Ws, Wq> Sync for MutexGuard<'_, T, L, Ws, Wq> {}
 
-impl<'a, T: ?Sized, L: Lock, Q, W> MutexGuard<'a, T, L, Q, W> {
+impl<'a, T: ?Sized, L: Lock, Ws, Wq> MutexGuard<'a, T, L, Ws, Wq> {
     /// Creates a new `MutexGuard` instance.
-    const fn new(lock: &'a Mutex<T, L, Q, W>) -> Self {
+    const fn new(lock: &'a Mutex<T, L, Ws, Wq>) -> Self {
         Self { lock }
     }
 
@@ -121,26 +123,26 @@ impl<'a, T: ?Sized, L: Lock, Q, W> MutexGuard<'a, T, L, Q, W> {
     }
 }
 
-impl<T: ?Sized, L: Lock, Q, W> Drop for MutexGuard<'_, T, L, Q, W> {
+impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
     fn drop(&mut self) {
         self.lock.unlock();
     }
 }
 
-impl<'a, T: ?Sized + Debug, L: Lock, Q, W> Debug for MutexGuard<'a, T, L, Q, W> {
+impl<'a, T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for MutexGuard<'a, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
-impl<'a, T: ?Sized + Display, L: Lock, Q, W> Display for MutexGuard<'a, T, L, Q, W> {
+impl<'a, T: ?Sized + Display, L: Lock, Ws, Wq> Display for MutexGuard<'a, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Q, W> core::ops::Deref for MutexGuard<'a, T, L, Q, W> {
+impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'a, T, L, Ws, Wq> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -151,7 +153,7 @@ impl<'a, T: ?Sized, L: Lock, Q, W> core::ops::Deref for MutexGuard<'a, T, L, Q, 
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Q, W> core::ops::DerefMut for MutexGuard<'a, T, L, Q, W> {
+impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::DerefMut for MutexGuard<'a, T, L, Ws, Wq> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
@@ -163,7 +165,7 @@ impl<'a, T: ?Sized, L: Lock, Q, W> core::ops::DerefMut for MutexGuard<'a, T, L, 
 /// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
-unsafe impl<T: ?Sized, L: Lock, Q, W> crate::loom::Guard for MutexGuard<'_, T, L, Q, W> {
+unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 
     fn get(&self) -> &loom::cell::UnsafeCell<Self::Target> {

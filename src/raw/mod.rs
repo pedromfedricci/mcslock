@@ -14,11 +14,12 @@
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
 //!
-//! The Mutex is generic over the relax policy. User may choose a policy as long
-//! as it implements the [`Relax`] trait. There is a number of relax policies
-//! provided by the [`relax`] module. Each module in `raw` provides type aliases
-//! for [`Mutex`] and [`MutexGuard`] associated with one relax policy. See their
-//! documentation for more information.
+//! This Mutex is generic over the relax policy. User may choose a policy as long
+//! as it implements the [`Relax`] trait.
+//!
+//! There is a number of relax policies provided by the [`relax`] module. The
+//! following modules provide type aliases for [`Mutex`] and [`MutexGuard`]
+//! associated with a relax policy. See their documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock

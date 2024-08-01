@@ -115,8 +115,7 @@
 //! use std::thread;
 //!
 //! // Requires `barging` feature.
-//! // `spins::Mutex` simply spins during contention.
-//! use mcslock::barging::spins::Mutex;
+//! use mcslock::barging::spins::backoff::Mutex;
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
@@ -135,10 +134,10 @@
 //! ## Locking with thread parking MCS locks
 //!
 //! This crate also supports MCS lock implementations that will put the blocking
-//! threads to sleep. All `no_std` flavors: `raw`, `barging` and `lock_api` have
-//! matching `Mutex` types under the [`parking`] module, with corresponding
-//! paths and public APIs, that are thread parking capable. These implementations
-//! are not `no_std` compatible. See [`parking`] module for more information.
+//! threads to sleep. All `no_std` flavors: `raw`, `barging` have matching `Mutex`
+//! types under the [`parking`] module, with corresponding paths and public APIs,
+//! that are thread parking capable. These implementations are not `no_std`
+//! compatible. See [`parking`] module for more information.
 //!
 //! ```
 //! # #[cfg(all(feature = "thread_local", feature = "parking"))]
@@ -209,8 +208,8 @@
 //!
 //! This feature implements the [`RawMutex`] trait from the [lock_api]
 //! crate for both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases
-//! are provided by the [`lock_api`] (`no_std`) and [`parking::lock_api`]
-//! modules. This feature is automatically enables the `barging` feature.
+//! are provided by the [`barging::lock_api`] (`no_std`) and
+//! [`parking::barging::lock_api`] modules.
 //!
 //! ### parking
 //!
@@ -275,10 +274,6 @@ pub mod barging;
 #[cfg(feature = "parking")]
 #[cfg_attr(docsrs, doc(cfg(feature = "parking")))]
 pub mod parking;
-
-#[cfg(all(feature = "lock_api", feature = "barging", not(loom)))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "lock_api", feature = "barging"))))]
-pub mod lock_api;
 
 #[cfg(test)]
 pub(crate) mod test;

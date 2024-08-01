@@ -2,7 +2,7 @@ use crate::lock::Wait;
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 
 /// A thread parking waiting policy to be applied when the lock is contended.
-pub trait Park: Relax {
+pub unsafe trait Park: Relax {
     /// The relax operation that should be applied during unlock waiting loops.
     type UnlockRelax: Relax;
 
@@ -20,19 +20,27 @@ type Uint = u16;
 
 pub const DEFMAX: Uint = 100;
 
-#[derive(Default)]
 pub struct SpinThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Spin, MAX>,
 }
 
-impl<const MAX: Uint> Relax for SpinThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Relax for SpinThenPark<MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { bounded: Bounded::new() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for SpinThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Park for SpinThenPark<MAX> {
     type UnlockRelax = Spin;
 
     #[inline(always)]
@@ -41,19 +49,27 @@ impl<const MAX: Uint> Park for SpinThenPark<MAX> {
     }
 }
 
-#[derive(Default)]
 pub struct LoopThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Loop, MAX>,
 }
 
-impl<const MAX: Uint> Relax for LoopThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Relax for LoopThenPark<MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { bounded: Bounded::new() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for LoopThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Park for LoopThenPark<MAX> {
     type UnlockRelax = Loop;
 
     #[inline(always)]
@@ -62,19 +78,27 @@ impl<const MAX: Uint> Park for LoopThenPark<MAX> {
     }
 }
 
-#[derive(Default)]
 pub struct YieldThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<Yield, MAX>,
 }
 
-impl<const MAX: Uint> Relax for YieldThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Relax for YieldThenPark<MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { bounded: Bounded::new() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for YieldThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Park for YieldThenPark<MAX> {
     type UnlockRelax = Yield;
 
     #[inline(always)]
@@ -84,17 +108,24 @@ impl<const MAX: Uint> Park for YieldThenPark<MAX> {
 }
 
 // Immediately inform that the current should be parked.
-#[derive(Default)]
-#[non_exhaustive]
 pub struct ImmediatePark;
 
-impl Relax for ImmediatePark {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl Relax for ImmediatePark {
+    #[inline(always)]
+    fn new() -> Self {
+        Self
+    }
+
     #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn relax(&mut self) {}
 }
 
-impl Park for ImmediatePark {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl Park for ImmediatePark {
     type UnlockRelax = Yield;
 
     #[inline(always)]
@@ -103,19 +134,27 @@ impl Park for ImmediatePark {
     }
 }
 
-#[derive(Default)]
 pub struct SpinBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<SpinBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Relax for SpinBackoffThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Relax for SpinBackoffThenPark<MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { bounded: Bounded::new() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
     type UnlockRelax = SpinBackoff;
 
     #[inline(always)]
@@ -124,19 +163,27 @@ impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
     }
 }
 
-#[derive(Default)]
 pub struct YieldBackoffThenPark<const MAX: Uint = DEFMAX> {
     bounded: Bounded<YieldBackoff, MAX>,
 }
 
-impl<const MAX: Uint> Relax for YieldBackoffThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Relax for YieldBackoffThenPark<MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self { bounded: Bounded::new() }
+    }
+
     #[inline(always)]
     fn relax(&mut self) {
         self.bounded.relax();
     }
 }
 
-impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
     type UnlockRelax = YieldBackoff;
 
     #[inline(always)]
@@ -147,13 +194,16 @@ impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
 
 /// A bounded, relaxed waiting policy that will block the thread for at most
 /// some number of attempts.
-#[derive(Default)]
 struct Bounded<R, const MAX: Uint> {
     relax: R,
     attempts: Uint,
 }
 
 impl<R: Relax, const MAX: Uint> Bounded<R, MAX> {
+    fn new() -> Self {
+        Self { relax: R::new(), attempts: 0 }
+    }
+
     const fn should_park(&self) -> bool {
         self.attempts >= MAX
     }
@@ -171,12 +221,17 @@ impl<R: Relax, const MAX: Uint> Bounded<R, MAX> {
 /// `T` implements [`Park`], because that would prevent us from implementing
 /// `Wait` for `T` when it implements [`Relax`], since they would conflict. We
 /// need both `Park` and `Relax` types to implement `Wait`.
-#[derive(Default)]
 pub(super) struct ParkWait<P> {
     waiter: P,
 }
 
-impl<P: Park> Relax for ParkWait<P> {
+// SAFETY: None of the associated function implementations contain any code
+// that could cause a thread exit.
+unsafe impl<P: Park> Relax for ParkWait<P> {
+    fn new() -> Self {
+        Self { waiter: P::new() }
+    }
+
     fn relax(&mut self) {
         self.waiter.relax();
     }
@@ -212,7 +267,7 @@ mod test {
     impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThenPark<MAX> {}
 
     fn parking_policy_loop<P: Park>() -> (P, Uint) {
-        let mut parking_waiter = P::default();
+        let mut parking_waiter = P::new();
         let mut counter = 0;
         while !parking_waiter.should_park() {
             parking_waiter.relax();

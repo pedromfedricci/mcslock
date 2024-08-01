@@ -201,7 +201,7 @@ impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
 ///
 /// The successor node is loaded with a relaxed ordering.
 fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
-    let mut relax = R::default();
+    let mut relax = R::new();
     loop {
         let ptr = next.load(Relaxed);
         let true = ptr.is_null() else { return ptr };

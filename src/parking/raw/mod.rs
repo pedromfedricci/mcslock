@@ -5,7 +5,7 @@
 //! waiting thread will spin against its own, locally-accessible atomic lock
 //! state, which then avoids the network contention of the state access.
 //!
-//! This module provides an implementation that is **not** `no_std` compatible,
+//! This module provides an implementation that **is not** `no_std` compatible,
 //! and it also requires that queue nodes must be allocated by the callers.
 //! Queue nodes are represented by the [`MutexNode`] type.
 //!
@@ -14,11 +14,12 @@
 //! [`lock`] and [`try_lock`]. Guards are also accessible as the closure argument
 //! for [`lock_with`] and [`try_lock_with`] methods.
 //!
-//! The Mutex is generic over the parking policy. User may choose a policy
-//! as long as it implements the [`Park`] trait. There is a number of parking
-//! policies provided by the [`park`] module. Each module in `parking::raw`
-//! provides type aliases for [`Mutex`] and [`MutexGuard`] associated with one
-//! parking policy. See their documentation for more information.
+//! This Mutex is generic over the parking policy. User may choose a policy as
+//! long as it implements the [`Park`] trait.
+//!
+//! There is a number of parking policies provided by the [`park`] module. The
+//! following modules provide type aliases for [`Mutex`] and [`MutexGuard`]
+//! associated with a parking policy. See their documentation for more information.
 //!
 //! [`lock`]: Mutex::lock
 //! [`try_lock`]: Mutex::try_lock

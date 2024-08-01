@@ -53,7 +53,7 @@ Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 
 [dependencies]
 # Available features: `yield`, `barging`, `parking`, `thread_local` and `lock_api`.
-mcslock = { version = "0.2", features = ["parking"] }
+mcslock = { version = "0.3", features = ["parking"] }
 ```
 
 ## Documentation
@@ -137,16 +137,16 @@ fn main() {
 This implementation will have non-waiting threads race for the lock against
 the front of the waiting queue thread, which means this it is an unfair lock.
 This implementation is suitable for `no_std` environments, and the locking
-APIs are compatible with the [lock_api] crate. See [`barging`] and [`lock_api`]
-modules for more information.
+APIs are compatible with the [lock_api] crate. See [`barging`] and
+[`barking::lock_api`] modules for more information.
 
 ```rust
 use std::sync::Arc;
 use std::thread;
 
 // Requires `barging` feature.
-// `spins::Mutex` simply spins during contention.
-use mcslock::barging::spins::Mutex;
+// `spins::backoff::Mutex` simply spins wiht backoff during contention.
+use mcslock::barging::spins::backoff::Mutex;
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
@@ -164,10 +164,10 @@ fn main() {
 ## Locking with thread parking MCS locks
 
 This crate also supports MCS lock implementations that will put the blocking
-threads to sleep. All `no_std` flavors: `raw`, `barging` and `lock_api` have
-matching `Mutex` types under the [`parking`] module, with corresponding
-paths and public APIs, that are thread parking capable. These implementations
-are not `no_std` compatible. See [`parking`] module for more information.
+threads to sleep. All `no_std` flavors: `raw`, `barging` have matching `Mutex`
+`Mutex` types under the [`parking`] module, with corresponding paths and public
+APIs, that are thread parking capable. These implementations are not `no_std`
+compatible. See [`parking`] module for more information.
 
 ```rust
 use std::sync::Arc;
@@ -232,8 +232,7 @@ FIFO), but can improve throughput when the lock is heavily contended.
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
 both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases are provided by
-the [`lock_api`] (`no_std`) and [`parking::lock_api`] modules. This feature
-automatically enables the `barging` feature.
+the [`barging::lock_api`] (`no_std`) and [`parking::lock_api`] modules.
 
 ### parking
 
@@ -311,8 +310,8 @@ each of your dependencies, including this one.
 [`parking::raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.LocalMutexNode.html
 [`parking::barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/parking/barging/struct.Mutex.html
 [`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
+[`barging::lock_api`]: https://docs.rs/mcslock/latest/mcslock/barging/lock_api/index.html
 [`barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/barging/struct.Mutex.html
-[`lock_api`]: https://docs.rs/mcslock/latest/mcslock/lock_api/index.html
 [`thread_local_node!`]: https://docs.rs/mcslock/latest/mcslock/macro.thread_local_node.html
 [`thread_local_parking_node!`]: https://docs.rs/mcslock/latest/mcslock/macro.thread_local_parking_node.html
 

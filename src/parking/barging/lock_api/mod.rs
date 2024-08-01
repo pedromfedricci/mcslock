@@ -11,15 +11,22 @@
 //! the guard is dropped, the mutex is freed. Mutex guards are returned by
 //! [`lock`] and [`try_lock`].
 //!
-//! The Mutex is generic over the parking policy. User may choose a policy as
-//! long as it implements the [`Park`] trait. There is a number of parking
-//! policies provided by the [`park`] module. The following modules provide
-//! type aliases for [`lock_api::Mutex`] and [`lock_api::MutexGuard`] associated
-//! with one parking policy. See their documentation for more information.
+//! This Mutex is generic over the two layers of parking policies. User may
+//! choose a policy as long as it implements the [`Park`] trait. The shared
+//! lock parking policy is associated with the `Ps` generic paramater. The
+//! handoff parking policy is then associated with the `Pq` generic parameter.
+//! Backoff parking policies are usually prefered for shared lock contention,
+//! while non-backoff parking policies are usually prefered for handoffs.
+//!
+//! There is a number of parking policies provided by the [`park`] module. The
+//! following modules provide type aliases for [`lock_api::Mutex`] and
+//! [`lock_api::MutexGuard`] associated with a parking policy. See their
+//! documentation for more information.
 //!
 //! [`park`]: crate::parking::park
 //! [`Park`]: crate::parking::park::Park
 //! [`parking::barging::Mutex`]: crate::parking::barging::Mutex
+//!
 //! [lock_api]: https://crates.io/crates/lock_api
 //! [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 //! [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
@@ -50,13 +57,13 @@ pub mod spins {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, SpinThenPark>;
+    pub type Mutex<T> = mutex::Mutex<T, SpinThenPark, SpinThenPark>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`SpinThenPark`] parking
     /// policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinThenPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinThenPark, SpinThenPark>;
 
     /// An unfair MCS lock that implements a `spin with backoff then park` parking
     /// policy.
@@ -66,7 +73,7 @@ pub mod spins {
     /// spin-loop.
     pub mod backoff {
         use super::mutex;
-        use crate::parking::park::SpinBackoffThenPark;
+        use crate::parking::park::{SpinBackoffThenPark, SpinThenPark};
 
         /// A [`lock_api::Mutex`] that implements the [`SpinBackoffThenPark`]
         /// parking policy.
@@ -81,13 +88,13 @@ pub mod spins {
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`lock_api::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, SpinBackoffThenPark>;
+        pub type Mutex<T> = mutex::Mutex<T, SpinBackoffThenPark, SpinThenPark>;
 
         /// A [`lock_api::MutexGuard`] that implements the [`SpinBackoffThenPark`]
         /// parking policy.
         ///
         /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoffThenPark>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, SpinBackoffThenPark, SpinThenPark>;
     }
 }
 
@@ -111,13 +118,13 @@ pub mod yields {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, YieldThenPark>;
+    pub type Mutex<T> = mutex::Mutex<T, YieldThenPark, YieldThenPark>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`YieldThenPark`] parking
     /// policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldThenPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldThenPark, YieldThenPark>;
 
     /// An unfair MCS lock that implements a `yield with backoff then park`
     /// parking policy.
@@ -126,7 +133,7 @@ pub mod yields {
     /// spinning, up to a threshold, then yields back to the OS scheduler.
     pub mod backoff {
         use super::mutex;
-        use crate::parking::park::YieldBackoffThenPark;
+        use crate::parking::park::{YieldBackoffThenPark, YieldThenPark};
 
         /// A [`lock_api::Mutex`] that implements the [`YieldBackoffThenPark`]
         /// parking policy.
@@ -141,13 +148,13 @@ pub mod yields {
         /// assert_eq!(*guard, 0);
         /// ```
         /// [`lock_api::Mutex`]: mutex::Mutex
-        pub type Mutex<T> = mutex::Mutex<T, YieldBackoffThenPark>;
+        pub type Mutex<T> = mutex::Mutex<T, YieldBackoffThenPark, YieldThenPark>;
 
         /// A [`lock_api::MutexGuard`] that implements the [`YieldBackoffThenPark`]
         /// parking policy.
         ///
         /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoffThenPark>;
+        pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, YieldBackoffThenPark, YieldThenPark>;
     }
 }
 
@@ -171,13 +178,13 @@ pub mod loops {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, LoopThenPark>;
+    pub type Mutex<T> = mutex::Mutex<T, LoopThenPark, LoopThenPark>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`LoopThenPark`] parking
     /// policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThenPark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThenPark, LoopThenPark>;
 }
 
 /// An unfair MCS lock that implements a `immediate park` parking policy.
@@ -199,11 +206,11 @@ pub mod immediate {
     /// assert_eq!(*guard, 0);
     /// ```
     /// [`lock_api::Mutex`]: mutex::Mutex
-    pub type Mutex<T> = mutex::Mutex<T, ImmediatePark>;
+    pub type Mutex<T> = mutex::Mutex<T, ImmediatePark, ImmediatePark>;
 
     /// A [`lock_api::MutexGuard`] that implements the [`ImmediatePark`] parking
     /// policy.
     ///
     /// [`lock_api::MutexGuard`]: mutex::MutexGuard
-    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, ImmediatePark>;
+    pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, ImmediatePark, ImmediatePark>;
 }
