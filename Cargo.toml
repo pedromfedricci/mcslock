@@ -43,7 +43,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints.rust.unexpected_cfgs]
 level = "warn"
-check-cfg = ["cfg(tarpaulin_include)", "cfg(loom)"]
+check-cfg = ["cfg(loom)", "cfg(tarpaulin)", "cfg(tarpaulin_include)"]
 
 [[example]]
 name = "barging"
