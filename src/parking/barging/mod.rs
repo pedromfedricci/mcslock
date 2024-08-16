@@ -2,7 +2,7 @@
 //!
 //! This implementation will have non-waiting threads race for the lock against
 //! the front of the waiting queue thread. If the front of the queue thread
-//! looses the race, it will simply keep spinning, while holding its position
+//! looses the race, it will simply go back to sleep, while holding its position
 //! in the queue. By allowing barging instead of forcing FIFO, a higher
 //! throughput can be achieved when the lock is heavily contended.
 //!

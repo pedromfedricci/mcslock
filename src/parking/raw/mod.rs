@@ -2,8 +2,8 @@
 //!
 //! The `raw` implementation of MCS lock is fair, that is, it guarantees that
 //! thread that have waited for longer will be scheduled first (FIFO). Each
-//! waiting thread will spin against its own, locally-accessible atomic lock
-//! state, which then avoids the network contention of the state access.
+//! waiting thread will spin and park against its own, locally-accessible atomic
+//! lock state, which then avoids the network contention of the state access.
 //!
 //! This module provides an implementation that **is not** `no_std` compatible,
 //! and it also requires that queue nodes must be allocated by the callers.

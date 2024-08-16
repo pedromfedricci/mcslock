@@ -105,8 +105,8 @@ impl Lock for Parker {
     fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until either all attempts have
         // already been made or the lock has been handed off to this thread. If
-        // the limit of attempts has been reached and the lock stills locked,
-        // then park the thread.
+        // the limit of attempts has been reached and the lock remains locked,
+        // then park the thread. The parking loop will handle spurious wakeups.
         let mut parking_waiter = W::new();
         while !parking_waiter.should_park() {
             if ParkerT::is_locked(self) {
@@ -115,7 +115,6 @@ impl Lock for Parker {
                 return;
             }
         }
-        // Park the current thread. The parking loop will handle spurious wakeups.
         ParkerT::park_loop(self);
     }
 

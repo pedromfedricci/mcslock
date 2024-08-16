@@ -1,7 +1,16 @@
+// TODO: Docs
+
 use crate::lock::Wait;
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 
 /// A thread parking waiting policy to be applied when the lock is contended.
+///
+/// # Safety
+///
+/// All associated function implementations **must not** cause a thread exit,
+/// such as envoking a uncaught [`core::panic!`] call, or any other operation
+/// that will panic the thread. Exiting the thread will result in undefined
+/// behiavior.
 pub unsafe trait Park: Relax {
     /// The relax operation that should be applied during unlock waiting loops.
     type UnlockRelax: Relax;

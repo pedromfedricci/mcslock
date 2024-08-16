@@ -7,11 +7,13 @@ use crate::test::{LockData, LockNew, LockWith};
 
 /// A [`lock_api::Mutex`] alias that wraps a [`parking::barging::Mutex`].
 ///
+/// [`parking::barging::Mutex`]: crate::parking::barging::Mutex
 /// [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 pub type Mutex<T, Ps, Pq> = lock_api::Mutex<barging::Mutex<(), Ps, Pq>, T>;
 
 /// A [`lock_api::MutexGuard`] alias that wraps a [`parking::barging::MutexGuard`].
 ///
+/// [`parking::barging::MutexGuard`]: crate::parking::barging::MutexGuard
 /// [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
 pub type MutexGuard<'a, T, Ps, Pq> = lock_api::MutexGuard<'a, barging::Mutex<(), Ps, Pq>, T>;
 

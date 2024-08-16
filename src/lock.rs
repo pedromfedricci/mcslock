@@ -120,7 +120,7 @@ impl Lock for AtomicBool {
     fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        let mut relaxed_waiter = <W as Relax>::new();
+        let mut relaxed_waiter = W::new();
         while self.load(Relaxed) {
             relaxed_waiter.relax();
         }
