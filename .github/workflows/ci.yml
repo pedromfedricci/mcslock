@@ -37,7 +37,7 @@ jobs:
         run: rustup target add ${{ env.NO_STD_TARGET }}
       - name: Install cargo-hack
         uses: taiki-e/install-action@cargo-hack
-      - name: Build with no_std compatible features
+      - name: Build on no_std environment
         run: >
           cargo hack build
           --target ${{ env.NO_STD_TARGET }}
@@ -64,8 +64,8 @@ jobs:
       - name: Check MSRV
         run: cargo check --all-features
 
-  docs:
-    name: Docs
+  docsrs:
+    name: Build doc
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -78,6 +78,17 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs -D warnings
         run: cargo doc --all-features
+
+  doc:
+    name: Test doc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Run doc snippets
+        run: cargo test --doc --all-features
 
   examples:
     name: Examples

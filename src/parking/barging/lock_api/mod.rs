@@ -50,7 +50,7 @@ pub mod spins {
     /// # Example
     ///
     /// ```
-    /// use mcslock::parking::lock_api::spins::Mutex;
+    /// use mcslock::parking::barging::lock_api::spins::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -81,7 +81,7 @@ pub mod spins {
         /// # Example
         ///
         /// ```
-        /// use mcslock::parking::lock_api::spins::backoff::Mutex;
+        /// use mcslock::parking::barging::lock_api::spins::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
@@ -111,7 +111,7 @@ pub mod yields {
     /// # Example
     ///
     /// ```
-    /// use mcslock::parking::lock_api::yields::Mutex;
+    /// use mcslock::parking::barging::lock_api::yields::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -141,7 +141,7 @@ pub mod yields {
         /// # Example
         ///
         /// ```
-        /// use mcslock::parking::lock_api::yields::backoff::Mutex;
+        /// use mcslock::parking::barging::lock_api::yields::backoff::Mutex;
         ///
         /// let mutex = Mutex::new(0);
         /// let guard = mutex.lock();
@@ -171,7 +171,7 @@ pub mod loops {
     /// # Example
     ///
     /// ```
-    /// use mcslock::parking::lock_api::loops::Mutex;
+    /// use mcslock::parking::barging::lock_api::loops::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();
@@ -199,7 +199,7 @@ pub mod immediate {
     /// # Example
     ///
     /// ```
-    /// use mcslock::parking::lock_api::immediate::Mutex;
+    /// use mcslock::parking::barging::lock_api::immediate::Mutex;
     ///
     /// let mutex = Mutex::new(0);
     /// let guard = mutex.lock();

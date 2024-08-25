@@ -35,7 +35,7 @@ use crate::test::{LockNew, LockWith};
 /// //
 /// // Here we're using an Arc to share memory among threads, and the data inside
 /// // the Arc is protected with a mutex.
-/// let data = Arc::new(Mutex::new(0));
+/// let data = Arc::new(SpinMutex::new(0));
 ///
 /// let (tx, rx) = channel();
 /// for _ in 0..N {
@@ -80,8 +80,8 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
-    /// const MUTEX: Mutex<i32> = Mutex::new(0);
-    /// let mutex = Mutex::new(0);
+    /// const MUTEX: SpinMutex<i32> = SpinMutex::new(0);
+    /// let mutex = SpinMutex::new(0);
     /// ```
     #[cfg(not(all(loom, test)))]
     #[inline]
@@ -106,7 +106,7 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Mutex::new(0);
+    /// let mutex = SpinMutex::new(0);
     /// assert_eq!(mutex.into_inner(), 0);
     /// ```
     #[inline(always)]
@@ -136,7 +136,7 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -171,7 +171,7 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -220,7 +220,7 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -260,7 +260,7 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex::<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Arc::new(Mutex::new(0));
+    /// let mutex = Arc::new(SpinMutex::new(0));
     /// let c_mutex = Arc::clone(&mutex);
     ///
     /// thread::spawn(move || {
@@ -307,7 +307,7 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
-    /// let mutex = Mutex::new(0);
+    /// let mutex = SpinMutex::new(0);
     /// let guard = mutex.lock();
     /// drop(guard);
     ///
@@ -331,7 +331,7 @@ impl<T: ?Sized, Rs, Rq> Mutex<T, Rs, Rq> {
     ///
     /// type SpinMutex<T> = Mutex<T, SpinBackoff, Spin>;
     ///
-    /// let mut mutex = Mutex::new(0);
+    /// let mut mutex = SpinMutex::new(0);
     /// *mutex.get_mut() = 10;
     ///
     /// assert_eq!(*mutex.lock(), 10);
