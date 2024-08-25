@@ -1,9 +1,46 @@
 pub mod atomic {
+    pub use sealed::AtomicNullMut;
+
     #[cfg(not(all(loom, test)))]
     pub use core::sync::atomic::{fence, AtomicBool, AtomicPtr};
 
     #[cfg(all(loom, test))]
     pub use loom::sync::atomic::{fence, AtomicBool, AtomicPtr};
+
+    impl<T> AtomicNullMut for AtomicPtr<T> {
+        type Target = T;
+
+        #[rustfmt::skip]
+        #[cfg(not(all(loom, test)))]
+        const NULL_MUT: AtomicPtr<Self::Target> = {
+            Self::new(core::ptr::null_mut())
+        };
+
+        #[cfg(all(loom, test))]
+        #[cfg(not(tarpaulin_include))]
+        fn null_mut() -> AtomicPtr<Self::Target> {
+            Self::new(core::ptr::null_mut())
+        }
+    }
+
+    mod sealed {
+        use super::AtomicPtr;
+
+        /// A trait that extends [`AtomicPtr`] to allow creating `null` values.
+        pub trait AtomicNullMut {
+            /// The type of the data pointed to.
+            type Target;
+
+            /// A compiler time evaluable [`AtomicPtr`] poiting to `null`.
+            #[cfg(not(all(loom, test)))]
+            #[allow(clippy::declare_interior_mutable_const)]
+            const NULL_MUT: AtomicPtr<Self::Target>;
+
+            /// Returns a Loom based [`AtomicPtr`] poiting to `null` (non-const).
+            #[cfg(all(loom, test))]
+            fn null_mut() -> AtomicPtr<Self::Target>;
+        }
+    }
 }
 
 pub mod cell {
@@ -15,10 +52,10 @@ pub mod cell {
     #[cfg(all(loom, test))]
     pub use loom::cell::UnsafeCell;
 
-    #[cfg(not(all(loom, test)))]
     impl<T: ?Sized> WithUnchecked for UnsafeCell<T> {
         type Target = T;
 
+        #[cfg(not(all(loom, test)))]
         unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&Self::Target) -> Ret,
@@ -26,13 +63,9 @@ pub mod cell {
             // SAFETY: Caller guaranteed that there are no mutable aliases.
             f(unsafe { &*self.get() })
         }
-    }
 
-    #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
-    impl<T: ?Sized> WithUnchecked for UnsafeCell<T> {
-        type Target = T;
-
+        #[cfg(all(loom, test))]
+        #[cfg(not(tarpaulin_include))]
         unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&Self::Target) -> Ret,

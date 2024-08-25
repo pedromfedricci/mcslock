@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
-use crate::cfg::atomic::{fence, AtomicPtr};
+use crate::cfg::atomic::{fence, AtomicNullMut, AtomicPtr};
 use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::lock::{Lock, Wait};
 use crate::relax::Relax;
@@ -33,7 +33,7 @@ impl<L: Lock> MutexNodeInit<L> {
     /// Creates a new locked `MutexNodeInit` instance.
     #[cfg(not(all(loom, test)))]
     const fn locked() -> Self {
-        let next = AtomicPtr::new(ptr::null_mut());
+        let next = AtomicPtr::NULL_MUT;
         let lock = Lock::LOCKED;
         Self { next, lock }
     }
@@ -42,7 +42,7 @@ impl<L: Lock> MutexNodeInit<L> {
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
     fn locked() -> Self {
-        let next = AtomicPtr::new(ptr::null_mut());
+        let next = AtomicPtr::null_mut();
         let lock = Lock::locked();
         Self { next, lock }
     }
@@ -87,7 +87,7 @@ impl<L> Default for MutexNode<L> {
 /// protecting shared data.
 pub struct Mutex<T: ?Sized, L, W> {
     tail: AtomicPtr<MutexNodeInit<L>>,
-    marker: PhantomData<W>,
+    wait: PhantomData<W>,
     data: UnsafeCell<T>,
 }
 
@@ -99,18 +99,18 @@ impl<T, L, W> Mutex<T, L, W> {
     /// Creates a new mutex in an unlocked state ready for use.
     #[cfg(not(all(loom, test)))]
     pub const fn new(value: T) -> Self {
-        let tail = AtomicPtr::new(ptr::null_mut());
+        let tail = AtomicPtr::NULL_MUT;
         let data = UnsafeCell::new(value);
-        Self { tail, data, marker: PhantomData }
+        Self { tail, data, wait: PhantomData }
     }
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
     pub fn new(value: T) -> Self {
-        let tail = AtomicPtr::new(ptr::null_mut());
+        let tail = AtomicPtr::null_mut();
         let data = UnsafeCell::new(value);
-        Self { tail, data, marker: PhantomData }
+        Self { tail, data, wait: PhantomData }
     }
 
     /// Consumes this mutex, returning the underlying data.
@@ -217,11 +217,9 @@ pub struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     head: &'a MutexNodeInit<L>,
 }
 
-// `std::sync::MutexGuard` is not Send for pthread compatibility, but this
-// implementation is safe to be Send.
+// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
+// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Send, L: Lock, W: Wait> Send for MutexGuard<'_, T, L, W> {}
-
-// Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
