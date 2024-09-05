@@ -91,7 +91,6 @@ macro_rules! thread_local_node {
 ///
 /// [`MutexNode`]: MutexNode
 /// [`raw::Mutex`]: Mutex
-/// [`thread_local_node!`]: crate::thread_local_node
 /// [`try_lock_with_local`]: Mutex::try_lock_with_local
 /// [`lock_with_local`]: Mutex::lock_with_local
 /// [`try_lock_with_local_unchecked`]: Mutex::try_lock_with_local_unchecked
@@ -208,8 +207,6 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     mutex.try_lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
-    /// [`LocalMutexNode`]: LocalMutexNode
-    /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
     pub fn try_lock_with_local<F, Ret>(&self, node: StaticNode, f: F) -> Ret
@@ -239,6 +236,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// not check if the current thread local node is already mutably borrowed.
     /// If the current thread local node is already borrowed, calling this
     /// function is undefined behavior.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key currently has its destructor running, and it **may**
+    /// panic if the destructor has previously been run for this thread.
     ///
     /// # Examples
     ///
@@ -380,8 +382,6 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     mutex.lock_with_local(&NODE, |_guard| ());
     /// });
     /// ```
-    /// [`LocalMutexNode`]: LocalMutexNode
-    /// [`thread_local_node!`]: crate::thread_local_node
     #[inline]
     #[track_caller]
     pub fn lock_with_local<F, Ret>(&self, node: StaticNode, f: F) -> Ret

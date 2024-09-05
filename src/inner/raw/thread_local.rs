@@ -23,13 +23,11 @@ pub struct LocalMutexNode<N: 'static> {
 #[cfg(not(tarpaulin_include))]
 impl<N> LocalMutexNode<N> {
     #[cfg(not(all(loom, test)))]
-    #[must_use]
     pub const fn new(key: LocalKey<RefCell<N>>) -> Self {
         Self { key }
     }
 
     #[cfg(all(loom, test))]
-    #[must_use]
     pub const fn new(key: &'static LocalKey<RefCell<N>>) -> Self {
         Self { key }
     }
@@ -43,13 +41,13 @@ fn panic_already_borrowed(caller: &Location<'static>) -> ! {
 }
 
 impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
-    #[track_caller]
     /// Attempts to acquire this mutex with a thread local node and then runs
     /// a closure against its guard.
     ///
     /// # Panics
     ///
     /// See: `with_local_node`.
+    #[track_caller]
     pub fn try_lock_with_local<N, F, Ret>(&self, node: StaticNode<N>, f: F) -> Ret
     where
         N: DerefMut<Target = MutexNode<L>>,
