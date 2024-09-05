@@ -65,7 +65,7 @@ pub struct Mutex<T: ?Sized, Ps, Pq> {
     inner: inner::Mutex<T, Parker, ParkWait<Ps>, ParkWait<Pq>>,
 }
 
-// Same unsafe impls as `crate::inner::raw::Mutex`.
+// Same unsafe impls as `crate::inner::barging::Mutex`.
 unsafe impl<T: ?Sized + Send, Ps, Pq> Send for Mutex<T, Ps, Pq> {}
 unsafe impl<T: ?Sized + Send, Ps, Pq> Sync for Mutex<T, Ps, Pq> {}
 
@@ -468,7 +468,7 @@ pub struct MutexGuard<'a, T: ?Sized, Ps, Pq> {
     inner: inner::MutexGuard<'a, T, Parker, ParkWait<Ps>, ParkWait<Pq>>,
 }
 
-// Same unsafe impls as `crate::inner::raw::MutexGuard`.
+// Same unsafe impls as `crate::inner::barging::MutexGuard`.
 unsafe impl<T: ?Sized + Send, Ps, Pq> Send for MutexGuard<'_, T, Ps, Pq> {}
 unsafe impl<T: ?Sized + Sync, Ps, Pq> Sync for MutexGuard<'_, T, Ps, Pq> {}
 

@@ -14,7 +14,6 @@
 //! [`park`]: crate::parking::park
 //! [`Park`]: crate::parking::park::Park
 
-#[allow(missing_docs)]
 pub mod park;
 pub mod raw;
 

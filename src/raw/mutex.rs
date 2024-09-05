@@ -47,6 +47,7 @@ impl MutexNode {
 impl Deref for MutexNode {
     type Target = inner::MutexNode<AtomicBool>;
 
+    #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -54,6 +55,7 @@ impl Deref for MutexNode {
 
 #[doc(hidden)]
 impl DerefMut for MutexNode {
+    #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -536,6 +538,7 @@ unsafe impl<T: ?Sized + Sync, R: Relax> Sync for MutexGuard<'_, T, R> {}
 impl<'a, T: ?Sized, R: Relax> From<inner::MutexGuard<'a, T, AtomicBool, RelaxWait<R>>>
     for MutexGuard<'a, T, R>
 {
+    #[inline(always)]
     fn from(inner: inner::MutexGuard<'a, T, AtomicBool, RelaxWait<R>>) -> Self {
         Self { inner }
     }

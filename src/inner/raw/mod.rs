@@ -62,7 +62,6 @@ pub struct MutexNode<L> {
 
 impl<L> MutexNode<L> {
     /// Creates new `MutexNode` instance.
-    #[must_use]
     pub const fn new() -> Self {
         Self { inner: MaybeUninit::uninit() }
     }
@@ -78,6 +77,7 @@ impl<L: Lock> MutexNode<L> {
 
 #[cfg(not(tarpaulin_include))]
 impl<L> Default for MutexNode<L> {
+    #[inline(always)]
     fn default() -> Self {
         Self::new()
     }
@@ -211,7 +211,6 @@ fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut Mu
 
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
-#[must_use = "if unused the Mutex will immediately unlock"]
 pub struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     lock: &'a Mutex<T, L, W>,
     head: &'a MutexNodeInit<L>,
@@ -255,6 +254,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, 
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
+    #[inline(always)]
     fn deref(&self) -> &T {
         // SAFETY: A guard instance holds the lock locked.
         unsafe { &*self.lock.data.get() }
@@ -264,6 +264,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, 
 #[cfg(not(all(loom, test)))]
 impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, L, W> {
     /// Mutably dereferences the guard to access the underlying data.
+    #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
         unsafe { &mut *self.lock.data.get() }
@@ -271,6 +272,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
 }
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
+    #[inline]
     fn drop(&mut self) {
         self.lock.unlock(self.head);
     }

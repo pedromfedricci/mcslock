@@ -5,6 +5,8 @@ use crate::cfg::cell::{UnsafeCell, WithUnchecked};
 use crate::inner::raw;
 use crate::lock::{Lock, Wait};
 
+/// A mutual exclusion primitive implementing a barging MCS lock protocol, useful
+/// for protecting shared data.
 pub struct Mutex<T: ?Sized, L, Ws, Wq> {
     lock: L,
     queue: raw::Mutex<(), L, Wq>,
@@ -99,6 +101,8 @@ impl<T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for Mutex<T, L, Ws, Wq> {
     }
 }
 
+/// An RAII implementation of a "scoped lock" of a mutex. When this structure is
+/// dropped (falls out of scope), the lock will be unlocked.
 pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
     lock: &'a Mutex<T, L, Ws, Wq>,
 }

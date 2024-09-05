@@ -1,4 +1,4 @@
-# A simple and correct implementation of MCS lock
+# A simple and correct implementation of the MCS lock
 
 [![MIT][mit-badge]][mit]
 [![Apache 2.0][apache2-badge]][apache2]
