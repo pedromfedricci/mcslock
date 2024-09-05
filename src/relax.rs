@@ -191,6 +191,7 @@ unsafe impl Relax for SpinBackoff {
     }
 
     #[cfg(not(all(test, panic = "unwind")))]
+    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn relax(&mut self) {
         self.relax_impl();
@@ -252,6 +253,7 @@ unsafe impl Relax for YieldBackoff {
     }
 
     #[cfg(not(all(test, panic = "unwind")))]
+    #[cfg(not(tarpaulin_include))]
     #[inline(always)]
     fn relax(&mut self) {
         self.relax_impl();
@@ -317,6 +319,7 @@ impl Abort {
 }
 
 #[cfg(all(test, panic = "unwind"))]
+#[cfg(not(tarpaulin_include))]
 impl Drop for Abort {
     fn drop(&mut self) {
         panic!("thread exits are forbidden inside `relax`, aborting");
