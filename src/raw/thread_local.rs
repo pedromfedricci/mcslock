@@ -119,7 +119,7 @@ impl LocalMutexNode {
     }
 
     /// Creates a new Loom based `LocalMutexNode` key from the provided thread
-    /// local node key (non-const).
+    /// local node key.
     #[cfg(all(loom, test))]
     #[must_use]
     pub(crate) const fn new(key: &'static LocalKey<RefCell<MutexNode>>) -> Self {
@@ -411,6 +411,11 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// check if the current thread local node is already mutably borrowed. If
     /// the current thread local node is already borrowed, calling this
     /// function is undefined behavior.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key currently has its destructor running, and it **may**
+    /// panic if the destructor has previously been run for this thread.
     ///
     /// # Examples
     ///

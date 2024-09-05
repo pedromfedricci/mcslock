@@ -180,7 +180,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -192,7 +192,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// time:
     ///
     #[doc = concat!("```should_panic,", already_borrowed_error!())]
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -247,7 +247,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -272,7 +272,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -286,7 +286,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// at the same time:
     ///
     /// ```no_run
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -336,7 +336,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -355,7 +355,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -367,7 +367,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// time:
     ///
     #[doc = concat!("```should_panic,", already_borrowed_error!())]
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -422,7 +422,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -441,7 +441,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// closure:
     ///
     /// ```compile_fail,E0515
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///
@@ -455,7 +455,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// at the same time:
     ///
     /// ```no_run
-    /// use mcslock::raw::spins::Mutex;
+    /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
     ///

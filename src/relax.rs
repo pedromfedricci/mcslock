@@ -272,7 +272,7 @@ struct Backoff<const MAX: Uint>(Uint);
 impl<const MAX: Uint> Backoff<MAX> {
     /// The number of iterations that the backoff spin loop will execute, the
     /// result of the expression may overflow.
-    fn end(shifts: Uint) -> Uint {
+    const fn end(shifts: Uint) -> Uint {
         1 << shifts
     }
 
