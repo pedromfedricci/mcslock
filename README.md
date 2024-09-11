@@ -240,7 +240,8 @@ The `parking` feature provides Mutex implementations that are capable of putting
 blocking threads waiting for the lock to sleep. These implementations are
 published under the [`parking`] module. Each `no_std` mutex flavors provided
 by this crate have corresponding parking implementations under that module.
-Users may select a out of the box parking policy at [`parking::park`].
+Users may select a out of the box parking policy at [`parking::park`]. This feature
+will automatically enable the `yield` feature.
 
 ## Minimum Supported Rust Version (MSRV)
 
