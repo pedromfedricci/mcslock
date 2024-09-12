@@ -38,7 +38,7 @@ command = "cargo"
 args = ["semver-checks", "${@}"]
 
 # Run all documentation snippets.
-[tasks.doc]
+[tasks.doc-test]
 command = "cargo"
 args = ["test", "--doc", "--all-features"]
 
