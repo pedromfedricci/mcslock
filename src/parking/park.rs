@@ -11,8 +11,8 @@ use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 /// # Example
 ///
 /// ```
-/// # Requires `parking` feature.
-/// use mcslock::parking::Park;
+/// // Requires `parking` feature.
+/// use mcslock::parking::park::Park;
 /// use mcslock::relax::Spin;
 ///
 /// #[derive(Default)]
