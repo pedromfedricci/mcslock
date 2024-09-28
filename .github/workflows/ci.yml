@@ -134,6 +134,10 @@ jobs:
         env:
           RUSTFLAGS: -D warnings -D clippy::pedantic -D clippy::nursery
         run: cargo hack clippy --feature-powerset --no-dev-deps
+      - name: Lint test profile
+        env:
+          RUSTFLAGS: -D warnings -D clippy::pedantic -D clippy::nursery
+        run: cargo hack clippy --profile test --feature-powerset --no-dev-deps
       - name: Lint loom
         env:
           RUSTFLAGS: --cfg loom -D warnings -D clippy::pedantic -D clippy::nursery
