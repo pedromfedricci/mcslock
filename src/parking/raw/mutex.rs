@@ -241,7 +241,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// use std::sync::Arc;
     /// use std::thread;
     ///
-    /// use mcslock::raw;
+    /// use mcslock::parking::raw;
     /// use mcslock::parking::park::SpinThenPark;
     ///
     /// type Mutex<T> = raw::Mutex<T, SpinThenPark>;
@@ -414,7 +414,7 @@ impl<T: ?Sized, P> Mutex<T, P> {
     /// # Examples
     ///
     /// ```
-    /// use mcslock::raw::{self, MutexNode};
+    /// use mcslock::parking::raw::{self, MutexNode};
     /// use mcslock::parking::park::SpinThenPark;
     ///
     /// type Mutex<T> = raw::Mutex<T, SpinThenPark>;
@@ -605,7 +605,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_than_park() {
+    fn lots_and_lots_lock_yield_then_park() {
         tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
@@ -615,7 +615,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_try_lock_yield_than_park() {
+    fn lots_and_lots_try_lock_yield_then_park() {
         tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
     }
 
@@ -625,7 +625,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_yield_than_park() {
+    fn lots_and_lots_mixed_lock_yield_then_park() {
         tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
@@ -716,17 +716,17 @@ mod model {
     }
 
     #[test]
-    fn try_lock_join_yield_than_park() {
+    fn try_lock_join_yield_then_park() {
         models::try_lock_join::<yields::Mutex<_>>();
     }
 
     #[test]
-    fn lock_join_yield_than_park() {
+    fn lock_join_yield_then_park() {
         models::lock_join::<yields::Mutex<_>>();
     }
 
     #[test]
-    fn mixed_lock_join_yield_than_park() {
+    fn mixed_lock_join_yield_then_park() {
         models::mixed_lock_join::<yields::Mutex<_>>();
     }
 }

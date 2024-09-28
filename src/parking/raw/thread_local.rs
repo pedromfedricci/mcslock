@@ -628,7 +628,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_than_park() {
+    fn lots_and_lots_lock_yield_then_park() {
         tests::lots_and_lots_lock::<YieldThenParkMutexPanic<_>>();
     }
 
@@ -638,7 +638,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_than_park_unchecked() {
+    fn lots_and_lots_lock_yield_then_park_unchecked() {
         tests::lots_and_lots_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
@@ -653,12 +653,12 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_try_lock_yield_than_park() {
+    fn lots_and_lots_try_lock_yield_then_park() {
         tests::lots_and_lots_try_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock_yield_than_park_unchecked() {
+    fn lots_and_lots_try_lock_yield_then_park_unchecked() {
         tests::lots_and_lots_try_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
@@ -673,12 +673,12 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_yield_than_park() {
+    fn lots_and_lots_mixed_lock_yield_then_park() {
         tests::lots_and_lots_mixed_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_yield_than_park_unchecked() {
+    fn lots_and_lots_mixed_lock_yield_then_park_unchecked() {
         tests::lots_and_lots_mixed_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
@@ -752,7 +752,7 @@ mod model {
     }
 
     #[test]
-    fn try_lock_join_yield_than_park() {
+    fn try_lock_join_yield_then_park() {
         models::try_lock_join::<MutexYieldPanic<_>>();
     }
 
@@ -762,7 +762,7 @@ mod model {
     }
 
     #[test]
-    fn try_lock_join_yield_than_park_unchecked() {
+    fn try_lock_join_yield_then_park_unchecked() {
         models::try_lock_join::<MutexYieldUnchecked<_>>();
     }
 
@@ -772,7 +772,7 @@ mod model {
     }
 
     #[test]
-    fn lock_join_yield_than_park() {
+    fn lock_join_yield_then_park() {
         models::lock_join::<MutexYieldPanic<_>>();
     }
 
@@ -787,7 +787,7 @@ mod model {
     }
 
     #[test]
-    fn mixed_lock_join_yield_than_park() {
+    fn mixed_lock_join_yield_then_park() {
         models::mixed_lock_join::<MutexYieldPanic<_>>();
     }
 

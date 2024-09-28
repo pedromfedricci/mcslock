@@ -85,7 +85,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_than_park() {
+    fn lots_and_lots_lock_yield_then_park() {
         tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
@@ -95,7 +95,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_try_lock_yield_than_park() {
+    fn lots_and_lots_try_lock_yield_then_park() {
         tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
     }
 
@@ -105,7 +105,7 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_yield_than_park() {
+    fn lots_and_lots_mixed_lock_yield_then_park() {
         tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
