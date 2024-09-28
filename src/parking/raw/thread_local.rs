@@ -95,8 +95,8 @@ macro_rules! thread_local_parking_node {
 /// [`lock_with_local`]: Mutex::lock_with_local
 /// [`try_lock_with_local_unchecked`]: Mutex::try_lock_with_local_unchecked
 /// [`lock_with_local_unchecked`]: Mutex::lock_with_local_unchecked
-#[repr(transparent)]
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct LocalMutexNode {
     inner: inner::LocalMutexNode<MutexNode>,
 }

@@ -56,6 +56,7 @@ impl<L: Lock> MutexNodeInit<L> {
 ///
 /// `L` must fail [`core::mem::needs_drop`] check, else `L` will leak.
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct MutexNode<L> {
     inner: MaybeUninit<MutexNodeInit<L>>,
 }

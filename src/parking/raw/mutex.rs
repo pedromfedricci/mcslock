@@ -19,8 +19,8 @@ use crate::test::{LockNew, LockWith};
 ///
 /// [`lock`]: Mutex::lock
 /// [`try_lock`]: Mutex::try_lock
-#[repr(transparent)]
 #[derive(Debug)]
+#[repr(transparent)]
 pub struct MutexNode {
     inner: inner::MutexNode<Parker>,
 }
