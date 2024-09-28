@@ -3,6 +3,9 @@ use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
+#[cfg(feature = "parking")]
+use crate::parking::park::Park;
+
 /// A `Lock` is some arbitrary data type used by a lock implementation to
 /// manage the state of the lock.
 ///
@@ -70,22 +73,16 @@ pub trait Lock {
 
 /// The waiting policy that should be applied while the lock state has not
 /// reached some target state.
-pub trait Wait: Relax {
-    /// The relax operation that should be applied during unlock waiting loops.
+pub trait Wait {
+    /// The relax operation that will be excuted during lock waiting loops.
+    type LockRelax: Relax;
+
+    /// The relax operation that will be excuted during unlock waiting loops.
     type UnlockRelax: Relax;
 
-    /// Hints whether or not should the `parking` operation be executed at this
-    /// time.
-    ///
-    /// Returning `false` means that the thread is not ready to be put to sleep
-    /// yet, there is some other event that should occur first. Returning `true`
-    /// indicates that the thread is no longer waiting for any event, and so it
-    /// is hinting that it should be parked.
-    ///
-    /// Note that `no_std` implementations will simply ignore this function and
-    /// will only use `Self::relax` and `Self::UnlockRelax::relax` functions
-    /// instead.
-    fn should_park(&self) -> bool;
+    /// The parking policy that a thread parking capable waiter will execute.
+    #[cfg(feature = "parking")]
+    type Park: Park;
 }
 
 impl Lock for AtomicBool {
@@ -120,9 +117,9 @@ impl Lock for AtomicBool {
     fn lock_wait_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        let mut relaxed_waiter = W::new();
+        let mut relax = W::LockRelax::new();
         while self.load(Relaxed) {
-            relaxed_waiter.relax();
+            relax.relax();
         }
     }
 

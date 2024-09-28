@@ -1,9 +1,42 @@
-// TODO: Docs
+#![allow(missing_docs)]
 
+use core::marker::PhantomData;
+
+use crate::cfg::debug_abort;
 use crate::lock::Wait;
 use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 
-/// A thread parking waiting policy to be applied when the lock is contended.
+/// The thread parking waiting policy to be applied when the lock is contended.
+///
+/// # Example
+///
+/// ```
+/// # Requires `parking` feature.
+/// use mcslock::parking::Park;
+/// use mcslock::relax::Spin;
+///
+/// #[derive(Default)]
+/// struct SpinThenPark(u32);
+///
+/// unsafe impl Park for SpinThenPark {
+///     type Relax = Spin;
+///
+///     #[inline(always)]
+///     fn new() -> Self {
+///         Self::default()
+///     }
+///
+///     #[inline(always)]
+///     fn should_park(&self) -> bool {
+///         self.0 >= 100
+///     }
+///
+///     #[inline(always)]
+///     fn on_failure(&mut self) {
+///         self.0 += 1;
+///     }
+/// }
+/// ```
 ///
 /// # Safety
 ///
@@ -11,9 +44,12 @@ use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
 /// such as envoking a uncaught [`core::panic!`] call, or any other operation
 /// that will panic the thread. Exiting the thread will result in undefined
 /// behiavior.
-pub unsafe trait Park: Relax {
-    /// The relax operation that should be applied during unlock waiting loops.
-    type UnlockRelax: Relax;
+pub unsafe trait Park {
+    /// The relax operation that should be run during a period of contention.
+    type Relax: Relax;
+
+    /// Returns the initial value for this parking policy.
+    fn new() -> Self;
 
     /// Hints whether or not should the parking operation be executed at this
     /// time.
@@ -23,202 +59,221 @@ pub unsafe trait Park: Relax {
     /// indicates that the thread is no longer waiting for any event, and so it
     /// is hinting that it should be parked.
     fn should_park(&self) -> bool;
+
+    /// Updates the inner state whenever the thread fails to acquire the lock.
+    ///
+    /// This function will be called once whenever both `should_park` returns
+    /// `false` **and** the thread fails to acquire the lock. This will not be
+    /// called otherwise.
+    fn on_failure(&mut self);
 }
 
-type Uint = u16;
+mod sealed {
+    /// The actual implementation of this crate's `Park` types.
+    pub trait ParkImpl {
+        type Relax: super::Relax;
 
-pub const DEFMAX: Uint = 100;
+        /// The actual `new` implementation.
+        fn new() -> Self;
 
-pub struct SpinThenPark<const MAX: Uint = DEFMAX> {
-    bounded: Bounded<Spin, MAX>,
+        /// The actual `should_park` implementation.
+        fn should_park(&self) -> bool;
+
+        /// The actual `on_failure` implementation.
+        fn on_failure(&mut self);
+    }
 }
+use sealed::ParkImpl;
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Relax for SpinThenPark<MAX> {
+// SAFETY: All `new`, `should_park` and `on_failure` function implementations are
+// protected with a process abort (under test with unwind on panic configuration)
+// in case any of them where to panic the thread.
+#[doc(hidden)]
+unsafe impl<P: ParkImpl> Park for P {
+    type Relax = P::Relax;
+
     #[inline(always)]
+    fn new() -> Self {
+        debug_abort::on_unwind(|| P::new())
+    }
+
+    #[inline(always)]
+    fn should_park(&self) -> bool {
+        debug_abort::on_unwind(|| P::should_park(self))
+    }
+
+    #[inline(always)]
+    fn on_failure(&mut self) {
+        debug_abort::on_unwind(|| P::on_failure(self));
+    }
+}
+
+pub struct SpinThenPark {
+    bounded: Bounded<{ Self::ATTEMPTS }>,
+}
+
+impl SpinThenPark {
+    const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
+}
+
+impl ParkImpl for SpinThenPark {
+    type Relax = Spin;
+
     fn new() -> Self {
         Self { bounded: Bounded::new() }
     }
 
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
-    }
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Park for SpinThenPark<MAX> {
-    type UnlockRelax = Spin;
-
-    #[inline(always)]
     fn should_park(&self) -> bool {
         self.bounded.should_park()
     }
+
+    fn on_failure(&mut self) {
+        self.bounded.on_failure();
+    }
 }
 
-pub struct LoopThenPark<const MAX: Uint = DEFMAX> {
-    bounded: Bounded<Loop, MAX>,
+pub struct LoopThenPark {
+    bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Relax for LoopThenPark<MAX> {
-    #[inline(always)]
+impl LoopThenPark {
+    const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
+}
+
+impl ParkImpl for LoopThenPark {
+    type Relax = Loop;
+
     fn new() -> Self {
         Self { bounded: Bounded::new() }
     }
 
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
-    }
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Park for LoopThenPark<MAX> {
-    type UnlockRelax = Loop;
-
-    #[inline(always)]
     fn should_park(&self) -> bool {
         self.bounded.should_park()
     }
+
+    fn on_failure(&mut self) {
+        self.bounded.on_failure();
+    }
 }
 
-pub struct YieldThenPark<const MAX: Uint = DEFMAX> {
-    bounded: Bounded<Yield, MAX>,
+pub struct YieldThenPark {
+    bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Relax for YieldThenPark<MAX> {
-    #[inline(always)]
+impl YieldThenPark {
+    const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
+}
+
+impl ParkImpl for YieldThenPark {
+    type Relax = Yield;
+
     fn new() -> Self {
         Self { bounded: Bounded::new() }
     }
 
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
-    }
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Park for YieldThenPark<MAX> {
-    type UnlockRelax = Yield;
-
-    #[inline(always)]
     fn should_park(&self) -> bool {
         self.bounded.should_park()
+    }
+
+    fn on_failure(&mut self) {
+        self.bounded.on_failure();
     }
 }
 
 // Immediately inform that the current should be parked.
-pub struct ImmediatePark;
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl Relax for ImmediatePark {
-    #[inline(always)]
-    fn new() -> Self {
-        Self
-    }
-
-    #[cfg(not(tarpaulin_include))]
-    #[inline(always)]
-    fn relax(&mut self) {}
+pub struct ImmediatePark<R: Relax = Spin> {
+    relax: PhantomData<R>,
 }
 
 // SAFETY: None of the associated function implementations contain any code
 // that could cause a thread exit.
-unsafe impl Park for ImmediatePark {
-    type UnlockRelax = Yield;
+impl<R: Relax> ParkImpl for ImmediatePark<R> {
+    type Relax = R;
 
-    #[inline(always)]
+    fn new() -> Self {
+        Self { relax: PhantomData }
+    }
+
     fn should_park(&self) -> bool {
         true
     }
+
+    fn on_failure(&mut self) {}
 }
 
-pub struct SpinBackoffThenPark<const MAX: Uint = DEFMAX> {
-    bounded: Bounded<SpinBackoff, MAX>,
+pub struct SpinBackoffThenPark {
+    bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Relax for SpinBackoffThenPark<MAX> {
-    #[inline(always)]
+impl SpinBackoffThenPark {
+    const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
+}
+
+impl ParkImpl for SpinBackoffThenPark {
+    type Relax = SpinBackoff;
+
     fn new() -> Self {
         Self { bounded: Bounded::new() }
     }
 
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
-    }
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Park for SpinBackoffThenPark<MAX> {
-    type UnlockRelax = SpinBackoff;
-
-    #[inline(always)]
     fn should_park(&self) -> bool {
         self.bounded.should_park()
     }
+
+    fn on_failure(&mut self) {
+        self.bounded.on_failure();
+    }
 }
 
-pub struct YieldBackoffThenPark<const MAX: Uint = DEFMAX> {
-    bounded: Bounded<YieldBackoff, MAX>,
+pub struct YieldBackoffThenPark {
+    bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Relax for YieldBackoffThenPark<MAX> {
-    #[inline(always)]
+impl YieldBackoffThenPark {
+    const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
+}
+
+impl ParkImpl for YieldBackoffThenPark {
+    type Relax = YieldBackoff;
+
     fn new() -> Self {
         Self { bounded: Bounded::new() }
     }
 
-    #[inline(always)]
-    fn relax(&mut self) {
-        self.bounded.relax();
-    }
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<const MAX: Uint> Park for YieldBackoffThenPark<MAX> {
-    type UnlockRelax = YieldBackoff;
-
-    #[inline(always)]
     fn should_park(&self) -> bool {
         self.bounded.should_park()
     }
+
+    fn on_failure(&mut self) {
+        self.bounded.on_failure();
+    }
 }
 
-/// A bounded, relaxed waiting policy that will block the thread for at most
-/// some number of attempts.
-struct Bounded<R, const MAX: Uint> {
-    relax: R,
+/// An unsigned integer type use as the inner type for [`Bounded`].
+///
+/// All `Bounded` related arithmetic operations (eg. sum) should only
+/// use this same type as the right-hand and lef-hand side types.
+type Uint = u16;
+
+/// A default number of attempts to acquire the lock before parking the thread.
+const DEFAULT_ATTEMPTS: Uint = 100;
+
+/// A bounded parking policy that will block the thread for at most some number
+/// of attempts.
+struct Bounded<const MAX: Uint> {
     attempts: Uint,
 }
 
-impl<R: Relax, const MAX: Uint> Bounded<R, MAX> {
-    fn new() -> Self {
-        Self { relax: R::new(), attempts: 0 }
+impl<const MAX: Uint> Bounded<MAX> {
+    const fn new() -> Self {
+        Self { attempts: 0 }
     }
 
     const fn should_park(&self) -> bool {
         self.attempts >= MAX
     }
 
-    fn relax(&mut self) {
-        self.relax.relax();
+    fn on_failure(&mut self) {
         self.attempts += 1;
     }
 }
@@ -230,110 +285,99 @@ impl<R: Relax, const MAX: Uint> Bounded<R, MAX> {
 /// `T` implements [`Park`], because that would prevent us from implementing
 /// `Wait` for `T` when it implements [`Relax`], since they would conflict. We
 /// need both `Park` and `Relax` types to implement `Wait`.
-pub(super) struct ParkWait<P> {
-    waiter: P,
-}
-
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl<P: Park> Relax for ParkWait<P> {
-    fn new() -> Self {
-        Self { waiter: P::new() }
-    }
-
-    fn relax(&mut self) {
-        self.waiter.relax();
-    }
-}
+pub(super) struct ParkWait<P>(PhantomData<P>);
 
 impl<P: Park> Wait for ParkWait<P> {
-    type UnlockRelax = P::UnlockRelax;
+    type LockRelax = P::Relax;
+    type UnlockRelax = P::Relax;
+    type Park = P;
+}
+
+/// A parking policy that never requests the thread to be parked.
+///
+/// Useful for `Relax` types so that they can implement the `Wait` trait, even
+/// though they will never call any of the `Park` methods.
+pub(crate) struct CantPark<R>(PhantomData<R>);
+
+impl<R: Relax> ParkImpl for CantPark<R> {
+    type Relax = R;
+
+    fn new() -> Self {
+        Self(PhantomData)
+    }
 
     fn should_park(&self) -> bool {
-        self.waiter.should_park()
+        false
     }
+
+    fn on_failure(&mut self) {}
 }
 
 #[cfg(all(not(loom), test))]
 mod test {
     use super::{Park, Uint};
 
-    trait Bounded<const MAX: Uint>: Park {}
-
-    use super::SpinThenPark;
-    impl<const MAX: Uint> Bounded<MAX> for SpinThenPark<MAX> {}
-
-    use super::YieldThenPark;
-    impl<const MAX: Uint> Bounded<MAX> for YieldThenPark<MAX> {}
-
-    use super::LoopThenPark;
-    impl<const MAX: Uint> Bounded<MAX> for LoopThenPark<MAX> {}
-
-    use super::SpinBackoffThenPark;
-    impl<const MAX: Uint> Bounded<MAX> for SpinBackoffThenPark<MAX> {}
-
-    use super::YieldBackoffThenPark;
-    impl<const MAX: Uint> Bounded<MAX> for YieldBackoffThenPark<MAX> {}
-
-    fn parking_policy_loop<P: Park>() -> (P, Uint) {
-        let mut parking_waiter = P::new();
+    fn parking_loop<P: Park, const MAX: Uint>() -> (P, Uint) {
+        let mut parker = P::new();
         let mut counter = 0;
-        while !parking_waiter.should_park() {
-            parking_waiter.relax();
-            counter += 1;
+        for _ in 0..=MAX.saturating_mul(10) {
+            while !parker.should_park() {
+                parker.on_failure();
+                counter += 1;
+            }
         }
-        (parking_waiter, counter)
+        (parker, counter)
     }
 
-    fn should_park_eventually<P: Bounded<MAX>, const MAX: Uint>() {
-        let (waiter, counter): (P, Uint) = parking_policy_loop();
+    fn should_park_eventually<P: Park, const MAX: Uint>() {
+        let (waiter, counter) = parking_loop::<P, MAX>();
         assert!(waiter.should_park());
         assert_eq!(MAX, counter);
     }
 
-    fn should_park_immediately<P: Park>() {
-        let (waiter, counter): (P, Uint) = parking_policy_loop();
+    fn should_park_immediately<P: Park, const MAX: Uint>() {
+        let (waiter, counter) = parking_loop::<P, MAX>();
         assert!(waiter.should_park());
         assert_eq!(0, counter);
     }
 
     #[test]
     fn spins() {
-        should_park_eventually::<SpinThenPark<0>, 0>();
-        should_park_eventually::<SpinThenPark<1>, 1>();
-        should_park_eventually::<SpinThenPark<10>, 10>();
+        use super::SpinThenPark;
+        const MAX: Uint = SpinThenPark::ATTEMPTS;
+        should_park_eventually::<SpinThenPark, MAX>();
     }
 
     #[test]
     fn yields() {
-        should_park_eventually::<YieldThenPark<0>, 0>();
-        should_park_eventually::<YieldThenPark<1>, 1>();
-        should_park_eventually::<YieldThenPark<10>, 10>();
+        use super::YieldThenPark;
+        const MAX: Uint = YieldThenPark::ATTEMPTS;
+        should_park_eventually::<YieldThenPark, MAX>();
     }
 
     #[test]
     fn loops() {
-        should_park_eventually::<LoopThenPark<0>, 0>();
-        should_park_eventually::<LoopThenPark<1>, 1>();
-        should_park_eventually::<LoopThenPark<10>, 10>();
+        use super::LoopThenPark;
+        const MAX: Uint = LoopThenPark::ATTEMPTS;
+        should_park_eventually::<LoopThenPark, MAX>();
     }
 
     #[test]
     fn spin_backoff() {
-        should_park_eventually::<SpinBackoffThenPark<0>, 0>();
-        should_park_eventually::<SpinBackoffThenPark<1>, 1>();
-        should_park_eventually::<SpinBackoffThenPark<10>, 10>();
+        use super::SpinBackoffThenPark;
+        const MAX: Uint = SpinBackoffThenPark::ATTEMPTS;
+        should_park_eventually::<SpinBackoffThenPark, MAX>();
     }
 
     #[test]
     fn yield_backoff() {
-        should_park_eventually::<YieldBackoffThenPark<0>, 0>();
-        should_park_eventually::<YieldBackoffThenPark<1>, 1>();
-        should_park_eventually::<YieldBackoffThenPark<10>, 10>();
+        use super::YieldBackoffThenPark;
+        const MAX: Uint = YieldBackoffThenPark::ATTEMPTS;
+        should_park_eventually::<YieldBackoffThenPark, MAX>();
     }
 
     #[test]
     fn immediately() {
-        should_park_immediately::<super::ImmediatePark>();
+        should_park_immediately::<super::ImmediatePark, 10>();
     }
 }

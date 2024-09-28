@@ -1,4 +1,6 @@
 use crate::lock::{Lock, Wait};
+use crate::parking::park::Park;
+use crate::relax::Relax;
 
 #[cfg(not(all(loom, test)))]
 pub(super) use common::Parker;
@@ -103,18 +105,25 @@ impl Lock for Parker {
     }
 
     fn lock_wait_relaxed<W: Wait>(&self) {
-        // Block the thread with a relaxed loop until either all attempts have
-        // already been made or the lock has been handed off to this thread. If
-        // the limit of attempts has been reached and the lock remains locked,
-        // then park the thread. The parking loop will handle spurious wakeups.
-        let mut parking_waiter = W::new();
-        while !parking_waiter.should_park() {
+        let mut parker = W::Park::new();
+        let mut relax = W::LockRelax::new();
+        // Block the thread with a relaxed loop untin either all attempts have
+        // already been made or the lock has been handed over to this thread.
+        while !parker.should_park() {
             if ParkerT::is_locked(self) {
-                parking_waiter.relax();
+                // Whenever the thread is not ready to be put to sleep yet and
+                // it also fails to acquire the lock, then update parker's
+                // state and apply its associated relax operation.
+                parker.on_failure();
+                relax.relax();
             } else {
+                // The thread managed to acquire the lock without sleeping and
+                // also within the limit of attempts.
                 return;
             }
         }
+        // The limit of attempts have been reached and the lock remais locked,
+        // then park the thread. The parking loop will handle spurious wakeups.
         ParkerT::park_loop(self);
     }
 

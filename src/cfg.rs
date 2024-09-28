@@ -95,6 +95,47 @@ pub mod cell {
     }
 }
 
+pub mod debug_abort {
+    #[cfg(all(test, panic = "unwind"))]
+    use std::panic::Location;
+
+    /// Runs the closure, aborting the process if a unwinding panic occurs.
+    #[cfg(all(test, panic = "unwind"))]
+    #[track_caller]
+    pub fn on_unwind<T, F: FnOnce() -> T>(may_unwind: F) -> T {
+        let location = Location::caller();
+        let abort = DebugAbort { location };
+        let value = may_unwind();
+        core::mem::forget(abort);
+        value
+    }
+
+    /// Runs the closure, without aborting the process if a unwinding panic
+    /// occurs.
+    #[cfg(not(all(test, panic = "unwind")))]
+    #[cfg(not(tarpaulin_include))]
+    pub fn on_unwind<T, F: FnOnce() -> T>(may_unwind: F) -> T {
+        may_unwind()
+    }
+
+    /// A test only type that will abort the program execution once dropped.
+    ///
+    /// To avoid aborting the proccess, callers must `forget` all instances of
+    /// the `Abort` type.
+    #[cfg(all(test, panic = "unwind"))]
+    struct DebugAbort {
+        location: &'static Location<'static>,
+    }
+
+    #[cfg(all(test, panic = "unwind"))]
+    #[cfg(not(tarpaulin_include))]
+    impl Drop for DebugAbort {
+        fn drop(&mut self) {
+            panic!("thread exits are forbidden inside {:?}, aborting", self.location);
+        }
+    }
+}
+
 pub mod hint {
     #[cfg(not(all(loom, test)))]
     pub use core::hint::spin_loop;

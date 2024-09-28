@@ -1,5 +1,5 @@
-// Modified version of relax.rs from spin-rs to support Loom yielding,
-// exponential backoff and requires unsafe for `Relax`.
+// Heavily modified version of relax.rs from spin-rs to support Loom yielding,
+// exponential backoff, abort on unwind (debug) and requires unsafe for `Relax`.
 //
 // Original file at its most recent change (at the time of writing):
 // https://github.com/mvdnes/spin-rs/blob/5860ee114094cf200b97348ff332155fbd7159b4/src/relax.rs
@@ -14,7 +14,14 @@
 
 //! Strategies that determine the behaviour of locks when encountering contention.
 
-use crate::{cfg::hint, lock::Wait};
+use core::marker::PhantomData;
+
+use crate::cfg::debug_abort;
+use crate::cfg::hint;
+use crate::lock::Wait;
+
+#[cfg(feature = "parking")]
+use crate::parking::park::CantPark;
 
 #[cfg(any(feature = "yield", test))]
 use crate::cfg::thread;
@@ -55,6 +62,31 @@ pub unsafe trait Relax {
     fn relax(&mut self);
 }
 
+/// The actual implementation of this crate's `Relax` types.
+trait RelaxImpl {
+    /// The actual `new` implementation.
+    fn new() -> Self;
+
+    /// The actual `relax` implementation.
+    fn relax(&mut self);
+}
+
+// SAFETY: Both `new` and `relax` function implementation are protected with a
+// process abort (under test with unwind on panic configuration) in case any of
+// them where to panic the thread.
+#[doc(hidden)]
+unsafe impl<R: RelaxImpl> Relax for R {
+    #[inline(always)]
+    fn new() -> Self {
+        debug_abort::on_unwind(|| R::new())
+    }
+
+    #[inline(always)]
+    fn relax(&mut self) {
+        debug_abort::on_unwind(|| R::relax(self));
+    }
+}
+
 /// A strategy that rapidly spins while informing the CPU that it should power
 /// down non-essential components via [`core::hint::spin_loop`].
 ///
@@ -73,15 +105,11 @@ pub unsafe trait Relax {
 /// [priority inversion]: https://matklad.github.io/2020/01/02/spinlocks-considered-harmful.html
 pub struct Spin;
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl Relax for Spin {
-    #[inline(always)]
+impl RelaxImpl for Spin {
     fn new() -> Self {
         Self
     }
 
-    #[inline(always)]
     fn relax(&mut self) {
         hint::spin_loop();
     }
@@ -98,16 +126,12 @@ unsafe impl Relax for Spin {
 #[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct Yield;
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
 #[cfg(any(feature = "yield", test))]
-unsafe impl Relax for Yield {
-    #[inline(always)]
+impl RelaxImpl for Yield {
     fn new() -> Self {
         Self
     }
 
-    #[inline(always)]
     fn relax(&mut self) {
         thread::yield_now();
     }
@@ -121,35 +145,13 @@ unsafe impl Relax for Yield {
 /// (i.e: this is a workaround for possible compiler bugs).
 pub struct Loop;
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
-unsafe impl Relax for Loop {
-    #[inline(always)]
+impl RelaxImpl for Loop {
     fn new() -> Self {
         Self
     }
 
-    #[inline(always)]
     fn relax(&mut self) {}
 }
-
-// Exponential backoff is based on the crossbeam-utils implementation.
-// link to most recent change (as the time of writing):
-// https://github.com/crossbeam-rs/crossbeam/blob/371de8c2d304db07662450995848f3dc9598ac99/crossbeam-utils/src/backoff.rs
-//
-// Copyright (c) 2019 The Crossbeam Project Developers
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
-
-/// An unsigned integer type use as the inner type for [`Backoff`].
-///
-/// All backoff related arithmetic operations (eg. left shift, sum) should only
-/// only use this same type as the right-hand and lef-hand side types.
-type Uint = u32;
 
 /// A strategy that, as [`Spin`], will run a busy-wait spin-loop, except this
 /// implementation will perform exponential backoff.
@@ -166,12 +168,6 @@ pub struct SpinBackoff {
 impl SpinBackoff {
     /// The largest value the inner backoff counter can reach.
     const MAX: Uint = 6;
-
-    /// The actual relax implementation.
-    fn relax_impl(&mut self) {
-        self.inner.saturating_spin();
-        self.inner.saturating_step();
-    }
 }
 
 // The maximum inner value **must** be smaller than Uint::BITS, or else the
@@ -180,26 +176,14 @@ impl SpinBackoff {
 // will panic and exit the thread which is forbidded by `Relax`.
 const _: () = assert!(SpinBackoff::MAX < Uint::BITS);
 
-// SAFETY: The `new` function implementation does contain any code that could
-// could cause a thread exit. The `relax` function implementation is protected
-// with a process abort (under test with unwind on panic configuration) in case
-// an arithmetic operation overflow were to panic the thread.
-unsafe impl Relax for SpinBackoff {
-    #[inline(always)]
+impl RelaxImpl for SpinBackoff {
     fn new() -> Self {
-        Self { inner: Backoff::default() }
+        Self { inner: Backoff::new() }
     }
 
-    #[cfg(not(all(test, panic = "unwind")))]
-    #[cfg(not(tarpaulin_include))]
-    #[inline(always)]
     fn relax(&mut self) {
-        self.relax_impl();
-    }
-
-    #[cfg(all(test, panic = "unwind"))]
-    fn relax(&mut self) {
-        Abort::on_unwind(|| self.relax_impl());
+        self.inner.saturating_spin();
+        self.inner.saturating_step();
     }
 }
 
@@ -222,16 +206,6 @@ pub struct YieldBackoff {
 impl YieldBackoff {
     /// The largest value the inner backoff counter can reach.
     const MAX: Uint = SpinBackoff::MAX;
-
-    /// The actual relax implementation.
-    fn relax_impl(&mut self) {
-        if self.inner.0 < Self::MAX {
-            self.inner.wrapping_spin();
-        } else {
-            thread::yield_now();
-        }
-        self.inner.saturating_step();
-    }
 }
 
 // The maximum inner value **must** be smaller than Uint::BITS, or else the
@@ -241,39 +215,57 @@ impl YieldBackoff {
 #[cfg(any(feature = "yield", test))]
 const _: () = assert!(YieldBackoff::MAX < Uint::BITS);
 
-// SAFETY: The `new` function implementation does contain any code that could
-// could cause a thread exit. The `relax` function implementation is protected
-// with a process abort (under test with unwind on panic configuration) in case
-// an arithmetic operation overflow were to panic the thread.
 #[cfg(any(feature = "yield", test))]
-unsafe impl Relax for YieldBackoff {
-    #[inline(always)]
+impl RelaxImpl for YieldBackoff {
     fn new() -> Self {
-        Self { inner: Backoff::default() }
+        Self { inner: Backoff::new() }
     }
 
-    #[cfg(not(all(test, panic = "unwind")))]
-    #[cfg(not(tarpaulin_include))]
-    #[inline(always)]
     fn relax(&mut self) {
-        self.relax_impl();
-    }
-
-    #[cfg(all(test, panic = "unwind"))]
-    fn relax(&mut self) {
-        Abort::on_unwind(|| self.relax_impl());
+        if self.inner.0 < Self::MAX {
+            self.inner.wrapping_spin();
+        } else {
+            thread::yield_now();
+        }
+        self.inner.saturating_step();
     }
 }
+
+// Exponential backoff is inspired by the crossbeam-utils implementation.
+// link to most recent change (as the time of writing):
+// https://github.com/crossbeam-rs/crossbeam/blob/371de8c2d304db07662450995848f3dc9598ac99/crossbeam-utils/src/backoff.rs
+//
+// Copyright (c) 2019 The Crossbeam Project Developers
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+/// An unsigned integer type use as the inner type for [`Backoff`].
+///
+/// All backoff related arithmetic operations (eg. left shift, sum) should only
+/// use this same type as the right-hand and lef-hand side types.
+type Uint = u32;
 
 /// Inner backoff counter that keeps track of the number of shifts applied.
 ///
 /// The maximum value the inner shift counter can take is defined by `MAX`.
-#[derive(Default)]
 struct Backoff<const MAX: Uint>(Uint);
 
 impl<const MAX: Uint> Backoff<MAX> {
+    /// Creates a new `Backoff` instance with the counter initialized to 0.
+    const fn new() -> Self {
+        Self(0)
+    }
+
     /// The number of iterations that the backoff spin loop will execute, the
     /// result of the expression may overflow.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `shl` arithmetic overflow under debug profile.
     const fn end(shifts: Uint) -> Uint {
         1 << shifts
     }
@@ -288,6 +280,10 @@ impl<const MAX: Uint> Backoff<MAX> {
 
     /// Runs a unbounded spin loop `1 << self.inner` times, the result of the
     /// expression may overflow.
+    ///
+    /// # Panics
+    ///
+    /// Panics on `shl` arithmetic overflow under debug profile.
     #[cfg(any(feature = "yield", test))]
     fn wrapping_spin(&self) {
         for _ in 0..Self::end(self.0) {
@@ -301,31 +297,6 @@ impl<const MAX: Uint> Backoff<MAX> {
     }
 }
 
-/// A test only type that will abort the program execution once dropped.
-///
-/// To avoid aborting the proccess, callers must `forget` all instance of the
-/// `Abort` type.
-#[cfg(all(test, panic = "unwind"))]
-struct Abort;
-
-#[cfg(all(test, panic = "unwind"))]
-impl Abort {
-    /// Runs the closure, aborting the process if a unwinding panic occurs.
-    fn on_unwind<F: FnOnce()>(f: F) {
-        let abort = Abort;
-        f();
-        core::mem::forget(abort);
-    }
-}
-
-#[cfg(all(test, panic = "unwind"))]
-#[cfg(not(tarpaulin_include))]
-impl Drop for Abort {
-    fn drop(&mut self) {
-        panic!("thread exits are forbidden inside `relax`, aborting");
-    }
-}
-
 /// A generic relaxed waiter, that implements [`Relax`] so long as `R`
 /// implements it too.
 ///
@@ -333,29 +304,13 @@ impl Drop for Abort {
 /// `T` implements [`Relax`], because that would prevent us from implementing
 /// `Wait` for `T` when it implements [`Park`], since they would conflict. We
 /// need both `Relax` and `Park` types to implement `Wait`.
-pub(crate) struct RelaxWait<R> {
-    waiter: R,
-}
-
-// SAFETY: A generic type `R` that implements `Relax` guarantees that their
-// implementation fullfils the `Relax` safety contract.
-unsafe impl<R: Relax> Relax for RelaxWait<R> {
-    fn new() -> Self {
-        Self { waiter: R::new() }
-    }
-
-    fn relax(&mut self) {
-        self.waiter.relax();
-    }
-}
+pub(crate) struct RelaxWait<R>(PhantomData<R>);
 
 impl<R: Relax> Wait for RelaxWait<R> {
+    type LockRelax = R;
     type UnlockRelax = R;
-
-    #[cfg(not(tarpaulin_include))]
-    fn should_park(&self) -> bool {
-        unimplemented!("should_park` should not be called by `RelaxWait`");
-    }
+    #[cfg(feature = "parking")]
+    type Park = CantPark<R>;
 }
 
 #[cfg(all(not(loom), test))]
