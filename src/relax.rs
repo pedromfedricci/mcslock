@@ -167,7 +167,7 @@ pub struct SpinBackoff {
 
 impl SpinBackoff {
     /// The largest value the inner backoff counter can reach.
-    const MAX: Uint = 6;
+    const MAX: Uint = DEFAULT_SHIFTS;
 }
 
 // The maximum inner value **must** be smaller than Uint::BITS, or else the
@@ -205,7 +205,7 @@ pub struct YieldBackoff {
 #[cfg(any(feature = "yield", test))]
 impl YieldBackoff {
     /// The largest value the inner backoff counter can reach.
-    const MAX: Uint = SpinBackoff::MAX;
+    const MAX: Uint = DEFAULT_SHIFTS;
 }
 
 // The maximum inner value **must** be smaller than Uint::BITS, or else the
@@ -248,6 +248,14 @@ impl RelaxImpl for YieldBackoff {
 /// All backoff related arithmetic operations (eg. left shift, sum) should only
 /// use this same type as the right-hand and lef-hand side types.
 type Uint = u32;
+
+/// The default max number of shits the inner value of `Backoff` will produce.
+#[cfg(not(miri))]
+const DEFAULT_SHIFTS: Uint = 6;
+
+/// The default max number of shits the inner value of `Backoff` will produce.
+#[cfg(miri)]
+const DEFAULT_SHIFTS: Uint = 1;
 
 /// Inner backoff counter that keeps track of the number of shifts applied.
 ///

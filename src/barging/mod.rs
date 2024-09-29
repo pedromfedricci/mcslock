@@ -134,7 +134,6 @@ pub mod yields {
     ///
     /// During lock contention, this lock will perform exponential backoff while
     /// spinning, up to a threshold, then yields back to the OS scheduler.
-    #[cfg(feature = "yield")]
     pub mod backoff {
         use super::mutex;
         use crate::relax::{Yield, YieldBackoff};

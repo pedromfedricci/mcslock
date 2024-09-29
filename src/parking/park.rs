@@ -1,3 +1,17 @@
+//! Thread parking policies that determine the behaviour of locks when encountering
+//! contention.
+//!
+//! When a thread is "parked", it essentially goes into a sleeping state until
+//! it is awakened by the OS when a event or condition occurs. This is used to
+//! prevent busy-waiting, where a thread continuously checks for a condition to
+//! be true, wasting CPU resources.
+//!
+//! This crate integrates with the OS specific thread sleeping and awakening
+//! infraetructure transparently. Users are then responsible solely to tell
+//! _when_ should the current thread be put to sleep. The `Park` trait defines
+//! the interface of which users will then conditionally request the current
+//! waiting thread to be parked.
+
 #![allow(missing_docs)]
 
 use core::marker::PhantomData;
@@ -185,8 +199,6 @@ pub struct ImmediatePark<R: Relax = Spin> {
     relax: PhantomData<R>,
 }
 
-// SAFETY: None of the associated function implementations contain any code
-// that could cause a thread exit.
 impl<R: Relax> ParkImpl for ImmediatePark<R> {
     type Relax = R;
 
@@ -198,6 +210,7 @@ impl<R: Relax> ParkImpl for ImmediatePark<R> {
         true
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn on_failure(&mut self) {}
 }
 
@@ -256,7 +269,15 @@ impl ParkImpl for YieldBackoffThenPark {
 type Uint = u16;
 
 /// A default number of attempts to acquire the lock before parking the thread.
+#[cfg(not(miri))]
 const DEFAULT_ATTEMPTS: Uint = 100;
+
+/// A default number of attempts to acquire the lock before parking the thread.
+///
+/// For testing purposes, lets make this super small, else Miri runs will take
+/// far more time without much benefit.
+#[cfg(miri)]
+const DEFAULT_ATTEMPTS: Uint = 1;
 
 /// A bounded parking policy that will block the thread for at most some number
 /// of attempts.
@@ -299,6 +320,7 @@ impl<P: Park> Wait for ParkWait<P> {
 /// though they will never call any of the `Park` methods.
 pub(crate) struct CantPark<R>(PhantomData<R>);
 
+#[cfg(not(tarpaulin_include))]
 impl<R: Relax> ParkImpl for CantPark<R> {
     type Relax = R;
 
