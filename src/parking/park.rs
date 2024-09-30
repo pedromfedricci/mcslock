@@ -1,5 +1,5 @@
-//! Thread parking policies that determine the behaviour of locks when encountering
-//! contention.
+//! Thread parking policies that determine the behaviour of locks when
+//! encountering contention.
 //!
 //! When a thread is "parked", it essentially goes into a sleeping state until
 //! it is awakened by the OS when a event or condition occurs. This is used to
@@ -7,7 +7,7 @@
 //! be true, wasting CPU resources.
 //!
 //! This crate integrates with the OS specific thread sleeping and awakening
-//! infraetructure transparently. Users are then responsible solely to tell
+//! infrastructure transparently. Users are then responsible solely to tell
 //! _when_ should the current thread be put to sleep. The `Park` trait defines
 //! the interface of which users will then conditionally request the current
 //! waiting thread to be parked.
