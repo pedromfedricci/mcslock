@@ -12,8 +12,6 @@
 //! the interface of which users will then conditionally request the current
 //! waiting thread to be parked.
 
-#![allow(missing_docs)]
-
 use core::marker::PhantomData;
 
 use crate::cfg::debug_abort;
@@ -122,11 +120,20 @@ unsafe impl<P: ParkImpl> Park for P {
     }
 }
 
+/// A busy-wait spin-loop then thread sleeping policy.
+///
+/// A thread parking policy that, while trying to acquire the lock, will initially
+/// run a busy-wait spin-loop (signaling the CPU to power down) for a number of
+/// attempts and then, if unsuccessful, requests for the current thread to be put
+/// to sleep.
+///
+/// The [`Spin`] relax strategy is executed during waiting loops.
 pub struct SpinThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
 impl SpinThenPark {
+    /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
@@ -146,11 +153,20 @@ impl ParkImpl for SpinThenPark {
     }
 }
 
+/// A no power down spin-loop then thread sleeping policy.
+///
+/// A thread parking policy that, while trying to acquire the lock, will initially
+/// rapidly spin in a loop (without signaling the CPU to power down) for a number
+/// of attempts and then, if unsuccessful, requests for the current thread to be
+/// put to sleep.
+///
+/// The [`Loop`] relax strategy is executed during waiting loops.
 pub struct LoopThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
 impl LoopThenPark {
+    /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
@@ -170,11 +186,19 @@ impl ParkImpl for LoopThenPark {
     }
 }
 
+/// A thread yielding then thread sleeping policy.
+///
+/// A thread parking policy that, while trying to acquire the lock, will initially
+/// request the OS to yield the current thread, for number of attempts and then,
+/// if unsuccessful, requests for the current thread to be put to sleep.
+///
+/// The [`Yield`] relax strategy is executed during waiting loops.
 pub struct YieldThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
 impl YieldThenPark {
+    /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
@@ -194,7 +218,14 @@ impl ParkImpl for YieldThenPark {
     }
 }
 
-// Immediately inform that the current should be parked.
+/// Immediately requests the thread to be put to sleep.
+///
+/// A thread parking policy that immediately requests that the current thread
+/// should be put to sleep. No relax operation is executed during lock waiting
+/// loops. During unlock waiting loops, the generic `R` type's relax strategy
+/// will be executed.
+///
+/// The default relax operation executed is [`Spin`].
 pub struct ImmediatePark<R: Relax = Spin> {
     relax: PhantomData<R>,
 }
@@ -214,11 +245,20 @@ impl<R: Relax> ParkImpl for ImmediatePark<R> {
     fn on_failure(&mut self) {}
 }
 
+/// A spin-loop with exponential backoff then thread sleeping policy.
+///
+/// A thread parking policy that, while trying to acquire the lock, will initially
+/// run a busy-wait spin-loop with exponential backoff (signaling the CPU to
+/// power down) for a number of attempts and then, if unsuccessful, requests
+/// for the current thread to be put to sleep.
+///
+/// The [`SpinBackoff`] relax strategy is executed during waiting loops.
 pub struct SpinBackoffThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
 impl SpinBackoffThenPark {
+    /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
@@ -238,11 +278,22 @@ impl ParkImpl for SpinBackoffThenPark {
     }
 }
 
+/// A spin-loop with exponential backoff, then thread yielding and finally thread
+/// sleeping policy.
+///
+/// A thread parking policy that, while trying to acquire the lock, will initially
+/// run a busy-wait spin-loop with exponential backoff (signaling the CPU to
+/// power down) up to a threshold, then requests the OS to yield the current
+/// thread, for a number of attempts and finally, if unsuccessful, requests for
+/// the current thread to be put to sleep.
+///
+/// The [`YieldBackoff`] relax strategy is executed during waiting loops.
 pub struct YieldBackoffThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
 impl YieldBackoffThenPark {
+    /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 

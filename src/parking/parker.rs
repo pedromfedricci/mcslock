@@ -122,7 +122,7 @@ impl Lock for Parker {
                 return;
             }
         }
-        // The limit of attempts have been reached and the lock remais locked,
+        // The limit of attempts have been reached and the lock remains locked,
         // then park the thread. The parking loop will handle spurious wakeups.
         ParkerT::park_loop(self);
     }
