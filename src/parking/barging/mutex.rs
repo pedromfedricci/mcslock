@@ -5,7 +5,7 @@ use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWith};
+use crate::test::{LockNew, LockWith, TryLockWith};
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -384,18 +384,21 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockWith for Mutex<T, Ps, Pq> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, Ps, Pq>>) -> Ret,
-    {
-        self.try_lock_with(f)
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Ps, Pq>) -> Ret,
     {
         self.lock_with(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, Ps: Park, Pq: Park> TryLockWith for Mutex<T, Ps, Pq> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, Ps, Pq>>) -> Ret,
+    {
+        self.try_lock_with(f)
     }
 
     fn is_locked(&self) -> bool {

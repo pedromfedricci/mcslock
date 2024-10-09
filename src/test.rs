@@ -23,16 +23,20 @@ pub trait LockWith: LockNew {
         Self: 'a,
         Self::Target: 'a;
 
+    /// Acquires a mutex and then runs the closure against its guard.
+    fn lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Self::Guard<'_>) -> Ret;
+}
+
+/// A trait for lock types that can test if the lock is busy and run closures
+/// against the guard in case of success.
+pub trait TryLockWith: LockWith {
     // Attempts to acquire this lock and then runs the closure against its
     // guard.
     fn try_lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(Option<Self::Guard<'_>>) -> Ret;
-
-    /// Acquires a mutex and then runs the closure against its guard.
-    fn lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Self::Guard<'_>) -> Ret;
 
     /// Returns `true` if the lock is currently held.
     #[allow(dead_code)]
@@ -73,7 +77,7 @@ pub mod tests {
     use std::sync::Arc;
     use std::thread;
 
-    use super::{LockData, LockWith};
+    use super::{LockData, LockWith, TryLockWith};
 
     type Int = u32;
 
@@ -97,7 +101,7 @@ pub mod tests {
         data.lock_with(|mut guard| *guard += 1);
     }
 
-    fn try_inc<L: LockWith<Target = Int>>(data: &Arc<L>) {
+    fn try_inc<L: TryLockWith<Target = Int>>(data: &Arc<L>) {
         data.try_lock_with(|opt| opt.map(|mut guard| *guard += 1));
     }
 
@@ -107,13 +111,13 @@ pub mod tests {
         }
     }
 
-    fn try_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
+    fn try_inc_for<L: TryLockWith<Target = Int>>(data: &Arc<L>) {
         for _ in 0..ITERS {
             try_inc::<L>(data);
         }
     }
 
-    fn mixed_inc_for<L: LockWith<Target = Int>>(data: &Arc<L>) {
+    fn mixed_inc_for<L: TryLockWith<Target = Int>>(data: &Arc<L>) {
         for run in 0..ITERS {
             let f = if run % 2 == 0 { inc } else { try_inc };
             f(data);
@@ -165,7 +169,7 @@ pub mod tests {
 
     pub fn lots_and_lots_try_lock<L>()
     where
-        L: LockWith<Target = Int> + Send + Sync + 'static,
+        L: TryLockWith<Target = Int> + Send + Sync + 'static,
     {
         let value = lots_and_lots(try_inc_for::<L>);
         assert!(EXPECTED_RANGE.contains(&value));
@@ -173,7 +177,7 @@ pub mod tests {
 
     pub fn lots_and_lots_mixed_lock<L>()
     where
-        L: LockWith<Target = Int> + Send + Sync + 'static,
+        L: TryLockWith<Target = Int> + Send + Sync + 'static,
     {
         let value = lots_and_lots(mixed_inc_for::<L>);
         assert!(EXPECTED_RANGE.contains(&value));
@@ -236,7 +240,7 @@ pub mod tests {
 
     pub fn test_try_lock<L>()
     where
-        L: LockWith<Target = ()>,
+        L: TryLockWith<Target = ()>,
     {
         use std::rc::Rc;
         let mutex = Rc::new(L::new(()));

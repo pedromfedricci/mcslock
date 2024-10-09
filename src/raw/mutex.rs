@@ -6,7 +6,7 @@ use crate::inner::raw as inner;
 use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWith};
+use crate::test::{LockNew, LockWith, TryLockWith};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -476,18 +476,21 @@ impl<T: ?Sized, R: Relax> LockWith for Mutex<T, R> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
-    {
-        self.try_lock_with(f)
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, R>) -> Ret,
     {
         self.lock_with(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> TryLockWith for Mutex<T, R> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, R>>) -> Ret,
+    {
+        self.try_lock_with(f)
     }
 
     fn is_locked(&self) -> bool {

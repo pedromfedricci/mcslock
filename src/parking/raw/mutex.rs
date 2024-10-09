@@ -6,7 +6,7 @@ use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWith};
+use crate::test::{LockNew, LockWith, TryLockWith};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -473,18 +473,21 @@ impl<T: ?Sized, P: Park> LockWith for Mutex<T, P> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
-    {
-        self.try_lock_with(f)
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
         self.lock_with(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, P: Park> TryLockWith for Mutex<T, P> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
+    {
+        self.try_lock_with(f)
     }
 
     fn is_locked(&self) -> bool {

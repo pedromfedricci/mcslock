@@ -6,7 +6,7 @@ use crate::inner::raw as inner;
 use crate::parking::park::Park;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWith};
+use crate::test::{LockNew, LockWith, TryLockWith};
 
 type StaticNode = &'static LocalMutexNode;
 
@@ -535,18 +535,21 @@ impl<T: ?Sized, P: Park> LockWith for MutexPanic<T, P> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
-    {
-        self.0.try_lock_with_local(&TEST_NODE, f)
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
     {
         self.0.lock_with_local(&TEST_NODE, f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, P: Park> TryLockWith for MutexPanic<T, P> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
+    {
+        self.0.try_lock_with_local(&TEST_NODE, f)
     }
 
     fn is_locked(&self) -> bool {
@@ -578,15 +581,6 @@ impl<T: ?Sized, P: Park> LockWith for MutexUnchecked<T, P> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
-    {
-        // SAFETY: caller must guarantee that this thread local node is not
-        // already mutably borrowed for some other lock acquisition.
-        unsafe { self.0.try_lock_with_local_unchecked(&TEST_NODE, f) }
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, P>) -> Ret,
@@ -594,6 +588,18 @@ impl<T: ?Sized, P: Park> LockWith for MutexUnchecked<T, P> {
         // SAFETY: caller must guarantee that this thread local node is not
         // already mutably borrowed for some other lock acquisition.
         unsafe { self.0.lock_with_local_unchecked(&TEST_NODE, f) }
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, P: Park> TryLockWith for MutexUnchecked<T, P> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, P>>) -> Ret,
+    {
+        // SAFETY: caller must guarantee that this thread local node is not
+        // already mutably borrowed for some other lock acquisition.
+        unsafe { self.0.try_lock_with_local_unchecked(&TEST_NODE, f) }
     }
 
     fn is_locked(&self) -> bool {

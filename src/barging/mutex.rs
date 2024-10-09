@@ -5,7 +5,7 @@ use crate::inner::barging as inner;
 use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWith};
+use crate::test::{LockNew, LockWith, TryLockWith};
 
 /// A mutual exclusion primitive useful for protecting shared data.
 ///
@@ -384,18 +384,21 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWith for Mutex<T, Rs, Rq> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
-    {
-        self.try_lock_with(f)
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
         self.lock_with(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockWith for Mutex<T, Rs, Rq> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
+    {
+        self.try_lock_with(f)
     }
 
     fn is_locked(&self) -> bool {

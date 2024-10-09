@@ -69,9 +69,9 @@ impl<L> MutexNode<L> {
 }
 
 impl<L: Lock> MutexNode<L> {
-    /// Initializes this node's inner state, returning an exclusive reference
+    /// Initializes this node's inner state, returning a shared reference
     /// pointing to it.
-    fn initialize(&mut self) -> &mut MutexNodeInit<L> {
+    fn initialize(&mut self) -> &MutexNodeInit<L> {
         self.inner.write(MutexNodeInit::locked())
     }
 }
@@ -138,7 +138,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         if !pred.is_null() {
             // SAFETY: Already verified that our predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
-            // Acquire this mutex, applying some waiting policy.
+            // Verify the lock hand-off, while applying some waiting policy.
             node.lock.lock_wait_relaxed::<W>();
             fence(Acquire);
         }

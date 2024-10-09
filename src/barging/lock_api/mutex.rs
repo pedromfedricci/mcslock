@@ -3,7 +3,7 @@ use crate::barging;
 #[cfg(test)]
 use crate::relax::Relax;
 #[cfg(test)]
-use crate::test::{LockData, LockNew, LockWith};
+use crate::test::{LockData, LockNew, LockWith, TryLockWith};
 
 /// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
 ///
@@ -34,18 +34,21 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWith for Mutex<T, Rs, Rq> {
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
-    {
-        f(self.try_lock())
-    }
-
     fn lock_with<F, Ret>(&self, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
         f(self.lock())
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockWith for Mutex<T, Rs, Rq> {
+    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
+    {
+        f(self.try_lock())
     }
 
     fn is_locked(&self) -> bool {
