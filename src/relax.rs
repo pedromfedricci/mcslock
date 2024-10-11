@@ -249,11 +249,11 @@ impl RelaxImpl for YieldBackoff {
 /// use this same type as the right-hand and lef-hand side types.
 type Uint = u32;
 
-/// The default max number of shits the inner value of `Backoff` will produce.
+/// The default max number of shifts the inner value of `Backoff` will produce.
 #[cfg(not(miri))]
 const DEFAULT_SHIFTS: Uint = 6;
 
-/// The default max number of shits the inner value of `Backoff` will produce.
+/// The default max number of shifts the inner value of `Backoff` will produce.
 ///
 /// For testing purposes, lets make this super small, else Miri runs will take
 /// far more time without much benefit.
