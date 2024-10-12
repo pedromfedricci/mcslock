@@ -61,7 +61,7 @@
 //! assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
 //! ```
 //!
-//! ## Thread local raw MCS spinlock nodes
+//! ## Thread local queue nodes
 //!
 //! Enables [`raw::Mutex`] locking APIs that operate over queue nodes that are
 //! stored at the thread local storage. These locking APIs require a static
