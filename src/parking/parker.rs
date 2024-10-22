@@ -185,6 +185,8 @@ mod common {
 
         fn unpark(&self) {
             let state = &self.state;
+            // TODO: 1.82.0 supports native syntax:
+            // let ptr = &raw const self.state;
             let ptr = ptr::addr_of!(*state);
             state.store(UNLOCKED, Release);
             atomic_wait::wake_one(ptr);

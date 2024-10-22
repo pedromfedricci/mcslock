@@ -145,13 +145,13 @@ pub mod hint {
 }
 
 pub mod thread {
-    #[cfg(all(any(feature = "yield", test), not(all(loom, test))))]
+    #[cfg(all(any(feature = "yield", test), not(loom)))]
     pub use std::thread::yield_now;
 
     #[cfg(all(loom, test))]
     pub use loom::thread::yield_now;
 
-    #[cfg(all(feature = "thread_local", not(all(loom, test))))]
+    #[cfg(all(feature = "thread_local", not(loom)))]
     pub use std::thread::LocalKey;
 
     #[cfg(all(feature = "thread_local", loom, test))]
