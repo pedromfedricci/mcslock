@@ -85,7 +85,7 @@ pub mod models {
     use loom::sync::Arc;
     use loom::{model, thread};
 
-    use crate::test::{Guard, LockWith};
+    use crate::test::{Guard, LockWith, TryLockWith};
 
     type Int = usize;
     // TODO: Three or more threads make lock models run for too long. It would
@@ -101,7 +101,7 @@ pub mod models {
     }
 
     /// Tries to increment a shared integer.
-    fn try_inc<L: LockWith<Target = Int>>(lock: &Arc<L>) {
+    fn try_inc<L: TryLockWith<Target = Int>>(lock: &Arc<L>) {
         lock.try_lock_with(|opt| opt.map(|guard| *guard.deref_mut() += 1));
     }
 
@@ -112,7 +112,7 @@ pub mod models {
 
     /// Evaluates that concurrent `try_lock` calls will serialize all mutations
     /// against the shared data, therefore no data races.
-    pub fn try_lock_join<L: LockWith<Target = Int> + 'static>() {
+    pub fn try_lock_join<L: TryLockWith<Target = Int> + 'static>() {
         model(|| {
             const RUNS: Int = TRY_LOCKS;
             let data = Arc::new(L::new(0));
@@ -148,7 +148,7 @@ pub mod models {
 
     /// Evaluates that concurrent `lock` and `try_lock` calls will serialize
     /// all mutations against the shared data, therefore no data races.
-    pub fn mixed_lock_join<L: LockWith<Target = Int> + 'static>() {
+    pub fn mixed_lock_join<L: TryLockWith<Target = Int> + 'static>() {
         model(|| {
             const RUNS: Int = LOCKS;
             let data = Arc::new(L::new(0));
