@@ -130,8 +130,8 @@ pub mod models {
             for handle in handles {
                 handle.join().unwrap();
             }
-            let data = get(&lock);
-            assert!((1..=RUNS).contains(&data));
+            let value = get(&lock);
+            assert!((1..=RUNS).contains(&value));
         });
     }
 
@@ -148,8 +148,8 @@ pub mod models {
             for handle in handles {
                 handle.join().unwrap();
             }
-            let data = get(&lock);
-            assert_eq!(RUNS, data);
+            let value = get(&lock);
+            assert_eq!(RUNS, value);
         });
     }
 
@@ -167,8 +167,8 @@ pub mod models {
             for handle in handles {
                 handle.join().unwrap();
             }
-            let data = get(&lock);
-            assert!((1..=RUNS).contains(&data));
+            let value = get(&lock);
+            assert!((1..=RUNS).contains(&value));
         });
     }
 }

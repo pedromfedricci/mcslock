@@ -400,7 +400,7 @@ pub mod tests {
             panic!();
         })
         .join();
-        let value = arc.lock_then(|g| *g.as_deref());
+        let value = arc.lock_then(|d| *d.as_deref());
         assert_eq!(value, 2);
     }
 

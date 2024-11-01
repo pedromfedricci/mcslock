@@ -277,7 +277,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
     }
 
     /// Runs `f` against a mutable reference pointing to the underlying data.
-    fn with_mut<F, Ret>(&self, f: F) -> Ret
+    fn with_mut<F, Ret>(&mut self, f: F) -> Ret
     where
         F: FnOnce(&mut T) -> Ret,
     {
