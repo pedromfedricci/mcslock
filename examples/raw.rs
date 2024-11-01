@@ -26,19 +26,20 @@ fn main() {
             //
             // We unwrap() the return value to assert that we are not expecting
             // threads to ever fail while holding the lock.
-            let mut data = data.lock(&mut node);
-            *data += 1;
-            if *data == N {
-                tx.send(()).unwrap();
-            }
-            // the lock is unlocked here when `data` goes out of scope.
+            data.lock_with_then(&mut node, |data| {
+                *data += 1;
+                if *data == N {
+                    tx.send(()).unwrap();
+                }
+                // The lock is unlocked here at the end of the closure scope.
+            });
+            // The node can now be reused for other locking operations.
+            let _ = data.lock_with_then(&mut node, |data| *data);
         });
     }
     let _message = rx.recv();
 
-    // A queue node must be mutably accessible.
-    let mut node = MutexNode::new();
-    let count = data.lock(&mut node);
-    assert_eq!(*count, N);
-    // lock is unlock here when `count` goes out of scope.
+    // A queue node is transparently allocated in the stack.
+    let count = data.lock_then(|data| *data);
+    assert_eq!(count, N);
 }
