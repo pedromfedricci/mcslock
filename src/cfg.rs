@@ -147,13 +147,13 @@ pub mod cell {
                 F: FnOnce(&mut Self::Target) -> Ret;
         }
 
-        /// A trait that extends `Option<UnsafeCell>` to allow running closures
+        /// A trait that extends `Option<&UnsafeCell>` to allow running closures
         /// against its underlying data.
         pub trait UnsafeCellOptionWith {
             type Target: ?Sized;
 
             /// Runs `f` against a mutable reference borrowed from a
-            /// [`Option<UnsafeCell>`].
+            /// [`Option<&UnsafeCell>`].
             ///
             /// # Safety
             ///
