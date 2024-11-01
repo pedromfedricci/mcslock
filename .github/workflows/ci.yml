@@ -43,7 +43,7 @@ jobs:
           --target ${{ env.NO_STD_TARGET }}
           --no-dev-deps
           --feature-powerset
-          --skip yield,thread_local,parking
+          --skip yield,thread_local
 
   msrv:
     name: MSRV
@@ -106,8 +106,6 @@ jobs:
         run: cargo run --example thread_local --features thread_local
       - name: Run lock_api example
         run: cargo run --example lock_api --features lock_api,barging
-      - name: Run parking with thread_local example
-        run: cargo run --example parking --features parking,thread_local
 
   linter:
     name: Linter

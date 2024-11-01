@@ -3,17 +3,8 @@ use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
-#[cfg(feature = "parking")]
-use crate::parking::park::Park;
-
 /// A `Lock` is some arbitrary data type used by a lock implementation to
 /// manage the state of the lock.
-///
-/// The `no_std` implementations (eg `raw` and `barging`) can simply use a
-/// `AtomicBool` to manage state. The parking variants thought, need platform
-/// specific data types. We are currently using the `atomic_wait` crate for
-/// easy parking integration. It uses `AtomicU32` as the data type for all
-/// major platforms.
 pub trait Lock {
     /// Creates a new locked `Lock` instance.
     ///
@@ -79,10 +70,6 @@ pub trait Wait {
 
     /// The relax operation that will be excuted during unlock waiting loops.
     type UnlockRelax: Relax;
-
-    /// The parking policy that a thread parking capable waiter will execute.
-    #[cfg(feature = "parking")]
-    type Park: Park;
 }
 
 impl Lock for AtomicBool {

@@ -17,17 +17,11 @@ categories = ["algorithms", "concurrency", "no-std", "no-std::no-alloc"]
 keywords = ["mutex", "no_std", "spinlock", "synchronization"]
 
 [features]
-# NOTE: Features `yield`, `thread_local` and `parking` require std.
+# NOTE: Features `yield`, `thread_local` require std.
 yield = []
 thread_local = []
 barging = []
-# NOTE: The `dep:` syntax requires Rust 1.60.
-parking = ["yield", "dep:atomic-wait"]
 lock_api = ["dep:lock_api"]
-
-[dependencies.atomic-wait]
-version = "1"
-optional = true
 
 [dependencies.lock_api]
 version = "0.4"
@@ -48,10 +42,6 @@ check-cfg = ["cfg(loom)", "cfg(tarpaulin)", "cfg(tarpaulin_include)"]
 [[example]]
 name = "barging"
 required-features = ["barging"]
-
-[[example]]
-name = "parking"
-required-features = ["parking"]
 
 [[example]]
 name = "thread_local"

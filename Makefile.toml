@@ -12,7 +12,7 @@ default_to_workspace = false
 command = "cargo"
 args = ["hack", "build", "--target", "thumbv7m-none-eabi",
         "--feature-powerset", "--no-dev-deps", "--skip",
-        "yield,thread_local,parking"]
+        "yield,thread_local"]
 
 # Build docs for docs.rs.
 [tasks.docsrs]
