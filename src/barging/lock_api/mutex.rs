@@ -3,14 +3,16 @@ use crate::barging;
 #[cfg(test)]
 use crate::relax::Relax;
 #[cfg(test)]
-use crate::test::{LockData, LockNew, LockWith};
+use crate::test::{LockData, LockNew, LockThen, TryLockThen};
 
-/// A lock that provides mutually exclusive data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
+/// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
+///
+/// [`lock_api::Mutex`]: https://docs.rs/lock_api/latest/lock_api/struct.Mutex.html
 pub type Mutex<T, Rs, Rq> = lock_api::Mutex<barging::Mutex<(), Rs, Rq>, T>;
 
-/// A guard that provides mutable data access that is compatible with
-/// [`lock_api`](https://crates.io/crates/lock_api).
+/// A [`lock_api::MutexGuard`] alias that wraps a [`barging::MutexGuard`].
+///
+/// [`lock_api::MutexGuard`]: https://docs.rs/lock_api/latest/lock_api/struct.MutexGuard.html
 pub type MutexGuard<'a, T, Rs, Rq> = lock_api::MutexGuard<'a, barging::Mutex<(), Rs, Rq>, T>;
 
 #[cfg(test)]
@@ -26,24 +28,27 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockNew for Mutex<T, Rs, Rq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWith for Mutex<T, Rs, Rq> {
-    type Guard<'a> = MutexGuard<'a, Self::Target, Rs, Rq>
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
+    type Guard<'a> = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn try_lock_with<F, Ret>(&self, f: F) -> Ret
+    fn lock_then<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
+        F: FnOnce(&mut Self::Target) -> Ret,
     {
-        f(self.try_lock())
+        f(&mut *self.lock())
     }
+}
 
-    fn lock_with<F, Ret>(&self, f: F) -> Ret
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {
+    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
+        F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
-        f(self.lock())
+        f(self.try_lock().as_deref_mut())
     }
 
     fn is_locked(&self) -> bool {
@@ -71,8 +76,18 @@ mod test {
     use crate::test::tests;
 
     #[test]
-    fn lots_and_lots() {
-        tests::lots_and_lots::<Mutex<_>>();
+    fn lots_and_lots_lock() {
+        tests::lots_and_lots_lock::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_try_lock() {
+        tests::lots_and_lots_try_lock::<Mutex<_>>();
+    }
+
+    #[test]
+    fn lots_and_lots_mixed_lock() {
+        tests::lots_and_lots_mixed_lock::<Mutex<_>>();
     }
 
     #[test]

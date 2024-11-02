@@ -1,0 +1,19 @@
+name: Semver
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  semver:
+    name: Check semver
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Rust stable
+        run: rustup toolchain install stable
+      - name: Check semver violations
+        uses: obi1kenobi/cargo-semver-checks-action@v2

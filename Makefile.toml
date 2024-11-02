@@ -23,15 +23,24 @@ args = ["rustdoc", "--all-features", "--open", "--", "--default-theme", "ayu"]
 
 # Check MSRV.
 [tasks.msrv]
-# NOTE: We actually installing the first nightly 1.66.0. It should be
-# equivalent to stable 1.65.0. We need the nightly version to use the
-# sparse registry feature. This massively improves the index download.
+# NOTE: We are actually installing the first nightly 1.66.0. It should be
+# equivalent to stable 1.65.0. We need the nightly version to use the sparse
+# registry feature. This massively improves the index download.
 # Link: https://blog.rust-lang.org/2022/06/22/sparse-registry-testing.html
-toolchain = "nightly-2022-09-17"
+toolchain = "nightly-2022-09-18"
 command = "cargo"
 env = { "CARGO_UNSTABLE_SPARSE_REGISTRY" = "true" }
-# TODO: add `--all` for benches.
 args = ["check", "--all-features"]
+
+# Check semver viloations.
+[tasks.semver]
+command = "cargo"
+args = ["semver-checks", "${@}"]
+
+# Run all documentation snippets.
+[tasks.doc-test]
+command = "cargo"
+args = ["test", "--doc", "--all-features"]
 
 # Lint all feature combinations with cargo-hack.
 [tasks.lint]
@@ -46,7 +55,7 @@ env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
 args = ["run", "--example", "${@}", "--all-features"]
 
 # Lint all feature combinations with carg-hack on test profile.
-[tasks.lint-test]
+[tasks.test-lint]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
 args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
@@ -58,7 +67,7 @@ args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
 toolchain = "nightly"
 install_crate = { rustup_component_name = "miri" }
 command = "cargo"
-args = ["miri", "test", "--all-features", "${@}"]
+args = ["miri", "nextest", "run", "--all-features", "${@}"]
 
 # Check code coverage with tarpaulin (all features).
 [tasks.tarpaulin]

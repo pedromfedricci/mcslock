@@ -35,7 +35,7 @@ fn main() {
             // threads to ever fail while holding the lock.
             //
             // Data is exclusively accessed by the guard argument.
-            data.lock_with_local(&NODE, |mut data| {
+            data.lock_with_local_then(&NODE, |data| {
                 *data += 1;
                 if *data == N {
                     tx.send(()).unwrap();
@@ -46,6 +46,6 @@ fn main() {
     }
     let _message = rx.recv();
 
-    let count = data.lock_with_local(&NODE, |guard| *guard);
+    let count = data.lock_with_local_then(&NODE, |data| *data);
     assert_eq!(count, N);
 }
