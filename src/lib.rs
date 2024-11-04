@@ -59,6 +59,7 @@
 //! })
 //! .join().expect("thread::spawn failed");
 //!
+//! // A node is transparently allocated in the stack.
 //! // Critical section must be defined as a closure.
 //! assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
 //! ```

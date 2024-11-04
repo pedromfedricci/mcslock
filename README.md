@@ -86,14 +86,15 @@ fn main() {
         // A queue node must be mutably accessible.
         // Critical section must be defined as a closure.
         let mut node = MutexNode::new();
-        *c_mutex.lock(&mut node) = 10;
+        c_mutex.lock_with_then(&mut node, |data| {
+            *data = 10;
+        });
     })
     .join().expect("thread::spawn failed");
 
-    // A queue node must be mutably accessible.
+    // A node is transparently allocated in the stack.
     // Critical section must be defined as a closure.
-    let mut node = MutexNode::new();
-    assert_eq!(*mutex.try_lock(&mut node).unwrap(), 10);
+    assert_eq!(*mutex.try_lock_then(|data| *data.unwrap()), 10);
 }
 ```
 
@@ -128,7 +129,7 @@ fn main() {
 
     // Local node handles are provided by reference.
     // Critical section must be defined as a closure.
-    assert_eq!(mutex.try_lock_with_local_then(&NODE, |g| *g.unwrap()), 10);
+    assert_eq!(mutex.try_lock_with_local_then(&NODE, |data| *data.unwrap()), 10);
 }
 ```
 
@@ -138,7 +139,7 @@ This implementation will have non-waiting threads race for the lock against
 the front of the waiting queue thread, which means this it is an unfair lock.
 This implementation is suitable for `no_std` environments, and the locking
 APIs are compatible with the [lock_api] crate. See [`barging`] and
-[`barking::lock_api`] modules for more information.
+[`barging::lock_api`] modules for more information.
 
 ```rust
 use std::sync::Arc;
