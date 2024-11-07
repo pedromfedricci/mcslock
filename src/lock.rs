@@ -64,11 +64,11 @@ pub trait Lock {
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
-    fn is_locked(&self) -> bool;
+    fn is_locked_relaxed(&self) -> bool;
 
     /// Changes the state of the lock and, possibly, notifies that change
     /// to some other interested party.
-    fn notify(&self);
+    fn notify_release(&self);
 }
 
 /// The waiting policy that should be applied while the lock state has not
@@ -123,11 +123,11 @@ impl Lock for AtomicBool {
         }
     }
 
-    fn is_locked(&self) -> bool {
+    fn is_locked_relaxed(&self) -> bool {
         self.load(Relaxed)
     }
 
-    fn notify(&self) {
+    fn notify_release(&self) {
         self.store(false, Release);
     }
 }

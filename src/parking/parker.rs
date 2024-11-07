@@ -45,7 +45,7 @@ pub trait ParkerT {
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
-    fn is_locked(&self) -> bool;
+    fn is_locked_relaxed(&self) -> bool;
 
     /// Tries to lock this mutex with acquire load.
     ///
@@ -66,13 +66,13 @@ pub trait ParkerT {
     /// to safeguard agains spurious wake-ups if they are possible. That is,
     /// this function should only unblock once a corresponding unpark call has
     /// been issued to this parked thread.
-    fn park_loop(&self);
+    fn park_loop_relaxed(&self);
 
     /// Atomically makes the handle’s token available if it is not already.
     ///
     /// Implementors of this function are expected to call the platform's
     /// specific API for thread unparking.
-    fn unpark(&self);
+    fn unpark_release(&self);
 }
 
 impl Lock for Parker {
@@ -110,7 +110,7 @@ impl Lock for Parker {
         // Block the thread with a relaxed loop untin either all attempts have
         // already been made or the lock has been handed over to this thread.
         while !parker.should_park() {
-            if ParkerT::is_locked(self) {
+            if ParkerT::is_locked_relaxed(self) {
                 // Whenever the thread is not ready to be put to sleep yet and
                 // it also fails to acquire the lock, then update parker's
                 // state and apply its associated relax operation.
@@ -124,15 +124,15 @@ impl Lock for Parker {
         }
         // The limit of attempts have been reached and the lock remains locked,
         // then park the thread. The parking loop will handle spurious wakeups.
-        ParkerT::park_loop(self);
+        ParkerT::park_loop_relaxed(self);
     }
 
-    fn is_locked(&self) -> bool {
-        ParkerT::is_locked(self)
+    fn is_locked_relaxed(&self) -> bool {
+        ParkerT::is_locked_relaxed(self)
     }
 
-    fn notify(&self) {
-        ParkerT::unpark(self);
+    fn notify_release(&self) {
+        ParkerT::unpark_release(self);
     }
 }
 
@@ -173,17 +173,17 @@ mod common {
             self.state.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
         }
 
-        fn is_locked(&self) -> bool {
+        fn is_locked_relaxed(&self) -> bool {
             self.state.load(Relaxed) == LOCKED
         }
 
-        fn park_loop(&self) {
-            while self.state.load(Acquire) == LOCKED {
+        fn park_loop_relaxed(&self) {
+            while self.state.load(Relaxed) == LOCKED {
                 atomic_wait::wait(&self.state, LOCKED);
             }
         }
 
-        fn unpark(&self) {
+        fn unpark_release(&self) {
             let state = &self.state;
             // TODO: 1.82.0 supports native syntax:
             // let ptr = &raw const self.state;
@@ -231,17 +231,17 @@ mod loom {
             self.locked.compare_exchange_weak(UNLOCKED, LOCKED, Acquire, Relaxed).is_ok()
         }
 
-        fn is_locked(&self) -> bool {
+        fn is_locked_relaxed(&self) -> bool {
             self.locked.load(Relaxed) == LOCKED
         }
 
-        fn park_loop(&self) {
-            while self.locked.load(Acquire) == LOCKED {
+        fn park_loop_relaxed(&self) {
+            while self.locked.load(Relaxed) == LOCKED {
                 thread::yield_now();
             }
         }
 
-        fn unpark(&self) {
+        fn unpark_release(&self) {
             self.locked.store(UNLOCKED, Release);
             thread::yield_now();
         }

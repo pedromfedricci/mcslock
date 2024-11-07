@@ -65,12 +65,12 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
     ///
     /// This function does not guarantee strong ordering, only atomicity.
     pub fn is_locked(&self) -> bool {
-        self.lock.is_locked()
+        self.lock.is_locked_relaxed()
     }
 
     /// Unlocks this mutex.
     pub fn unlock(&self) {
-        self.lock.notify();
+        self.lock.notify_release();
     }
 }
 

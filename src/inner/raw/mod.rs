@@ -172,7 +172,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         fence(Acquire);
         // Notify our successor that they hold the lock.
         // SAFETY: We already verified that our successor is not null.
-        unsafe { &*next }.lock.notify();
+        unsafe { &*next }.lock.notify_release();
     }
 }
 
