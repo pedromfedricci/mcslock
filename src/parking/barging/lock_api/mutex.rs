@@ -77,22 +77,22 @@ mod test {
     use crate::parking::barging::lock_api::{immediate, yields};
     use crate::test::tests;
 
-    type Mutex<T> = yields::Mutex<T>;
-    type ImmediateParkMutex<T> = immediate::Mutex<T>;
+    type Mutex<T> = immediate::Mutex<T>;
+    type YieldThenParkMutex<T> = yields::Mutex<T>;
 
     #[test]
-    fn lots_and_lots_lock_immediate_park() {
-        tests::lots_and_lots_lock::<ImmediateParkMutex<_>>();
+    fn lots_and_lots_lock_yield_then_park() {
+        tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock_immediate_park() {
-        tests::lots_and_lots_try_lock::<ImmediateParkMutex<_>>();
+    fn lots_and_lots_try_lock_yield_then_park() {
+        tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_immediate_park() {
-        tests::lots_and_lots_mixed_lock::<ImmediateParkMutex<_>>();
+    fn lots_and_lots_mixed_lock_yield_then_park() {
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
     }
 
     #[test]

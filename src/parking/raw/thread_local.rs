@@ -609,11 +609,11 @@ mod test {
     use crate::parking::raw::MutexNode;
     use crate::test::tests;
 
-    type MutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
-    type ImmediateParkMutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
+    type MutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
+    type YieldThenParkMutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
 
-    type MutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
-    type ImmediateParkMutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
+    type MutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
+    type YieldThenParkMutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
 
     #[test]
     fn ref_cell_node_drop_does_not_matter() {
@@ -622,33 +622,33 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_immediate_park() {
-        tests::lots_and_lots_lock::<ImmediateParkMutexPanic<_>>();
+    fn lots_and_lots_lock_yield_then_park() {
+        tests::lots_and_lots_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_lock_immediate_park_unchecked() {
-        tests::lots_and_lots_lock::<ImmediateParkMutexUnchecked<_>>();
+    fn lots_and_lots_lock_yield_then_park_unchecked() {
+        tests::lots_and_lots_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock_immediate_park() {
-        tests::lots_and_lots_try_lock::<ImmediateParkMutexPanic<_>>();
+    fn lots_and_lots_try_lock_yield_then_park() {
+        tests::lots_and_lots_try_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock_immediate_park_unchecked() {
-        tests::lots_and_lots_try_lock::<ImmediateParkMutexUnchecked<_>>();
+    fn lots_and_lots_try_lock_yield_then_park_unchecked() {
+        tests::lots_and_lots_try_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_immediate_park() {
-        tests::lots_and_lots_mixed_lock::<ImmediateParkMutexPanic<_>>();
+    fn lots_and_lots_mixed_lock_yield_then_park() {
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_immediate_park_unchecked() {
-        tests::lots_and_lots_mixed_lock::<ImmediateParkMutexUnchecked<_>>();
+    fn lots_and_lots_mixed_lock_yield_then_park_unchecked() {
+        tests::lots_and_lots_mixed_lock::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
@@ -709,64 +709,64 @@ mod model {
     use crate::loom::models;
     use crate::parking::park::{ImmediatePark, YieldThenPark};
 
-    type MutexImmediatePanic<T> = super::MutexPanic<T, ImmediatePark>;
-    type MutexImmediateUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
+    type ImmediateParkMutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
+    type ImmediateParkMutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
 
-    type MutexYieldPanic<T> = super::MutexPanic<T, YieldThenPark>;
-    type MutexYieldUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
+    type YieldThenParkMutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
+    type YieldThenParkMutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
 
     #[test]
     fn try_lock_join_immediate_park() {
-        models::try_lock_join::<MutexImmediatePanic<_>>();
+        models::try_lock_join::<ImmediateParkMutexPanic<_>>();
     }
 
     #[test]
     fn try_lock_join_yield_then_park() {
-        models::try_lock_join::<MutexYieldPanic<_>>();
+        models::try_lock_join::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
     fn try_lock_join_immediate_park_unchecked() {
-        models::try_lock_join::<MutexImmediateUnchecked<_>>();
+        models::try_lock_join::<ImmediateParkMutexUnchecked<_>>();
     }
 
     #[test]
     fn try_lock_join_yield_then_park_unchecked() {
-        models::try_lock_join::<MutexYieldUnchecked<_>>();
+        models::try_lock_join::<YieldThenParkMutexUnchecked<_>>();
     }
 
     #[test]
     fn lock_join_immediate_park() {
-        models::lock_join::<MutexImmediatePanic<_>>();
+        models::lock_join::<ImmediateParkMutexPanic<_>>();
     }
 
     #[test]
     fn lock_join_yield_then_park() {
-        models::lock_join::<MutexYieldPanic<_>>();
+        models::lock_join::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
     fn lock_join_immediate_park_unchecked() {
-        models::lock_join::<MutexImmediateUnchecked<_>>();
+        models::lock_join::<ImmediateParkMutexUnchecked<_>>();
     }
 
     #[test]
     fn mixed_lock_join_immediate_park() {
-        models::mixed_lock_join::<MutexImmediatePanic<_>>();
+        models::mixed_lock_join::<ImmediateParkMutexPanic<_>>();
     }
 
     #[test]
     fn mixed_lock_join_yield_then_park() {
-        models::mixed_lock_join::<MutexYieldPanic<_>>();
+        models::mixed_lock_join::<YieldThenParkMutexPanic<_>>();
     }
 
     #[test]
     fn mixed_lock_join_immediate_park_unchecked() {
-        models::mixed_lock_join::<MutexImmediateUnchecked<_>>();
+        models::mixed_lock_join::<ImmediateParkMutexUnchecked<_>>();
     }
 
     #[test]
     fn mixed_lock_join_yield_park_unchecked() {
-        models::mixed_lock_join::<MutexYieldUnchecked<_>>();
+        models::mixed_lock_join::<YieldThenParkMutexUnchecked<_>>();
     }
 }
