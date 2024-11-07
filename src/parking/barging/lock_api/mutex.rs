@@ -74,10 +74,10 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockData for Mutex<T, Ps, Pq> {
 
 #[cfg(test)]
 mod test {
-    use crate::parking::barging::lock_api::immediate;
+    use crate::parking::barging::lock_api::{immediate, yields};
     use crate::test::tests;
 
-    type Mutex<T> = immediate::Mutex<T>;
+    type Mutex<T> = yields::Mutex<T>;
     type ImmediateParkMutex<T> = immediate::Mutex<T>;
 
     #[test]

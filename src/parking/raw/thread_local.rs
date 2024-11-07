@@ -605,14 +605,14 @@ impl<T: ?Sized, P: Park> TryLockThen for MutexUnchecked<T, P> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::park::ImmediatePark;
+    use crate::parking::park::{ImmediatePark, YieldThenPark};
     use crate::parking::raw::MutexNode;
     use crate::test::tests;
 
-    type MutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
+    type MutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
     type ImmediateParkMutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
 
-    type MutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
+    type MutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
     type ImmediateParkMutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
 
     #[test]

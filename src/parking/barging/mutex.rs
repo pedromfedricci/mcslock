@@ -567,10 +567,10 @@ impl<T: ?Sized, Ps, Pq> AsDerefMut for MutexGuard<'_, T, Ps, Pq> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::barging::immediate;
+    use crate::parking::barging::{immediate, yields};
     use crate::test::tests;
 
-    type Mutex<T> = immediate::Mutex<T>;
+    type Mutex<T> = yields::Mutex<T>;
     type ImmediateParkMutex<T> = immediate::Mutex<T>;
 
     #[test]

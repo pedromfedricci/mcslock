@@ -542,10 +542,10 @@ impl<T: ?Sized, P> crate::test::LockData for Mutex<T, P> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::parking::raw::immediate;
+    use crate::parking::raw::{immediate, yields};
     use crate::test::tests;
 
-    type Mutex<T> = immediate::Mutex<T>;
+    type Mutex<T> = yields::Mutex<T>;
     type ImmediateParkMutex<T> = immediate::Mutex<T>;
 
     #[test]
