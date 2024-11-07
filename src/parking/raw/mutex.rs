@@ -239,8 +239,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     where
         F: FnOnce(Option<&mut T>) -> Ret,
     {
-        let mut node = MutexNode::new();
-        self.try_lock_with_then(&mut node, f)
+        self.try_lock_with_then(&mut MutexNode::new(), f)
     }
 
     /// Attempts to acquire this mutex and then runs a closure against the
@@ -352,8 +351,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     where
         F: FnOnce(&mut T) -> Ret,
     {
-        let mut node = MutexNode::new();
-        self.lock_with_then(&mut node, f)
+        self.lock_with_then(&mut MutexNode::new(), f)
     }
 
     /// Acquires this mutex and then runs the closure against the proteced data.
