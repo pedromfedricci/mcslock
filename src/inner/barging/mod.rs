@@ -51,7 +51,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
                 self.lock.lock_wait_relaxed::<Ws>();
             }
         });
-        MutexGuard::new(self)
+        MutexGuard { lock: self }
     }
 }
 
