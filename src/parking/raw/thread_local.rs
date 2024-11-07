@@ -611,9 +611,11 @@ mod test {
 
     type MutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
     type YieldThenParkMutexPanic<T> = super::MutexPanic<T, YieldThenPark>;
+    type ImmediateParkMutexPanic<T> = super::MutexPanic<T, ImmediatePark>;
 
     type MutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
     type YieldThenParkMutexUnchecked<T> = super::MutexUnchecked<T, YieldThenPark>;
+    type ImmediateParkMutexUnchecked<T> = super::MutexUnchecked<T, ImmediatePark>;
 
     #[test]
     fn ref_cell_node_drop_does_not_matter() {
@@ -622,13 +624,13 @@ mod test {
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_then_park() {
-        tests::lots_and_lots_lock::<YieldThenParkMutexPanic<_>>();
+    fn lots_and_lots_lock_immediate_park() {
+        tests::lots_and_lots_lock::<ImmediateParkMutexPanic<_>>();
     }
 
     #[test]
-    fn lots_and_lots_lock_yield_then_park_unchecked() {
-        tests::lots_and_lots_lock::<YieldThenParkMutexUnchecked<_>>();
+    fn lots_and_lots_lock_immediate_park_unchecked() {
+        tests::lots_and_lots_lock::<ImmediateParkMutexUnchecked<_>>();
     }
 
     #[test]
