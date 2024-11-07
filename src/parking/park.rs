@@ -321,15 +321,7 @@ impl ParkImpl for YieldBackoffThenPark {
 type Uint = u16;
 
 /// A default number of attempts to acquire the lock before parking the thread.
-#[cfg(not(miri))]
 const DEFAULT_ATTEMPTS: Uint = 100;
-
-/// A default number of attempts to acquire the lock before parking the thread.
-///
-/// For testing purposes, lets make this super small, else Miri runs will take
-/// far more time without much benefit.
-#[cfg(miri)]
-const DEFAULT_ATTEMPTS: Uint = 1;
 
 /// A bounded parking policy that will block the thread for at most some number
 /// of attempts.
