@@ -74,25 +74,25 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockData for Mutex<T, Ps, Pq> {
 
 #[cfg(test)]
 mod test {
-    use crate::parking::barging::lock_api::{immediate, yields};
+    use crate::parking::barging::lock_api::immediate;
     use crate::test::tests;
 
     type Mutex<T> = immediate::Mutex<T>;
-    type YieldThenParkMutex<T> = yields::Mutex<T>;
+    type ImmediateParkMutex<T> = immediate::Mutex<T>;
 
     #[test]
-    fn lots_and_lots_lock_yield_then_park() {
-        tests::lots_and_lots_lock::<YieldThenParkMutex<_>>();
+    fn lots_and_lots_lock_immediate_park() {
+        tests::lots_and_lots_lock::<ImmediateParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_try_lock_yield_then_park() {
-        tests::lots_and_lots_try_lock::<YieldThenParkMutex<_>>();
+    fn lots_and_lots_try_lock_immediate_park() {
+        tests::lots_and_lots_try_lock::<ImmediateParkMutex<_>>();
     }
 
     #[test]
-    fn lots_and_lots_mixed_lock_yield_then_park() {
-        tests::lots_and_lots_mixed_lock::<YieldThenParkMutex<_>>();
+    fn lots_and_lots_mixed_lock_immediate_park() {
+        tests::lots_and_lots_mixed_lock::<ImmediateParkMutex<_>>();
     }
 
     #[test]
