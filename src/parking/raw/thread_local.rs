@@ -191,7 +191,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// Panic: thread local node cannot be borrowed more than once at the same
     /// time:
     ///
-    #[doc = concat!("```should_panic,", already_borrowed_error!())]
+    #[doc = concat!("```should_panic(expected = ", already_borrowed_error!(), ")")]
     /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
@@ -365,7 +365,7 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// Panic: thread local node cannot be borrowed more than once at the same
     /// time:
     ///
-    #[doc = concat!("```should_panic,", already_borrowed_error!())]
+    #[doc = concat!("```should_panic(expected = ", already_borrowed_error!(), ")")]
     /// use mcslock::parking::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_parking_node!(static NODE);
