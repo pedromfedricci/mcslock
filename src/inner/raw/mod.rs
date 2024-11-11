@@ -255,9 +255,7 @@ struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     head: &'a MutexNodeInit<L>,
 }
 
-// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
-// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
-unsafe impl<T: ?Sized + Send, L: Lock, W: Wait> Send for MutexGuard<'_, T, L, W> {}
+// Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {

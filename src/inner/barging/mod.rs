@@ -108,7 +108,8 @@ pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
     lock: &'a Mutex<T, L, Ws, Wq>,
 }
 
-// Same unsafe impls as `crate::inner::raw::MutexGuard`.
+// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
+// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Send, L: Lock, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
 unsafe impl<T: ?Sized + Sync, L: Lock, Ws, Wq> Sync for MutexGuard<'_, T, L, Ws, Wq> {}
 
