@@ -15,7 +15,10 @@
 use core::marker::PhantomData;
 
 use crate::cfg::debug_abort;
-use crate::relax::{Loop, Relax, Spin, SpinBackoff, Yield, YieldBackoff};
+use crate::relax::{Loop, Relax, Spin, SpinBackoff};
+
+#[cfg(any(feature = "yield", test))]
+use crate::relax::{Yield, YieldBackoff};
 
 pub(crate) use wait::{CantPark, ParkWait};
 
@@ -194,15 +197,19 @@ impl ParkImpl for LoopThenPark {
 /// if unsuccessful, requests for the current thread to be put to sleep.
 ///
 /// The [`Yield`] relax strategy is executed during waiting loops.
+#[cfg(any(feature = "yield", test))]
+#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct YieldThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
+#[cfg(any(feature = "yield", test))]
 impl YieldThenPark {
     /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
+#[cfg(any(feature = "yield", test))]
 impl ParkImpl for YieldThenPark {
     type Relax = Yield;
 
@@ -289,15 +296,19 @@ impl ParkImpl for SpinBackoffThenPark {
 /// the current thread to be put to sleep.
 ///
 /// The [`YieldBackoff`] relax strategy is executed during waiting loops.
+#[cfg(any(feature = "yield", test))]
+#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub struct YieldBackoffThenPark {
     bounded: Bounded<{ Self::ATTEMPTS }>,
 }
 
+#[cfg(any(feature = "yield", test))]
 impl YieldBackoffThenPark {
     /// The maximum number of attempts this policy will run before being parked.
     const ATTEMPTS: Uint = DEFAULT_ATTEMPTS;
 }
 
+#[cfg(any(feature = "yield", test))]
 impl ParkImpl for YieldBackoffThenPark {
     type Relax = YieldBackoff;
 

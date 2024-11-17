@@ -235,7 +235,7 @@ FIFO), but can improve throughput when the lock is heavily contended.
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
 both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases are provided by
-the [`barging::lock_api`] (`no_std`) and [`parking::lock_api`] modules.
+the [`barging::lock_api`] (`no_std`) and [`parking::barging::lock_api`] modules.
 
 ### parking
 
@@ -243,8 +243,7 @@ The `parking` feature provides Mutex implementations that are capable of putting
 blocking threads waiting for the lock to sleep. These implementations are
 published under the [`parking`] module. Each `no_std` mutex flavors provided
 by this crate have corresponding parking implementations under that module.
-Users may select a out of the box parking policy at [`parking::park`]. This feature
-will automatically enable the `yield` feature.
+Users may select a out of the box parking policy at [`parking::park`].
 
 ## Minimum Supported Rust Version (MSRV)
 

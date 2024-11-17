@@ -111,6 +111,8 @@ pub mod spins {
 /// During lock contention, and for a certain amount of attempts, this lock will
 /// yield the current time slice to the OS scheduler. Once all attempts have
 /// been tried, puts the thread to sleep.
+#[cfg(any(feature = "yield", loom, test))]
+#[cfg_attr(docsrs, doc(cfg(feature = "yield")))]
 pub mod yields {
     use super::mutex;
     use crate::parking::park::YieldThenPark;
@@ -201,7 +203,7 @@ pub mod loops {
     pub type MutexGuard<'a, T> = mutex::MutexGuard<'a, T, LoopThenPark, LoopThenPark>;
 }
 
-/// A unfair MCS lock that implements a `immediate park` parking policy.
+/// A unfair MCS lock that implements an `immediate park` parking policy.
 ///
 /// During lock contention, this lock will immediately put the thread to sleep.
 pub mod immediate {

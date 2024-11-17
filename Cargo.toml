@@ -22,7 +22,7 @@ yield = []
 thread_local = []
 barging = []
 # NOTE: The `dep:` syntax requires Rust 1.60.
-parking = ["yield", "dep:atomic-wait"]
+parking = ["dep:atomic-wait"]
 lock_api = ["dep:lock_api"]
 
 [dependencies.atomic-wait]
