@@ -148,7 +148,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `barging` feature.
-// `spins::backoff::Mutex` simply spins wiht backoff during contention.
+// `spins::backoff::Mutex` spins with exponential backoff during contention.
 use mcslock::barging::spins::backoff::Mutex;
 
 fn main() {

@@ -118,6 +118,7 @@
 //! use std::thread;
 //!
 //! // Requires `barging` feature.
+//! // `spins::backoff::Mutex` spins with exponential backoff during contention.
 //! use mcslock::barging::spins::backoff::Mutex;
 //!
 //! let mutex = Arc::new(Mutex::new(0));

@@ -29,16 +29,16 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockNew for Mutex<T, Rs, Rq> {
 
 #[cfg(test)]
 impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
-    type Guard<'a> = &'a mut Self::Target
+    type Guard<'a> = MutexGuard<'a, T, Rs, Rq>
     where
         Self: 'a,
         Self::Target: 'a;
 
     fn lock_then<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(&mut Self::Target) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
-        f(&mut *self.lock())
+        f(self.lock())
     }
 }
 
@@ -46,9 +46,9 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
 impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {
     fn try_lock_then<F, Ret>(&self, f: F) -> Ret
     where
-        F: FnOnce(Option<&mut Self::Target>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
     {
-        f(self.try_lock().as_deref_mut())
+        f(self.try_lock())
     }
 
     fn is_locked(&self) -> bool {
