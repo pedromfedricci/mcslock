@@ -32,7 +32,7 @@ impl<L> MutexNodeInit<L> {
     /// linking with the current thread.
     ///
     /// The successor node is loaded with a relaxed ordering.
-    fn wait_next_relaxed<R: Relax>(&self) -> *mut MutexNodeInit<L> {
+    fn wait_next_relaxed<R: Relax>(&self) -> *mut Self {
         let mut relax = R::new();
         loop {
             let ptr = self.next.load(Relaxed);
