@@ -59,7 +59,7 @@ pub trait Lock {
     /// waiting policy while the lock is still on hold somewhere else.
     ///
     /// The lock is loaded with a relaxed ordering.
-    fn lock_wait_relaxed<W: Wait>(&self);
+    fn wait_lock_relaxed<W: Wait>(&self);
 
     /// Returns `true` if the lock is currently held.
     ///
@@ -114,7 +114,7 @@ impl Lock for AtomicBool {
         self.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok()
     }
 
-    fn lock_wait_relaxed<W: Wait>(&self) {
+    fn wait_lock_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
         let mut relax = W::LockRelax::new();

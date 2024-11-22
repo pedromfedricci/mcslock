@@ -48,7 +48,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
         let mut node = raw::MutexNode::new();
         self.queue.lock_with_then(&mut node, |()| {
             while !self.lock.try_lock_acquire_weak() {
-                self.lock.lock_wait_relaxed::<Ws>();
+                self.lock.wait_lock_relaxed::<Ws>();
             }
         });
         MutexGuard::new(self)

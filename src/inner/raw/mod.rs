@@ -27,6 +27,19 @@ impl<L> MutexNodeInit<L> {
     const fn as_ptr(&self) -> *mut Self {
         (self as *const Self).cast_mut()
     }
+
+    /// A relaxed loop that returns a pointer to the successor once it finishes
+    /// linking with the current thread.
+    ///
+    /// The successor node is loaded with a relaxed ordering.
+    fn wait_next_relaxed<R: Relax>(&self) -> *mut MutexNodeInit<L> {
+        let mut relax = R::new();
+        loop {
+            let ptr = self.next.load(Relaxed);
+            let true = ptr.is_null() else { return ptr };
+            relax.relax();
+        }
+    }
 }
 
 impl<L: Lock> MutexNodeInit<L> {
@@ -151,7 +164,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
             // SAFETY: Already verified that our predecessor is not null.
             unsafe { &*pred }.next.store(node.as_ptr(), Release);
             // Verify the lock hand-off, while applying some waiting policy.
-            node.lock.lock_wait_relaxed::<W>();
+            node.lock.wait_lock_relaxed::<W>();
             fence(Acquire);
         }
         MutexGuard::new(self, node)
@@ -167,25 +180,12 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
             let false = self.try_unlock_release(head.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = wait_next_relaxed::<L, W::UnlockRelax>(&head.next);
+            next = head.wait_next_relaxed::<W::UnlockRelax>();
         }
         fence(Acquire);
         // Notify our successor that they hold the lock.
         // SAFETY: We already verified that our successor is not null.
         unsafe { &*next }.lock.notify_release();
-    }
-}
-
-/// A relaxed loop that returns a pointer to the successor once it finishes
-/// linking with the current thread.
-///
-/// The successor node is loaded with a relaxed ordering.
-fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
-    let mut relax = R::new();
-    loop {
-        let ptr = next.load(Relaxed);
-        let true = ptr.is_null() else { return ptr };
-        relax.relax();
     }
 }
 

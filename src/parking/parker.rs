@@ -104,11 +104,11 @@ impl Lock for Parker {
         ParkerT::try_lock_acquire_weak(self)
     }
 
-    fn lock_wait_relaxed<W: Wait>(&self) {
-        let mut parker = W::Park::new();
-        let mut relax = W::LockRelax::new();
+    fn wait_lock_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop untin either all attempts have
         // already been made or the lock has been handed over to this thread.
+        let mut parker = W::Park::new();
+        let mut relax = W::LockRelax::new();
         while !parker.should_park() {
             if ParkerT::is_locked_relaxed(self) {
                 // Whenever the thread is not ready to be put to sleep yet and
