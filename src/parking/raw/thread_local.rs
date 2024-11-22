@@ -114,16 +114,14 @@ impl LocalMutexNode {
     #[must_use]
     #[inline(always)]
     pub const fn __new(key: LocalKey<RefCell<MutexNode>>) -> Self {
-        let inner = inner::LocalMutexNode::new(key);
-        Self { inner }
+        Self { inner: inner::LocalMutexNode::new(key) }
     }
 
     /// Creates a new Loom based `LocalMutexNode` key from the provided thread
     /// local node key (non-const).
     #[cfg(all(loom, test))]
     pub(crate) const fn new(key: &'static LocalKey<RefCell<MutexNode>>) -> Self {
-        let inner = inner::LocalMutexNode::new(key);
-        Self { inner }
+        Self { inner: inner::LocalMutexNode::new(key) }
     }
 }
 
