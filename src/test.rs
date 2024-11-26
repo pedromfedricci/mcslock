@@ -88,7 +88,8 @@ impl<T: Deref> AsDeref for T {
 
     type Deref<'a> = &'a <Self as Deref>::Target
     where
-        Self: 'a;
+        Self: 'a,
+        Self::Target: 'a;
 
     fn as_deref(&self) -> Self::Deref<'_> {
         self
@@ -99,7 +100,8 @@ impl<T: Deref> AsDeref for T {
 impl<T: DerefMut> AsDerefMut for T {
     type DerefMut<'a> = &'a mut <Self as Deref>::Target
     where
-        Self: 'a;
+        Self: 'a,
+        Self::Target: 'a;
 
     fn as_deref_mut(&mut self) -> Self::DerefMut<'_> {
         self
