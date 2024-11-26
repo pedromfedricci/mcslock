@@ -14,8 +14,7 @@ mod thread_local;
 #[cfg(feature = "thread_local")]
 pub use thread_local::LocalMutexNode;
 
-/// The inner definition of [`MutexNode`], which is known to be in a initialized
-/// state.
+/// The inner type of [`MutexNode`], which is known to be in initialized state.
 #[derive(Debug)]
 pub struct MutexNodeInit<L> {
     next: AtomicPtr<Self>,
@@ -141,7 +140,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     /// The returned guard instance **must** be dropped, that is, it **must not**
     /// be "forgotten" (e.g. `core::mem::forget`), or being targeted by any
     /// other operation that would prevent it from executing its `drop` call.
-    unsafe fn try_lock<'a>(&'a self, n: &'a mut MutexNode<L>) -> Option<MutexGuard<'a, T, L, W>> {
+    unsafe fn try_lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> OptionGuard<'a, T, L, W> {
         let node = n.initialize();
         self.tail
             .compare_exchange(ptr::null_mut(), node.as_ptr(), AcqRel, Relaxed)
@@ -156,13 +155,13 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     /// The returned guard instance **must** be dropped, that is, it **must not**
     /// be "forgotten" (e.g. `core::mem::forget`), or being targeted of any
     /// other operation hat would prevent it from executing its `drop` call.
-    unsafe fn lock<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
+    unsafe fn lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
         let node = n.initialize();
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
         // If we have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             // SAFETY: Already verified that our predecessor is not null.
-            unsafe { &*pred }.next.store(node.as_ptr(), Release);
+            unsafe { &(*pred).next }.store(node.as_ptr(), Release);
             // Verify the lock hand-off, while applying some waiting policy.
             node.lock.wait_lock_relaxed::<W>();
             fence(Acquire);
@@ -172,7 +171,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
 
     /// Unlocks this mutex. If there is a successor node in the queue, the lock
     /// is passed directly to them.
-    fn unlock(&self, head: &MutexNodeInit<L>) {
+    fn unlock_with(&self, head: &MutexNodeInit<L>) {
         let mut next = head.next.load(Relaxed);
         // If we don't have a known successor currently,
         if next.is_null() {
@@ -185,7 +184,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         fence(Acquire);
         // Notify our successor that they hold the lock.
         // SAFETY: We already verified that our successor is not null.
-        unsafe { &*next }.lock.notify_release();
+        unsafe { &(*next).lock }.notify_release();
     }
 }
 
@@ -220,7 +219,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         F: FnOnce(Option<&mut T>) -> Ret,
     {
         // SAFETY: The guard's `drop` call is executed within this scope.
-        unsafe { self.try_lock(node) }.as_deref_mut_with_mut(f)
+        unsafe { self.try_lock_with(node) }.as_deref_mut_with_mut(f)
     }
 
     /// Acquires this mutex and then runs the closure against the protected data.
@@ -231,7 +230,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         F: FnOnce(&mut T) -> Ret,
     {
         // SAFETY: The guard's `drop` call is executed within this scope.
-        unsafe { self.lock(node) }.with_mut(f)
+        unsafe { self.lock_with(node) }.with_mut(f)
     }
 }
 
@@ -246,6 +245,9 @@ impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
         d.finish()
     }
 }
+
+/// Short alias for a `Option` wrapped `MutexGuard`;
+type OptionGuard<'a, T, L, W> = Option<MutexGuard<'a, T, L, W>>;
 
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
@@ -296,7 +298,7 @@ trait AsDerefMutWithMut {
         F: FnOnce(Option<&mut Self::Target>) -> Ret;
 }
 
-impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for Option<MutexGuard<'_, T, L, W>> {
+impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for OptionGuard<'_, T, L, W> {
     type Target = T;
 
     fn as_deref_mut_with_mut<F, Ret>(&mut self, f: F) -> Ret
@@ -350,6 +352,6 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
 impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
     #[inline]
     fn drop(&mut self) {
-        self.lock.unlock(self.head);
+        self.lock.unlock_with(self.head);
     }
 }
