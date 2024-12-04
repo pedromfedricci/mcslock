@@ -516,6 +516,13 @@ impl<T: ?Sized, R: Relax> LockWithThen for Mutex<T, R> {
     {
         self.lock_with_then(node, f)
     }
+
+    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(&mut Self::Target) -> Ret,
+    {
+        self.lock_then(f)
+    }
 }
 
 #[cfg(test)]
@@ -525,6 +532,13 @@ impl<T: ?Sized, R: Relax> TryLockWithThen for Mutex<T, R> {
         F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
         self.try_lock_with_then(node, f)
+    }
+
+    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<&mut Self::Target>) -> Ret,
+    {
+        self.try_lock_then(f)
     }
 
     fn is_locked(&self) -> bool {
