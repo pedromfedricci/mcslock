@@ -5,7 +5,7 @@ use crate::inner::barging as inner;
 use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
-use crate::test::{LockNew, LockThen, TryLockThen};
+use crate::test::{LockNew, LockWithThen, TryLockWithThen};
 
 #[cfg(all(loom, test))]
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
@@ -386,13 +386,17 @@ impl<T: ?Sized, Rs, Rq> LockNew for Mutex<T, Rs, Rq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
-    type Guard<'a> = MutexGuard<'a, T, Rs, Rq>
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWithThen for Mutex<T, Rs, Rq> {
+    // The barging mutex does not require queue node access.
+    type Node = ();
+
+    type Guard<'a>
+        = MutexGuard<'a, T, Rs, Rq>
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
@@ -401,8 +405,8 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockWithThen for Mutex<T, Rs, Rq> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
     {
@@ -494,20 +498,20 @@ impl<'a, T: ?Sized, Rs, Rq> From<GuardInner<'a, T, Rs, Rq>> for MutexGuard<'a, T
     }
 }
 
-impl<'a, T: ?Sized + Debug, Rs, Rq> Debug for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized + Debug, Rs, Rq> Debug for MutexGuard<'_, T, Rs, Rq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + Display, Rs, Rq> Display for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized + Display, Rs, Rq> Display for MutexGuard<'_, T, Rs, Rq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -518,7 +522,7 @@ impl<'a, T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'a, T, Rs, Rq> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'_, T, Rs, Rq> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -526,8 +530,8 @@ impl<'a, T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'a, T, Rs, Rq> {
     }
 }
 
-/// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-/// underlying data.
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
@@ -543,7 +547,8 @@ unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
 impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
-    type Deref<'a> = GuardDeref<'a, Self>
+    type Deref<'a>
+        = GuardDeref<'a, Self>
     where
         Self: 'a,
         Self::Target: 'a;
@@ -556,7 +561,8 @@ impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 impl<T: ?Sized, Rs, Rq> AsDerefMut for MutexGuard<'_, T, Rs, Rq> {
-    type DerefMut<'a> = GuardDerefMut<'a, Self>
+    type DerefMut<'a>
+        = GuardDerefMut<'a, Self>
     where
         Self: 'a,
         Self::Target: 'a;

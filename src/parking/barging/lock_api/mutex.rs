@@ -3,7 +3,7 @@ use crate::parking::barging;
 #[cfg(test)]
 use crate::parking::park::Park;
 #[cfg(test)]
-use crate::test::{LockData, LockNew, LockThen, TryLockThen};
+use crate::test::{LockData, LockNew, LockWithThen, TryLockWithThen};
 
 /// A [`lock_api::Mutex`] alias that wraps a [`parking::barging::Mutex`].
 ///
@@ -30,13 +30,17 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockNew for Mutex<T, Ps, Pq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Ps: Park, Pq: Park> LockThen for Mutex<T, Ps, Pq> {
-    type Guard<'a> = MutexGuard<'a, T, Ps, Pq>
+impl<T: ?Sized, Ps: Park, Pq: Park> LockWithThen for Mutex<T, Ps, Pq> {
+    // The barging mutex does not require queue node access.
+    type Node = ();
+
+    type Guard<'a>
+        = MutexGuard<'a, T, Ps, Pq>
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Ps, Pq>) -> Ret,
     {
@@ -45,8 +49,8 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockThen for Mutex<T, Ps, Pq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Ps: Park, Pq: Park> TryLockThen for Mutex<T, Ps, Pq> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, Ps: Park, Pq: Park> TryLockWithThen for Mutex<T, Ps, Pq> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, Ps, Pq>>) -> Ret,
     {

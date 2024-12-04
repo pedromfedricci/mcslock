@@ -6,7 +6,7 @@ use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockThen, TryLockThen};
+use crate::test::{LockNew, LockWithThen, TryLockWithThen};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -498,27 +498,30 @@ impl<T: ?Sized, P> LockNew for Mutex<T, P> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, P: Park> LockThen for Mutex<T, P> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, P: Park> LockWithThen for Mutex<T, P> {
+    type Node = MutexNode;
+
+    type Guard<'a>
+        = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, node: &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(&mut Self::Target) -> Ret,
     {
-        self.lock_then(f)
+        self.lock_with_then(node, f)
     }
 }
 
 #[cfg(test)]
-impl<T: ?Sized, P: Park> TryLockThen for Mutex<T, P> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, P: Park> TryLockWithThen for Mutex<T, P> {
+    fn try_lock_with_then<F, Ret>(&self, node: &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
-        self.try_lock_then(f)
+        self.try_lock_with_then(node, f)
     }
 
     fn is_locked(&self) -> bool {

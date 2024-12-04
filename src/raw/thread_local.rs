@@ -6,7 +6,7 @@ use crate::inner::raw as inner;
 use crate::relax::Relax;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockThen, TryLockThen};
+use crate::test::{LockNew, LockWithThen, TryLockWithThen};
 
 type Key = &'static LocalMutexNode;
 
@@ -524,13 +524,17 @@ impl<T: ?Sized, R> LockNew for MutexPanic<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, R: Relax> LockWithThen for MutexPanic<T, R> {
+    // A thread local node is transparently accessed instead.
+    type Node = ();
+
+    type Guard<'a>
+        = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(&mut Self::Target) -> Ret,
     {
@@ -539,8 +543,8 @@ impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> TryLockThen for MutexPanic<T, R> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, R: Relax> TryLockWithThen for MutexPanic<T, R> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
@@ -570,13 +574,17 @@ impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, R: Relax> LockWithThen for MutexUnchecked<T, R> {
+    // A thread local node is transparently accessed instead.
+    type Node = ();
+
+    type Guard<'a>
+        = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(&mut Self::Target) -> Ret,
     {
@@ -587,10 +595,10 @@ impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> TryLockThen for MutexUnchecked<T, R> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, R: Relax> TryLockWithThen for MutexUnchecked<T, R> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
-        F: FnOnce(Option<&mut T>) -> Ret,
+        F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
         // SAFETY: caller must guarantee that this thread local node is not
         // already mutably borrowed for some other lock acquisition.

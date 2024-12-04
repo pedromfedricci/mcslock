@@ -154,7 +154,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     ///
     /// The returned guard instance **must** be dropped, that is, it **must not**
     /// be "forgotten" (e.g. `core::mem::forget`), or being targeted of any
-    /// other operation hat would prevent it from executing its `drop` call.
+    /// other operation that would prevent it from executing its `drop` call.
     unsafe fn lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
         let node = n.initialize();
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
@@ -312,14 +312,14 @@ impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for OptionGuard<'_, T, L, W>
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'_, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'_, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
@@ -327,7 +327,7 @@ impl<'a, T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'a, T, L,
 
 #[cfg(not(all(loom, test)))]
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'_, T, L, W> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -340,7 +340,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, 
 
 #[cfg(not(all(loom, test)))]
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'_, T, L, W> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -349,7 +349,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
     }
 }
 
-impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'_, T, L, W> {
     #[inline]
     fn drop(&mut self) {
         self.lock.unlock_with(self.head);

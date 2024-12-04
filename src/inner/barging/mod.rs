@@ -129,20 +129,20 @@ impl<'a, T: ?Sized, L: Lock, Ws, Wq> MutexGuard<'a, T, L, Ws, Wq> {
     }
 }
 
-impl<'a, T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for MutexGuard<'_, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
-impl<'a, T: ?Sized + Display, L: Lock, Ws, Wq> Display for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized + Display, L: Lock, Ws, Wq> Display for MutexGuard<'_, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -153,7 +153,7 @@ impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'a, T, L, W
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::DerefMut for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized, L: Lock, Ws, Wq> core::ops::DerefMut for MutexGuard<'_, T, L, Ws, Wq> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
@@ -167,8 +167,8 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
     }
 }
 
-/// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-/// underlying data.
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {
