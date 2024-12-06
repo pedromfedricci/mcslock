@@ -3,8 +3,17 @@ use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
+#[cfg(feature = "parking")]
+use crate::parking::park::Park;
+
 /// A `Lock` is some arbitrary data type used by a lock implementation to
 /// manage the state of the lock.
+///
+/// The `no_std` implementations (eg `raw` and `barging`) can simply use a
+/// `AtomicBool` to manage state. The parking variants thought, need platform
+/// specific data types. We are currently using the `atomic_wait` crate for
+/// easy parking integration. It uses `AtomicU32` as the data type for all
+/// major platforms.
 pub trait Lock {
     /// Creates a new locked `Lock` instance.
     ///
@@ -50,16 +59,16 @@ pub trait Lock {
     /// waiting policy while the lock is still on hold somewhere else.
     ///
     /// The lock is loaded with a relaxed ordering.
-    fn lock_wait_relaxed<W: Wait>(&self);
+    fn wait_lock_relaxed<W: Wait>(&self);
 
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
-    fn is_locked(&self) -> bool;
+    fn is_locked_relaxed(&self) -> bool;
 
     /// Changes the state of the lock and, possibly, notifies that change
     /// to some other interested party.
-    fn notify(&self);
+    fn notify_release(&self);
 }
 
 /// The waiting policy that should be applied while the lock state has not
@@ -70,6 +79,10 @@ pub trait Wait {
 
     /// The relax operation that will be excuted during unlock waiting loops.
     type UnlockRelax: Relax;
+
+    /// The parking policy that a thread parking capable waiter will execute.
+    #[cfg(feature = "parking")]
+    type Park: Park;
 }
 
 impl Lock for AtomicBool {
@@ -101,7 +114,7 @@ impl Lock for AtomicBool {
         self.compare_exchange_weak(false, true, Acquire, Relaxed).is_ok()
     }
 
-    fn lock_wait_relaxed<W: Wait>(&self) {
+    fn wait_lock_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
         let mut relax = W::LockRelax::new();
@@ -110,11 +123,11 @@ impl Lock for AtomicBool {
         }
     }
 
-    fn is_locked(&self) -> bool {
+    fn is_locked_relaxed(&self) -> bool {
         self.load(Relaxed)
     }
 
-    fn notify(&self) {
+    fn notify_release(&self) {
         self.store(false, Release);
     }
 }
