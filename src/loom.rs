@@ -93,14 +93,14 @@ pub mod models {
     use loom::{model, thread};
 
     use crate::test::{get, inc, try_inc, Int};
-    use crate::test::{LockWithThen, TryLockWithThen};
+    use crate::test::{LockThen, TryLockThen};
 
     /// Get a copy of the shared integer, converting it to usize.
     ///
     /// Panics if the cast fails.
     fn get_unwrap<L>(lock: &Arc<L>) -> usize
     where
-        L: LockWithThen<Target = Int>,
+        L: LockThen<Target = Int>,
     {
         get(lock).try_into().unwrap()
     }
@@ -116,7 +116,7 @@ pub mod models {
     /// against the shared data, therefore no data races.
     pub fn try_lock_join<L>()
     where
-        L: TryLockWithThen<Target = Int> + 'static,
+        L: TryLockThen<Target = Int> + 'static,
     {
         model(|| {
             const RUNS: usize = TRY_LOCKS;
@@ -137,7 +137,7 @@ pub mod models {
     /// against the shared data, therefore no data races.
     pub fn lock_join<L>()
     where
-        L: LockWithThen<Target = Int> + 'static,
+        L: LockThen<Target = Int> + 'static,
     {
         model(|| {
             const RUNS: usize = LOCKS;
@@ -158,7 +158,7 @@ pub mod models {
     /// all mutations against the shared data, therefore no data races.
     pub fn mixed_lock_join<L>()
     where
-        L: TryLockWithThen<Target = Int> + 'static,
+        L: TryLockThen<Target = Int> + 'static,
     {
         model(|| {
             const RUNS: usize = LOCKS;

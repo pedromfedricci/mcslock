@@ -5,7 +5,7 @@ use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWithThen, TryLockWithThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 #[cfg(all(loom, test))]
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
@@ -431,6 +431,12 @@ impl<T: ?Sized, Ps, Pq> crate::test::LockData for Mutex<T, Ps, Pq> {
         self.get_mut()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, Ps: Park, Pq: Park> LockThen for Mutex<T, Ps, Pq> {}
+
+#[cfg(test)]
+impl<T: ?Sized, Ps: Park, Pq: Park> TryLockThen for Mutex<T, Ps, Pq> {}
 
 #[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Ps: Park, Pq: Park> lock_api::RawMutex for Mutex<(), Ps, Pq> {

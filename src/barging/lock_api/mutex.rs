@@ -3,7 +3,7 @@ use crate::barging;
 #[cfg(test)]
 use crate::relax::Relax;
 #[cfg(test)]
-use crate::test::{LockData, LockNew, LockWithThen, TryLockWithThen};
+use crate::test::{LockData, LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 /// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
 ///
@@ -73,6 +73,12 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockData for Mutex<T, Rs, Rq> {
         self.get_mut()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {}
 
 #[cfg(test)]
 mod test {

@@ -6,7 +6,7 @@ use crate::parking::park::{Park, ParkWait};
 use crate::parking::parker::Parker;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWithThen, TryLockWithThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 /// A locally-accessible record for forming the waiting queue.
 ///
@@ -513,13 +513,6 @@ impl<T: ?Sized, P: Park> LockWithThen for Mutex<T, P> {
     {
         self.lock_with_then(node, f)
     }
-
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(&mut Self::Target) -> Ret,
-    {
-        self.lock_then(f)
-    }
 }
 
 #[cfg(test)]
@@ -529,13 +522,6 @@ impl<T: ?Sized, P: Park> TryLockWithThen for Mutex<T, P> {
         F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
         self.try_lock_with_then(node, f)
-    }
-
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(Option<&mut Self::Target>) -> Ret,
-    {
-        self.try_lock_then(f)
     }
 
     fn is_locked(&self) -> bool {
@@ -554,6 +540,26 @@ impl<T: ?Sized, P> crate::test::LockData for Mutex<T, P> {
 
     fn get_mut(&mut self) -> &mut Self::Target {
         self.get_mut()
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, P: Park> LockThen for Mutex<T, P> {
+    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(&mut Self::Target) -> Ret,
+    {
+        self.lock_then(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, P: Park> TryLockThen for Mutex<T, P> {
+    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<&mut Self::Target>) -> Ret,
+    {
+        self.try_lock_then(f)
     }
 }
 

@@ -5,7 +5,7 @@ use crate::inner::barging as inner;
 use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWithThen, TryLockWithThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 #[cfg(all(loom, test))]
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
@@ -431,6 +431,12 @@ impl<T: ?Sized, Rs, Rq> crate::test::LockData for Mutex<T, Rs, Rq> {
         self.get_mut()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {}
 
 #[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Rs: Relax, Rq: Relax> lock_api::RawMutex for Mutex<(), Rs, Rq> {

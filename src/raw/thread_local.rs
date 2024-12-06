@@ -6,7 +6,7 @@ use crate::inner::raw as inner;
 use crate::relax::Relax;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockWithThen, TryLockWithThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 type Key = &'static LocalMutexNode;
 
@@ -556,6 +556,12 @@ impl<T: ?Sized, R: Relax> TryLockWithThen for MutexPanic<T, R> {
     }
 }
 
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> TryLockThen for MutexPanic<T, R> {}
+
 /// A Mutex wrapper type that calls `lock_with_local_then_unchecked` and
 /// `try_lock_with_local_then_unchecked` when implementing testing traits.
 #[cfg(test)]
@@ -609,6 +615,12 @@ impl<T: ?Sized, R: Relax> TryLockWithThen for MutexUnchecked<T, R> {
         self.0.is_locked()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> TryLockThen for MutexUnchecked<T, R> {}
 
 #[cfg(all(not(loom), test))]
 mod test {
