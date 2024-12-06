@@ -190,7 +190,7 @@ where
 #[cfg(all(loom, test))]
 pub fn try_inc<L>(mutex: &Arc<L>)
 where
-    L: TryLockWithThen<Target = Int>,
+    L: TryLockThen<Target = Int>,
 {
     mutex.try_lock_then(try_inc_inner::<L>);
 }
