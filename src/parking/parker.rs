@@ -75,6 +75,25 @@ pub trait ParkerT {
     fn unpark_release(&self);
 }
 
+/// Parks the current thread under the specified policy and `futex` compatible
+/// atomic value.
+///
+/// If the current thread manages to acquire the lock within the limit of
+/// attempts, then just return and unblock the thread, without ever requesting
+/// the OS to put the thread to sleep.
+///
+/// Else, if the limit has been reached and the lock remains locked, then park
+/// the thread and protect it from being awaken by spurious wakeups.
+fn park_current_thread_with_relaxed<P: ParkerT, W: Wait>(parker: &P) {
+    let mut parking_policy = W::parking_policy();
+    while !parking_policy.park.should_park() {
+        let true = parker.is_locked_relaxed() else { return };
+        parking_policy.park.on_failure();
+        parking_policy.relax.relax();
+    }
+    parker.park_loop_relaxed();
+}
+
 impl Lock for Parker {
     #[cfg(not(all(loom, test)))]
     #[allow(clippy::declare_interior_mutable_const)]
@@ -105,26 +124,7 @@ impl Lock for Parker {
     }
 
     fn wait_lock_relaxed<W: Wait>(&self) {
-        // Block the thread with a relaxed loop untin either all attempts have
-        // already been made or the lock has been handed over to this thread.
-        let mut parker = W::Park::new();
-        let mut relax = W::LockRelax::new();
-        while !parker.should_park() {
-            if ParkerT::is_locked_relaxed(self) {
-                // Whenever the thread is not ready to be put to sleep yet and
-                // it also fails to acquire the lock, then update parker's
-                // state and apply its associated relax operation.
-                parker.on_failure();
-                relax.relax();
-            } else {
-                // The thread managed to acquire the lock without sleeping and
-                // also within the limit of attempts.
-                return;
-            }
-        }
-        // The limit of attempts have been reached and the lock remains locked,
-        // then park the thread. The parking loop will handle spurious wakeups.
-        ParkerT::park_loop_relaxed(self);
+        park_current_thread_with_relaxed::<Self, W>(self);
     }
 
     fn is_locked_relaxed(&self) -> bool {

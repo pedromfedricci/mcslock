@@ -74,15 +74,45 @@ pub trait Lock {
 /// The waiting policy that should be applied while the lock state has not
 /// reached some target state.
 pub trait Wait {
-    /// The relax operation that will be excuted during lock waiting loops.
+    /// The relax operation excuted inside `lock` busy-wait loops.
     type LockRelax: Relax;
 
-    /// The relax operation that will be excuted during unlock waiting loops.
+    /// The relax operation excuted inside `unlock` busy-wait loops.
     type UnlockRelax: Relax;
 
-    /// The parking policy that a thread parking capable waiter will execute.
+    /// The thread parking policy that will be executed during lock contention.
+    ///
+    /// Enabled only for thread parking capabable policies.
     #[cfg(feature = "parking")]
     type Park: Park;
+
+    /// Returns a initliazed relax waiting policy.
+    fn relax_policy() -> RelaxPolicy<Self> {
+        let relax = Self::LockRelax::new();
+        RelaxPolicy { relax }
+    }
+
+    /// Returns a initialized thread parking waiting policy.
+    ///
+    /// Enabled only for thread parking capabable policies.
+    #[cfg(feature = "parking")]
+    fn parking_policy() -> ParkingPolicy<Self> {
+        let relax = Self::LockRelax::new();
+        let park = Self::Park::new();
+        ParkingPolicy { relax, park }
+    }
+}
+
+/// A waiting policy that is only composed of a relax policy.
+pub struct RelaxPolicy<W: Wait + ?Sized> {
+    pub relax: W::LockRelax,
+}
+
+/// A waiting policy that s composed of both relax and thread parking policies.
+#[cfg(feature = "parking")]
+pub struct ParkingPolicy<W: Wait + ?Sized> {
+    pub relax: W::LockRelax,
+    pub park: W::Park,
 }
 
 impl Lock for AtomicBool {
@@ -117,9 +147,9 @@ impl Lock for AtomicBool {
     fn wait_lock_relaxed<W: Wait>(&self) {
         // Block the thread with a relaxed loop until the load returns `false`,
         // indicating that the lock was handed off to the current thread.
-        let mut relax = W::LockRelax::new();
+        let mut relax_policy = W::relax_policy();
         while self.load(Relaxed) {
-            relax.relax();
+            relax_policy.relax.relax();
         }
     }
 
