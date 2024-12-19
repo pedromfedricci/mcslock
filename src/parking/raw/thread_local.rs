@@ -371,9 +371,9 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
     /// let mutex = Mutex::new(0);
     ///
     /// mutex.lock_with_local_then(&NODE, |_data| {
-    ///     // `NODE` is already mutably borrowed in this thread by the
-    ///     // enclosing `lock_with_local_then`, the borrow is live for the full
-    ///     // duration of this closure scope.
+    ///     // `NODE` is already mutably borrowed in this thread by the enclosing
+    ///     // `lock_with_local_then`, the borrow is live for the full duration
+    ///     // of this closure scope.
     ///     let mutex = Mutex::new(());
     ///     mutex.lock_with_local_then(&NODE, |_data| ());
     /// });

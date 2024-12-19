@@ -52,7 +52,7 @@ Or add a entry under the `[dependencies]` section in your `Cargo.toml`:
 # Cargo.toml
 
 [dependencies]
-# Available features: `yield`, `barging`, `thread_local` and `lock_api`.
+# Features: `yield`, `barging`, `thread_local` and `lock_api`.
 mcslock = { version = "0.4", features = ["thread_local"] }
 ```
 
@@ -77,7 +77,7 @@ module for more information.
 use std::sync::Arc;
 use std::thread;
 
-// `spins::Mutex` simply spins during contention.
+// Simply spins during contention.
 use mcslock::raw::{spins::Mutex, MutexNode};
 
 fn main() {
@@ -88,13 +88,11 @@ fn main() {
         // A queue node must be mutably accessible.
         // Critical section must be defined as a closure.
         let mut node = MutexNode::new();
-        c_mutex.lock_with_then(&mut node, |data| {
-            *data = 10;
-        });
+        c_mutex.lock_with_then(&mut node, |data| *data = 10);
     })
     .join().expect("thread::spawn failed");
 
-    // A node is transparently allocated in the stack.
+    // A node may also be transparently allocated in the stack.
     // Critical section must be defined as a closure.
     assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
 }
@@ -112,7 +110,7 @@ the `thread_local` feature.
 use std::sync::Arc;
 use std::thread;
 
-// `spins::Mutex` simply spins during contention.
+// Simply spins during contention.
 use mcslock::raw::spins::Mutex;
 
 // Requires `thread_local` feature.
@@ -129,9 +127,9 @@ fn main() {
     })
     .join().expect("thread::spawn failed");
 
-    // Local node handles are provided by reference.
+    // A node may also be transparently allocated in the stack.
     // Critical section must be defined as a closure.
-    assert_eq!(mutex.try_lock_with_local_then(&NODE, |data| *data.unwrap()), 10);
+    assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
 }
 ```
 
@@ -148,7 +146,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `barging` feature.
-// `spins::backoff::Mutex` spins with exponential backoff during contention.
+// Spins with exponential backoff during contention.
 use mcslock::barging::spins::backoff::Mutex;
 
 fn main() {
@@ -156,11 +154,11 @@ fn main() {
     let c_mutex = Arc::clone(&mutex);
 
     thread::spawn(move || {
-        *c_mutex.lock() = 10;
+        *c_mutex.try_lock().unwrap() = 10;
     })
     .join().expect("thread::spawn failed");
 
-    assert_eq!(*mutex.try_lock().unwrap(), 10);
+    assert_eq!(*mutex.lock(), 10);
 }
 ```
 
@@ -177,7 +175,7 @@ use std::sync::Arc;
 use std::thread;
 
 // Requires `parking` feature.
-// `spins::Mutex` spins for a while then parks during contention.
+// Spins for a while then parks during contention.
 use mcslock::parking::raw::{spins::Mutex, MutexNode};
 
 // Requires `parking` and `thread_local` features.
@@ -194,7 +192,7 @@ fn main() {
     })
     .join().expect("thread::spawn failed");
 
-    // A node is transparently allocated in the stack.
+    // A node may also be transparently allocated in the stack.
     // Critical section must be defined as a closure.
     assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
 }
