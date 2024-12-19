@@ -43,25 +43,23 @@
 //! use std::sync::Arc;
 //! use std::thread;
 //!
-//! // `spins::Mutex` simply spins during contention.
+//! // Simply spins during contention.
 //! use mcslock::raw::{spins::Mutex, MutexNode};
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
 //!
 //! thread::spawn(move || {
-//!     // A queue node must be mutably accessible.
+//!     // A node may also be transparently allocated in the stack.
 //!     // Critical section must be defined as a closure.
-//!     let mut node = MutexNode::new();
-//!     c_mutex.lock_with_then(&mut node, |data| {
-//!         *data = 10;
-//!     });
+//!     c_mutex.try_lock_then(|data| *data.unwrap() = 10);
 //! })
 //! .join().expect("thread::spawn failed");
 //!
-//! // A node is transparently allocated in the stack.
+//! // A queue node must be mutably accessible.
 //! // Critical section must be defined as a closure.
-//! assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
+//! let mut node = MutexNode::new();
+//! assert_eq!(mutex.lock_with_then(&mut node, |data| *data), 10);
 //! ```
 //!
 //! ## Thread local queue nodes
@@ -78,7 +76,7 @@
 //! use std::sync::Arc;
 //! use std::thread;
 //!
-//! // `spins::Mutex` simply spins during contention.
+//! // Simply spins during contention.
 //! use mcslock::raw::spins::Mutex;
 //!
 //! // Requires `thread_local` feature.
@@ -96,7 +94,7 @@
 //!
 //! // Local node handles are provided by reference.
 //! // Critical section must be defined as a closure.
-//! assert_eq!(mutex.try_lock_with_local_then(&NODE, |data| *data.unwrap()), 10);
+//! assert_eq!(mutex.lock_with_local_then(&NODE, |data| *data), 10);
 //! # }
 //! # #[cfg(not(feature = "thread_local"))]
 //! # fn main() {}
@@ -118,18 +116,18 @@
 //! use std::thread;
 //!
 //! // Requires `barging` feature.
-//! // `spins::backoff::Mutex` spins with exponential backoff during contention.
+//! // Spins with exponential backoff during contention.
 //! use mcslock::barging::spins::backoff::Mutex;
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);
 //!
 //! thread::spawn(move || {
-//!     *c_mutex.lock() = 10;
+//!     *c_mutex.try_lock().unwrap() = 10;
 //! })
 //! .join().expect("thread::spawn failed");
 //!
-//! assert_eq!(*mutex.try_lock().unwrap(), 10);
+//! assert_eq!(*mutex.lock(), 10);
 //! # }
 //! # #[cfg(not(feature = "barging"))]
 //! # fn main() {}
@@ -150,7 +148,7 @@
 //! use std::thread;
 //!
 //! // Requires `parking` feature.
-//! // `spins::Mutex` spins for a while then parks during contention.
+//! // Spins for a while then parks during contention.
 //! use mcslock::parking::raw::{spins::Mutex, MutexNode};
 //!
 //! // Requires `parking` and `thread_local` features.
@@ -166,9 +164,10 @@
 //! })
 //! .join().expect("thread::spawn failed");
 //!
-//! // A node is transparently allocated in the stack.
+//! // A queue node must be mutably accessible.
 //! // Critical section must be defined as a closure.
-//! assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
+//! let mut node = MutexNode::new();
+//! assert_eq!(mutex.lock_with_then(&mut node, |data| *data), 10);
 //! # }
 //! # #[cfg(not(all(feature = "thread_local", feature = "parking")))]
 //! # fn main() {}
