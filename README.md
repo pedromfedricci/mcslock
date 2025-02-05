@@ -9,7 +9,8 @@
 ![No_std][no_std-badge]
 
 MCS lock is a List-Based Queuing Lock that avoids network contention by having
-threads spin on local memory locations. The main properties of this mechanism are:
+threads spin and/or park on local memory locations. The main properties of this
+mechanism are:
 
 - guarantees FIFO ordering of lock acquisitions;
 - spins on locally-accessible flag variables only;
@@ -24,9 +25,10 @@ paper. And a simpler correctness proof of the MCS lock was proposed by
 ## Spinlock use cases
 
 It is noteworthy to mention that [spinlocks are usually not what you want]. The
-majority of use cases are well covered by OS-based mutexes like [`std::sync::Mutex`]
-and [`parking_lot::Mutex`]. These implementations will notify the system that the
-waiting thread should be parked, freeing the processor to work on something else.
+majority of use cases are well covered by OS-based mutexes like
+[`std::sync::Mutex`] or [`parking_lot::Mutex`] or even this crate's [`parking`]
+Mutexes. These implementations will notify the system that the waiting thread
+should be parked, freeing the processor to work on something else.
 
 Spinlocks are only efficient in very few circumstances where the overhead
 of context switching or process rescheduling are greater than busy waiting
@@ -160,6 +162,42 @@ fn main() {
 }
 ```
 
+## Locking with thread parking MCS locks
+
+This crate also supports MCS lock implementations that will put the blocking
+threads to sleep. All `no_std` flavors: `raw`, `barging` have matching `Mutex`
+types under the [`parking`] module, with corresponding paths and public APIs,
+that are thread parking capable. These implementations are not `no_std`
+compatible. See [`parking`] module for more information.
+
+```rust
+use std::sync::Arc;
+use std::thread;
+
+// Requires `parking` feature.
+// Spins for a while then parks during contention.
+use mcslock::parking::raw::{spins::Mutex, MutexNode};
+
+// Requires `parking` and `thread_local` features.
+mcslock::thread_local_parking_node!(static NODE);
+
+fn main() {
+    let mutex = Arc::new(Mutex::new(0));
+    let c_mutex = Arc::clone(&mutex);
+
+    thread::spawn(move || {
+        // Local node handles are provided by reference.
+        // Critical section must be defined as a closure.
+        c_mutex.lock_with_local_then(&NODE, |data| *data = 10);
+    })
+    .join().expect("thread::spawn failed");
+
+    // A node may also be transparently allocated in the stack.
+    // Critical section must be defined as a closure.
+    assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
+}
+```
+
 ## Features
 
 This crate dos not provide any default features. Features that can be enabled
@@ -178,26 +216,37 @@ just simply busy-waits. This feature is not `no_std` compatible.
 
 ### thread_local
 
-The `thread_local` feature enables [`raw::Mutex`] locking APIs that operate over
-queue nodes that are stored at the thread local storage. These locking APIs
-require a static reference to [`raw::LocalMutexNode`] keys. Keys must be generated
-by the [`thread_local_node!`] macro. This feature also enables memory optimizations
-for [`barging::Mutex`] locking operations. This feature is not `no_std`
+The `thread_local` feature enables [`raw::Mutex`] and [`parking::raw::Mutex`]
+locking APIs that operate over queue nodes that are stored at the thread local
+storage. These locking APIs require a static reference to [`raw::LocalMutexNode`]
+and [`parking::raw::LocalMutexNode`] keys respectively. Keys must be generated
+by the [`thread_local_node!`] and [`thread_local_parking_node!`] macros. This
+feature also enables memory optimizations for [`barging::Mutex`] and
+[`parking::barging::Mutex`] locking operations. This feature is not `no_std`
 compatible.
 
 ### barging
 
-The `barging` feature provides locking APIs that are compatible with the
-[lock_api] crate. It does not require node allocations from the caller.
-The [`barging`] module is suitable for `no_std` environments. This implementation
-is not fair (does not guarantee FIFO), but can improve throughput when the lock
-is heavily contended.
+The `barging` feature provides locking APIs that are compatible with the [lock_api]
+crate. It does not require node allocations from the caller. The [`barging`] module
+is suitable for `no_std` environments, but [`parking::barging`] is not. This
+implementation is not fair (does not guarantee FIFO), but can improve throughput
+when the lock is heavily contended.
 
 ### lock_api
 
 This feature implements the [`RawMutex`] trait from the [lock_api] crate for
-[`barging::Mutex`]. Aliases are provided by the [`barging::lock_api`] (`no_std`)
-module. The `lock_api` public dependency is set to version 0.4.
+both [`barging::Mutex`] and [`parking::barging::Mutex`]. Aliases are provided by
+the [`barging::lock_api`] (`no_std`) and [`parking::barging::lock_api`] modules.
+The [lock_api] public dependency is set to version 0.4.
+
+### parking
+
+The `parking` feature provides Mutex implementations that are capable of putting
+blocking threads waiting for the lock to sleep. These implementations are
+published under the [`parking`] module. Each `no_std` mutex flavors provided
+by this crate have corresponding parking implementations under that module.
+Users may select a out of the box parking policy at [`parking::park`].
 
 ## Minimum Supported Rust Version (MSRV)
 
@@ -260,10 +309,18 @@ each of your dependencies, including this one.
 [`raw::Mutex`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.Mutex.html
 [`raw::MutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.MutexNode.html
 [`raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/raw/struct.LocalMutexNode.html
+[`parking`]: https://docs.rs/mcslock/latest/mcslock/parking/index.html
+[`parking::park`]: https://docs.rs/mcslock/latest/mcslock/parking/park/index.html
+[`parking::barging`]: https://docs.rs/mcslock/latest/mcslock/parking/barging/index.html
+[`parking::lock_api`]: https://docs.rs/mcslock/latest/mcslock/parking/lock_api/index.html
+[`parking::raw::Mutex`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.Mutex.html
+[`parking::raw::LocalMutexNode`]: https://docs.rs/mcslock/latest/mcslock/parking/raw/struct.LocalMutexNode.html
+[`parking::barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/parking/barging/struct.Mutex.html
 [`barging`]: https://docs.rs/mcslock/latest/mcslock/barging/index.html
 [`barging::lock_api`]: https://docs.rs/mcslock/latest/mcslock/barging/lock_api/index.html
 [`barging::Mutex`]: https://docs.rs/mcslock/latest/mcslock/barging/struct.Mutex.html
 [`thread_local_node!`]: https://docs.rs/mcslock/latest/mcslock/macro.thread_local_node.html
+[`thread_local_parking_node!`]: https://docs.rs/mcslock/latest/mcslock/macro.thread_local_parking_node.html
 
 [`std::sync::Mutex`]: https://doc.rust-lang.org/std/sync/struct.Mutex.html
 [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html

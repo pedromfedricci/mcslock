@@ -3,8 +3,17 @@ use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 use crate::cfg::atomic::AtomicBool;
 use crate::relax::Relax;
 
+#[cfg(feature = "parking")]
+use crate::parking::park::Park;
+
 /// A `Lock` is some arbitrary data type used by a lock implementation to
 /// manage the state of the lock.
+///
+/// The `no_std` implementations (eg `raw` and `barging`) can simply use a
+/// `AtomicBool` to manage state. The parking variants thought, need platform
+/// specific data types. We are currently using the `atomic_wait` crate for
+/// easy parking integration. It uses `AtomicU32` as the data type for all
+/// major platforms.
 pub trait Lock {
     /// Creates a new locked `Lock` instance.
     ///
@@ -71,16 +80,39 @@ pub trait Wait {
     /// The relax operation excuted inside `unlock` busy-wait loops.
     type UnlockRelax: Relax;
 
+    /// The thread parking policy that will be executed during lock contention.
+    ///
+    /// Enabled only for thread parking capabable policies.
+    #[cfg(feature = "parking")]
+    type Park: Park;
+
     /// Returns a initialzed relax waiting policy.
     fn relax_policy() -> RelaxPolicy<Self> {
         let relax = Self::LockRelax::new();
         RelaxPolicy { relax }
+    }
+
+    /// Returns a initialized thread parking waiting policy.
+    ///
+    /// Enabled only for thread parking capabable policies.
+    #[cfg(feature = "parking")]
+    fn parking_policy() -> ParkingPolicy<Self> {
+        let relax = Self::LockRelax::new();
+        let park = Self::Park::new();
+        ParkingPolicy { relax, park }
     }
 }
 
 /// A waiting policy that is only composed of a relax policy.
 pub struct RelaxPolicy<W: Wait + ?Sized> {
     pub relax: W::LockRelax,
+}
+
+/// A waiting policy that is composed of both relax and thread parking policies.
+#[cfg(feature = "parking")]
+pub struct ParkingPolicy<W: Wait + ?Sized> {
+    pub relax: W::LockRelax,
+    pub park: W::Park,
 }
 
 impl Lock for AtomicBool {
