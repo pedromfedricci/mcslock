@@ -6,7 +6,8 @@ use super::{Mutex, MutexNode};
 use crate::cfg::thread::LocalKey;
 use crate::lock::{Lock, Wait};
 
-type Key<N> = &'static LocalMutexNode<N>;
+/// A short alias for a static shared reference over a local mutex node.
+pub type Key<N> = &'static LocalMutexNode<N>;
 
 /// A handle to a [`MutexNode`] stored at the thread local storage.
 #[derive(Debug)]
@@ -76,7 +77,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         N: DerefMut<Target = MutexNode<L>>,
         F: FnOnce(Option<&mut T>) -> Ret,
     {
-        self.with_local_node_then_unchecked(node, |m, n| m.try_lock_with_then(n, f))
+        unsafe { self.with_local_node_then_unchecked(node, |m, n| m.try_lock_with_then(n, f)) }
     }
 
     /// Attempts to acquire this mutex with a thread local node and then runs
@@ -109,7 +110,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         N: DerefMut<Target = MutexNode<L>>,
         F: FnOnce(&mut T) -> Ret,
     {
-        self.with_local_node_then_unchecked(node, |m, n| m.lock_with_then(n, f))
+        unsafe { self.with_local_node_then_unchecked(node, |m, n| m.lock_with_then(n, f)) }
     }
 
     /// Runs `f` over a raw mutex and a thread local node as arguments.

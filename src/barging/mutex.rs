@@ -5,7 +5,7 @@ use crate::inner::barging as inner;
 use crate::relax::{Relax, RelaxWait};
 
 #[cfg(test)]
-use crate::test::{LockNew, LockThen, TryLockThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 #[cfg(all(loom, test))]
 use crate::loom::{Guard, GuardDeref, GuardDerefMut};
@@ -23,6 +23,12 @@ type MutexInner<T, Rs, Rq> = inner::Mutex<T, AtomicBool, RelaxWait<Rs>, RelaxWai
 /// it is protecting. The data can only be accessed through the RAII guards
 /// returned from [`lock`] and [`try_lock`], which guarantees that the data is only
 /// ever accessed when the mutex is locked.
+///
+/// If the `thread_local` feature is enabled (not `no_std` compatible), locking
+/// operations that block ([`lock`] and [`lock_then`]) will access and modify
+/// queue nodes stored at the thread local storage of the locking threads. Else,
+/// these locking operations will allocate a queue node in the stack, for each
+/// call (`no_std` compatible).
 ///
 /// # Examples
 ///
@@ -68,9 +74,10 @@ type MutexInner<T, Rs, Rq> = inner::Mutex<T, AtomicBool, RelaxWait<Rs>, RelaxWai
 /// ```
 /// [`new`]: Mutex::new
 /// [`lock`]: Mutex::lock
+/// [`lock_then`]: Mutex::lock_then
 /// [`try_lock`]: Mutex::try_lock
 pub struct Mutex<T: ?Sized, Rs, Rq> {
-    inner: MutexInner<T, Rs, Rq>,
+    pub(super) inner: MutexInner<T, Rs, Rq>,
 }
 
 // Same unsafe impls as `crate::inner::barging::Mutex`.
@@ -100,7 +107,7 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
     #[cfg(not(tarpaulin_include))]
-    fn new(value: T) -> Self {
+    pub(super) fn new(value: T) -> Self {
         Self { inner: inner::Mutex::new(value) }
     }
 
@@ -155,8 +162,16 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     #[inline]
+    #[allow(clippy::non_minimal_cfg)]
     pub fn lock(&self) -> MutexGuard<'_, T, Rs, Rq> {
-        self.inner.lock().into()
+        #[cfg(not(feature = "thread_local"))]
+        {
+            self.lock_with_stack_queue_node()
+        }
+        #[cfg(any(feature = "thread_local"))]
+        {
+            self.lock_with_local_queue_node()
+        }
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -205,6 +220,16 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
         f(self.lock())
+    }
+
+    /// Underlying implementation of `lock` that is only enabled when the
+    /// `thread_local` feature is disabled.
+    ///
+    /// This implementation will allocate, access and modify a queue node for
+    /// each call, storing it at the current stack frame.
+    #[cfg(any(test, not(feature = "thread_local")))]
+    fn lock_with_stack_queue_node(&self) -> MutexGuard<'_, T, Rs, Rq> {
+        self.inner.lock().into()
     }
 }
 
@@ -373,68 +398,108 @@ impl<T: ?Sized + Debug, Rs, Rq> Debug for Mutex<T, Rs, Rq> {
     }
 }
 
+/// A Mutex wrapper type that calls `lock_with_stack_queue_node` when
+/// implementing testing traits.
 #[cfg(test)]
-impl<T: ?Sized, Rs, Rq> LockNew for Mutex<T, Rs, Rq> {
+struct MutexStackNode<T: ?Sized, Rs, Rq>(Mutex<T, Rs, Rq>);
+
+#[cfg(test)]
+impl<T: Default, Rs, Rq> Default for MutexStackNode<T, Rs, Rq> {
+    fn default() -> Self {
+        Self(Mutex::default())
+    }
+}
+
+#[cfg(test)]
+impl<T, Rs, Rq> From<T> for MutexStackNode<T, Rs, Rq> {
+    fn from(value: T) -> Self {
+        Self(Mutex::from(value))
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized + Debug, Rs, Rq> Debug for MutexStackNode<T, Rs, Rq> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs, Rq> LockNew for MutexStackNode<T, Rs, Rq> {
     type Target = T;
 
     fn new(value: Self::Target) -> Self
     where
         Self::Target: Sized,
     {
-        Self::new(value)
+        Self(Mutex::new(value))
     }
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
-    type Guard<'a> = MutexGuard<'a, T, Rs, Rq>
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWithThen for MutexStackNode<T, Rs, Rq> {
+    // The barging mutex does not require queue node access.
+    type Node = ();
+
+    type Guard<'a>
+        = MutexGuard<'a, T, Rs, Rq>
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
-        self.lock_then(f)
+        f(self.0.lock_with_stack_queue_node())
     }
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockWithThen for MutexStackNode<T, Rs, Rq> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
     {
-        self.try_lock_then(f)
+        self.0.try_lock_then(f)
     }
 
     fn is_locked(&self) -> bool {
-        self.is_locked()
+        self.0.is_locked()
     }
 }
 
 #[cfg(all(not(loom), test))]
-impl<T: ?Sized, Rs, Rq> crate::test::LockData for Mutex<T, Rs, Rq> {
+impl<T: ?Sized, Rs, Rq> crate::test::LockData for MutexStackNode<T, Rs, Rq> {
     fn into_inner(self) -> Self::Target
     where
         Self::Target: Sized,
     {
-        self.into_inner()
+        self.0.into_inner()
     }
 
     fn get_mut(&mut self) -> &mut Self::Target {
-        self.get_mut()
+        self.0.get_mut()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for MutexStackNode<T, Rs, Rq> {
+    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
+    {
+        self.0.lock_then(f)
+    }
+}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for MutexStackNode<T, Rs, Rq> {}
 
 #[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Rs: Relax, Rq: Relax> lock_api::RawMutex for Mutex<(), Rs, Rq> {
     type GuardMarker = lock_api::GuardSend;
 
-    // It is fine to const initialize `Mutex<(), Rs, Rq>` since the data is not
-    // going to be shared. And since it is a `Unit` type, copies will be
-    // optimized away.
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Self::new(());
 
@@ -494,20 +559,20 @@ impl<'a, T: ?Sized, Rs, Rq> From<GuardInner<'a, T, Rs, Rq>> for MutexGuard<'a, T
     }
 }
 
-impl<'a, T: ?Sized + Debug, Rs, Rq> Debug for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized + Debug, Rs, Rq> Debug for MutexGuard<'_, T, Rs, Rq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl<'a, T: ?Sized + Display, Rs, Rq> Display for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized + Display, Rs, Rq> Display for MutexGuard<'_, T, Rs, Rq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -518,7 +583,7 @@ impl<'a, T: ?Sized, Rs, Rq> core::ops::Deref for MutexGuard<'a, T, Rs, Rq> {
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'a, T, Rs, Rq> {
+impl<T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'_, T, Rs, Rq> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -526,8 +591,8 @@ impl<'a, T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'a, T, Rs, Rq> {
     }
 }
 
-/// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-/// underlying data.
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
@@ -543,7 +608,8 @@ unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
 impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
-    type Deref<'a> = GuardDeref<'a, Self>
+    type Deref<'a>
+        = GuardDeref<'a, Self>
     where
         Self: 'a,
         Self::Target: 'a;
@@ -556,7 +622,8 @@ impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 impl<T: ?Sized, Rs, Rq> AsDerefMut for MutexGuard<'_, T, Rs, Rq> {
-    type DerefMut<'a> = GuardDerefMut<'a, Self>
+    type DerefMut<'a>
+        = GuardDerefMut<'a, Self>
     where
         Self: 'a,
         Self::Target: 'a;
@@ -568,8 +635,10 @@ impl<T: ?Sized, Rs, Rq> AsDerefMut for MutexGuard<'_, T, Rs, Rq> {
 
 #[cfg(all(not(loom), test))]
 mod test {
-    use crate::barging::yields::Mutex;
+    use crate::relax::Yield;
     use crate::test::tests;
+
+    type Mutex<T> = super::MutexStackNode<T, Yield, Yield>;
 
     #[test]
     fn node_waiter_drop_does_not_matter() {
@@ -659,8 +728,10 @@ mod test {
 
 #[cfg(all(loom, test))]
 mod model {
-    use crate::barging::yields::Mutex;
     use crate::loom::models;
+    use crate::relax::Yield;
+
+    type Mutex<T> = super::MutexStackNode<T, Yield, Yield>;
 
     #[test]
     fn try_lock_join() {

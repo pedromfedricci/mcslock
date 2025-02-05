@@ -21,6 +21,7 @@ keywords = ["mutex", "no_std", "spinlock", "synchronization"]
 yield = []
 thread_local = []
 barging = []
+# NOTE: The `dep:` syntax requires Rust 1.60.
 lock_api = ["dep:lock_api"]
 
 [dependencies.lock_api]

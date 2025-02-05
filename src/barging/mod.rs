@@ -42,6 +42,9 @@ pub use mutex::{Mutex, MutexGuard};
 #[cfg_attr(docsrs, doc(cfg(feature = "lock_api")))]
 pub mod lock_api;
 
+#[cfg(feature = "thread_local")]
+mod thread_local;
+
 /// An unfair MCS lock that implements a `spin` relax policy.
 ///
 /// During lock contention, this lock spins while signaling the processor that

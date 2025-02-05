@@ -33,6 +33,7 @@ pub use mutex::{Mutex, MutexNode};
 #[cfg(feature = "thread_local")]
 #[cfg_attr(docsrs, doc(cfg(feature = "thread_local")))]
 mod thread_local;
+
 #[cfg(feature = "thread_local")]
 pub use thread_local::LocalMutexNode;
 

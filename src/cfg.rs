@@ -215,6 +215,15 @@ pub mod hint {
     pub use loom::hint::spin_loop;
 }
 
+#[cfg(test)]
+pub mod sync {
+    #[cfg(not(all(loom, test)))]
+    pub use std::sync::Arc;
+
+    #[cfg(all(loom, test))]
+    pub use loom::sync::Arc;
+}
+
 pub mod thread {
     #[cfg(all(any(feature = "yield", test), not(loom)))]
     pub use std::thread::yield_now;
