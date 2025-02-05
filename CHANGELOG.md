@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.4.0..HEAD
+[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.4.1..HEAD
+
+## [0.4.1] - 2025-02-04
+
+## Changed
+
+- Enable memory optimizations for `barging::Mutex` locking operations (`lock`, `lock_then`)
+  when the `thread_local` feature is enabled [#18].
+
+[#18]: https://github.com/pedromfedricci/mcslock/pull/18
 
 ## [0.4.0] - 2024-11-04
 
@@ -15,20 +24,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed [**BREAKING**]
 
-- Remove `raw::MutexGuard` type, `raw::Mutex::lock` and `raw::Mutex::try_lock` methods ([#17])
-- Rename `raw::Mutex::lock_with` method to `raw::Mutex::lock_then` ([#17])
-- Rename `raw::Mutex::try_lock_with` method to `raw::Mutex::try_lock_then` ([#17])
-- Rename `raw::Mutex::lock_with_local` method to `raw::Mutex::lock_with_local_then` ([#17])
-- Rename `raw::Mutex::lock_with_local_unchecked` method to `raw::Mutex::lock_with_local_then_unchecked` ([#17])
-- Rename `raw::Mutex::try_lock_with_local` method to `raw::Mutex::try_lock_with_local_then` ([#17])
-- Rename `raw::Mutex::try_lock_with_local_unchecked` method to `raw::Mutex::try_lock_with_local_then_unchecked` ([#17])
-- Rename `barging::Mutex::lock_with` method to `barging::Mutex::lock_then` ([#17])
-- Rename `barging::Mutex::try_lock_with` method to `barging::Mutex::try_lock_then` ([#17])
-- Change closure parameters of `raw::Mutex`'s `then` (previous `with`) locking methods from `MutexGuard` to `&mut T` ([#17])
+- Remove `raw::MutexGuard` type, `raw::Mutex::lock` and `raw::Mutex::try_lock` methods ([#17]).
+- Rename `raw::Mutex::lock_with` method to `raw::Mutex::lock_then` ([#17]).
+- Rename `raw::Mutex::try_lock_with` method to `raw::Mutex::try_lock_then` ([#17]).
+- Rename `raw::Mutex::lock_with_local` method to `raw::Mutex::lock_with_local_then` ([#17]).
+- Rename `raw::Mutex::lock_with_local_unchecked` method to `raw::Mutex::lock_with_local_then_unchecked` ([#17]).
+- Rename `raw::Mutex::try_lock_with_local` method to `raw::Mutex::try_lock_with_local_then` ([#17]).
+- Rename `raw::Mutex::try_lock_with_local_unchecked` method to `raw::Mutex::try_lock_with_local_then_unchecked` ([#17]).
+- Rename `barging::Mutex::lock_with` method to `barging::Mutex::lock_then` ([#17]).
+- Rename `barging::Mutex::try_lock_with` method to `barging::Mutex::try_lock_then` ([#17]).
+- Change closure parameters of `raw::Mutex`'s `then` (previous `with`) locking methods from `MutexGuard` to `&mut T` ([#17]).
 
 ### Added
-- Add new `raw::Mutex::lock_with_then` method [#17]
-- Add new `raw::Mutex::try_lock_with_then` method [#17]
+
+- Add new `raw::Mutex::lock_with_then` method [#17].
+- Add new `raw::Mutex::try_lock_with_then` method [#17].
 
 [#17]: https://github.com/pedromfedricci/mcslock/pull/17
 
