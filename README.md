@@ -270,3 +270,4 @@ each of your dependencies, including this one.
 [lock_api]: https://docs.rs/lock_api/latest/lock_api
 [`RawMutex`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutex.html
 [`RawMutexFair`]: https://docs.rs/lock_api/latest/lock_api/trait.RawMutexFair.html
+[`parking_lot::Mutex`]: https://docs.rs/parking_lot/latest/parking_lot/type.Mutex.html
