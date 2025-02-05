@@ -23,7 +23,7 @@ args = [
   "--feature-powerset",
   "--no-dev-deps",
   "--skip",
-  "yield,thread_local",
+  "yield,thread_local,parking",
 ]
 dependencies = ["install-no-std-target"]
 

@@ -1,4 +1,5 @@
-/// Non-recursive, inner definition of `thread_local_node!`.
+/// Non-recursive, inner definition of `thread_local_node!` and
+/// `thread_local_parking_node!`.
 ///
 /// This macro is **NOT** part of the public API and so must not be called
 /// directly by user's code. It is subjected to changes **WITHOUT** prior
@@ -19,7 +20,8 @@ macro_rules! __thread_local_node_inner {
     };
 }
 
-/// Non-recursive, Loom based inner definition of `thread_local_node!`.
+/// Non-recursive, Loom based inner definition of `thread_local_node!` and
+/// `thread_local_parking_node!`.
 ///
 /// This node definition uses Loom primitives and it can't be evaluated at
 /// compile-time since Loom does not support that feature. Loom's `thread_local!`
