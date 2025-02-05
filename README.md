@@ -24,10 +24,9 @@ paper. And a simpler correctness proof of the MCS lock was proposed by
 ## Spinlock use cases
 
 It is noteworthy to mention that [spinlocks are usually not what you want]. The
-majority of use cases are well covered by OS-based mutexes like
-[`std::sync::Mutex`] or [`parking_lot::Mutex`] Mutexes. These implementations
-will notify the system that the waiting thread should be parked, freeing the
-processor to work on something else.
+majority of use cases are well covered by OS-based mutexes like [`std::sync::Mutex`]
+and [`parking_lot::Mutex`]. These implementations will notify the system that the
+waiting thread should be parked, freeing the processor to work on something else.
 
 Spinlocks are only efficient in very few circumstances where the overhead
 of context switching or process rescheduling are greater than busy waiting
