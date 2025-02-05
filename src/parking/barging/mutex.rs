@@ -80,6 +80,7 @@ pub struct Mutex<T: ?Sized, Ps, Pq> {
     pub(super) inner: MutexInner<T, Ps, Pq>,
 }
 
+<<<<<<< HEAD
 // SAFETY: `inner::Mutex` is `Send` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, Ps, Pq> Send for Mutex<T, Ps, Pq> {}
 // SAFETY: `inner::Mutex` is `Sync` if `T` is `Send`.
@@ -595,10 +596,10 @@ impl<T: ?Sized, Ps, Pq> core::ops::DerefMut for MutexGuard<'_, T, Ps, Pq> {
     }
 }
 
-#[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
 // SAFETY: A guard instance hold the lock locked, with exclusive access to the
 // underlying data.
+#[cfg(all(loom, test))]
+#[cfg(not(tarpaulin))]
 unsafe impl<T: ?Sized, Ps, Pq> Guard for MutexGuard<'_, T, Ps, Pq> {
     type Target = T;
 
