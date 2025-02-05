@@ -11,11 +11,14 @@ use crate::relax::Relax;
 
 #[cfg(feature = "thread_local")]
 mod thread_local;
+
 #[cfg(feature = "thread_local")]
 pub use thread_local::LocalMutexNode;
 
-/// The inner definition of [`MutexNode`], which is known to be in a initialized
-/// state.
+#[cfg(all(feature = "thread_local", feature = "barging"))]
+pub use thread_local::Key;
+
+/// The inner type of [`MutexNode`], which is known to be in initialized state.
 #[derive(Debug)]
 pub struct MutexNodeInit<L> {
     next: AtomicPtr<Self>,
@@ -26,6 +29,19 @@ impl<L> MutexNodeInit<L> {
     /// Returns a raw mutable pointer of this node.
     const fn as_ptr(&self) -> *mut Self {
         (self as *const Self).cast_mut()
+    }
+
+    /// A relaxed loop that returns a pointer to the successor once it finishes
+    /// linking with the current thread.
+    ///
+    /// The successor node is loaded with a relaxed ordering.
+    fn wait_next_relaxed<R: Relax>(&self) -> *mut Self {
+        let mut relax = R::new();
+        loop {
+            let ptr = self.next.load(Relaxed);
+            let true = ptr.is_null() else { return ptr };
+            relax.relax();
+        }
     }
 }
 
@@ -128,7 +144,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     /// The returned guard instance **must** be dropped, that is, it **must not**
     /// be "forgotten" (e.g. `core::mem::forget`), or being targeted by any
     /// other operation that would prevent it from executing its `drop` call.
-    unsafe fn try_lock<'a>(&'a self, n: &'a mut MutexNode<L>) -> Option<MutexGuard<'a, T, L, W>> {
+    unsafe fn try_lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> OptionGuard<'a, T, L, W> {
         let node = n.initialize();
         self.tail
             .compare_exchange(ptr::null_mut(), node.as_ptr(), AcqRel, Relaxed)
@@ -142,16 +158,16 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     ///
     /// The returned guard instance **must** be dropped, that is, it **must not**
     /// be "forgotten" (e.g. `core::mem::forget`), or being targeted of any
-    /// other operation hat would prevent it from executing its `drop` call.
-    unsafe fn lock<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
+    /// other operation that would prevent it from executing its `drop` call.
+    unsafe fn lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
         let node = n.initialize();
         let pred = self.tail.swap(node.as_ptr(), AcqRel);
         // If we have a predecessor, complete the link so it will notify us.
         if !pred.is_null() {
             // SAFETY: Already verified that our predecessor is not null.
-            unsafe { &*pred }.next.store(node.as_ptr(), Release);
+            unsafe { &(*pred).next }.store(node.as_ptr(), Release);
             // Verify the lock hand-off, while applying some waiting policy.
-            node.lock.lock_wait_relaxed::<W>();
+            node.lock.wait_lock_relaxed::<W>();
             fence(Acquire);
         }
         MutexGuard::new(self, node)
@@ -159,7 +175,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
 
     /// Unlocks this mutex. If there is a successor node in the queue, the lock
     /// is passed directly to them.
-    fn unlock(&self, head: &MutexNodeInit<L>) {
+    fn unlock_with(&self, head: &MutexNodeInit<L>) {
         let mut next = head.next.load(Relaxed);
         // If we don't have a known successor currently,
         if next.is_null() {
@@ -167,25 +183,12 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
             let false = self.try_unlock_release(head.as_ptr()) else { return };
             // But if we are not the tail, then we have a pending successor. We
             // must wait for them to finish linking with us.
-            next = wait_next_relaxed::<L, W::UnlockRelax>(&head.next);
+            next = head.wait_next_relaxed::<W::UnlockRelax>();
         }
         fence(Acquire);
         // Notify our successor that they hold the lock.
         // SAFETY: We already verified that our successor is not null.
-        unsafe { &*next }.lock.notify();
-    }
-}
-
-/// A relaxed loop that returns a pointer to the successor once it finishes
-/// linking with the current thread.
-///
-/// The successor node is loaded with a relaxed ordering.
-fn wait_next_relaxed<L, R: Relax>(next: &AtomicPtr<MutexNodeInit<L>>) -> *mut MutexNodeInit<L> {
-    let mut relax = R::new();
-    loop {
-        let ptr = next.load(Relaxed);
-        let true = ptr.is_null() else { return ptr };
-        relax.relax();
+        unsafe { &(*next).lock }.notify_release();
     }
 }
 
@@ -220,7 +223,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         F: FnOnce(Option<&mut T>) -> Ret,
     {
         // SAFETY: The guard's `drop` call is executed within this scope.
-        unsafe { self.try_lock(node) }.as_deref_mut_with_mut(f)
+        unsafe { self.try_lock_with(node) }.as_deref_mut_with_mut(f)
     }
 
     /// Acquires this mutex and then runs the closure against the protected data.
@@ -231,7 +234,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
         F: FnOnce(&mut T) -> Ret,
     {
         // SAFETY: The guard's `drop` call is executed within this scope.
-        unsafe { self.lock(node) }.with_mut(f)
+        unsafe { self.lock_with(node) }.with_mut(f)
     }
 }
 
@@ -247,6 +250,9 @@ impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for Mutex<T, L, W> {
     }
 }
 
+/// Short alias for a `Option` wrapped `MutexGuard`;
+type OptionGuard<'a, T, L, W> = Option<MutexGuard<'a, T, L, W>>;
+
 /// An RAII implementation of a "scoped lock" of a mutex. When this structure is
 /// dropped (falls out of scope), the lock will be unlocked.
 #[must_use = "if unused the Mutex will immediately unlock"]
@@ -255,9 +261,7 @@ struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     head: &'a MutexNodeInit<L>,
 }
 
-// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
-// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
-unsafe impl<T: ?Sized + Send, L: Lock, W: Wait> Send for MutexGuard<'_, T, L, W> {}
+// Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
@@ -298,7 +302,7 @@ trait AsDerefMutWithMut {
         F: FnOnce(Option<&mut Self::Target>) -> Ret;
 }
 
-impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for Option<MutexGuard<'_, T, L, W>> {
+impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for OptionGuard<'_, T, L, W> {
     type Target = T;
 
     fn as_deref_mut_with_mut<F, Ret>(&mut self, f: F) -> Ret
@@ -312,14 +316,14 @@ impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for Option<MutexGuard<'_, T,
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'_, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'_, T, L, W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
@@ -327,7 +331,7 @@ impl<'a, T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'a, T, L,
 
 #[cfg(not(all(loom, test)))]
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'_, T, L, W> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -340,7 +344,7 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'a, T, L, 
 
 #[cfg(not(all(loom, test)))]
 #[cfg(not(tarpaulin_include))]
-impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'_, T, L, W> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
@@ -349,9 +353,9 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'a, T, 
     }
 }
 
-impl<'a, T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'a, T, L, W> {
+impl<T: ?Sized, L: Lock, W: Wait> Drop for MutexGuard<'_, T, L, W> {
     #[inline]
     fn drop(&mut self) {
-        self.lock.unlock(self.head);
+        self.lock.unlock_with(self.head);
     }
 }

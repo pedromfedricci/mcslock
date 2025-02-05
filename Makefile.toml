@@ -7,11 +7,25 @@ CLIPPY_FLAGS_LOOM = "${CFG_LOOM} ${CLIPPY_FLAGS}"
 [config]
 default_to_workspace = false
 
+# Install a "no_std" target.
+[tasks.install-no-std-target]
+command = "rustup"
+args = ["target", "add", "thumbv7m-none-eabi"]
+
 # Build package for no_std environment.
 [tasks.no-std]
 command = "cargo"
-args = ["hack", "build", "--target", "thumbv7m-none-eabi", "--feature-powerset",
-        "--no-dev-deps", "--skip", "yield,thread_local"]
+args = [
+  "hack",
+  "build",
+  "--target",
+  "thumbv7m-none-eabi",
+  "--feature-powerset",
+  "--no-dev-deps",
+  "--skip",
+  "yield,thread_local",
+]
+dependencies = ["install-no-std-target"]
 
 # Build docs for docs.rs.
 [tasks.docsrs]
@@ -28,7 +42,7 @@ args = ["rustdoc", "--all-features", "--open", "--", "--default-theme", "ayu"]
 # Link: https://blog.rust-lang.org/2022/06/22/sparse-registry-testing.html
 toolchain = "nightly-2022-09-18"
 command = "cargo"
-env = { "CARGO_UNSTABLE_SPARSE_REGISTRY" = "true" }
+env = { "CARGO_UNSTABLE_SPARSE_REGISTRY" = "true", "RUSTFLAGS" = "--allow unknown_lints" }
 args = ["check", "--all-features"]
 
 # Check semver viloations.
@@ -57,8 +71,14 @@ args = ["run", "--example", "${@}", "--all-features"]
 [tasks.test-lint]
 command = "cargo"
 env = { "RUSTFLAGS" = "${CLIPPY_FLAGS}" }
-args = ["hack", "clippy", "--profile", "test", "--feature-powerset",
-        "--no-dev-deps"]
+args = [
+  "hack",
+  "clippy",
+  "--profile",
+  "test",
+  "--feature-powerset",
+  "--no-dev-deps",
+]
 
 # Run tests under miri.
 # NOTE: must run as: `cargo +nightly make miri`.

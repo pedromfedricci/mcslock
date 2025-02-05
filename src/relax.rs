@@ -348,7 +348,7 @@ mod test {
     #[test]
     fn yields_backoff() {
         use super::YieldBackoff;
-        const MAX: u32 = YieldBackoff::MAX;
+        const MAX: Uint = YieldBackoff::MAX;
         returns::<YieldBackoff, MAX>();
     }
 

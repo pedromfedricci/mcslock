@@ -5,6 +5,9 @@ use crate::cfg::cell::{UnsafeCell, UnsafeCellWith};
 use crate::inner::raw;
 use crate::lock::{Lock, Wait};
 
+#[cfg(feature = "thread_local")]
+mod thread_local;
+
 /// A mutual exclusion primitive implementing a barging MCS lock protocol, useful
 /// for protecting shared data.
 pub struct Mutex<T: ?Sized, L, Ws, Wq> {
@@ -41,6 +44,10 @@ impl<T, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
 
 impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     /// Acquires this mutex, blocking the current thread until it is able to do so.
+    ///
+    /// This implementation will allocate, access and modify a queue node for
+    /// each call, storing it at the current stack frame.
+    #[cfg(any(test, not(feature = "thread_local")))]
     pub fn lock(&self) -> MutexGuard<'_, T, L, Ws, Wq> {
         if self.lock.try_lock_acquire_weak() {
             return MutexGuard::new(self);
@@ -48,7 +55,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
         let mut node = raw::MutexNode::new();
         self.queue.lock_with_then(&mut node, |()| {
             while !self.lock.try_lock_acquire_weak() {
-                self.lock.lock_wait_relaxed::<Ws>();
+                self.lock.wait_lock_relaxed::<Ws>();
             }
         });
         MutexGuard::new(self)
@@ -65,12 +72,12 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
     ///
     /// This function does not guarantee strong ordering, only atomicity.
     pub fn is_locked(&self) -> bool {
-        self.lock.is_locked()
+        self.lock.is_locked_relaxed()
     }
 
     /// Unlocks this mutex.
     pub fn unlock(&self) {
-        self.lock.notify();
+        self.lock.notify_release();
     }
 }
 
@@ -108,7 +115,8 @@ pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
     lock: &'a Mutex<T, L, Ws, Wq>,
 }
 
-// Same unsafe impls as `crate::inner::raw::MutexGuard`.
+// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
+// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
 unsafe impl<T: ?Sized + Send, L: Lock, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
 unsafe impl<T: ?Sized + Sync, L: Lock, Ws, Wq> Sync for MutexGuard<'_, T, L, Ws, Wq> {}
 
@@ -128,20 +136,20 @@ impl<'a, T: ?Sized, L: Lock, Ws, Wq> MutexGuard<'a, T, L, Ws, Wq> {
     }
 }
 
-impl<'a, T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized + Debug, L: Lock, Ws, Wq> Debug for MutexGuard<'_, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
-impl<'a, T: ?Sized + Display, L: Lock, Ws, Wq> Display for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized + Display, L: Lock, Ws, Wq> Display for MutexGuard<'_, T, L, Ws, Wq> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.with(|data| data.fmt(f))
     }
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 
     /// Dereferences the guard to access the underlying data.
@@ -152,7 +160,7 @@ impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::Deref for MutexGuard<'a, T, L, W
 }
 
 #[cfg(not(all(loom, test)))]
-impl<'a, T: ?Sized, L: Lock, Ws, Wq> core::ops::DerefMut for MutexGuard<'a, T, L, Ws, Wq> {
+impl<T: ?Sized, L: Lock, Ws, Wq> core::ops::DerefMut for MutexGuard<'_, T, L, Ws, Wq> {
     /// Mutably dereferences the guard to access the underlying data.
     fn deref_mut(&mut self) -> &mut T {
         // SAFETY: A guard instance holds the lock locked.
@@ -166,8 +174,8 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
     }
 }
 
-/// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-/// underlying data.
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {

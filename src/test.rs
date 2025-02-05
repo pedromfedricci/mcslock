@@ -1,4 +1,6 @@
-pub use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut};
+
+use crate::cfg::sync::Arc;
 
 /// A trait for convertion from `&Self` to a type that implements the [`Deref`]
 /// trait.
@@ -40,8 +42,12 @@ pub trait LockNew {
         Self::Target: Sized;
 }
 
-/// A trait for lock types that can run closures against the protected data.
-pub trait LockThen: LockNew {
+/// A trait for locks that mutably borrow from nodes and run closures against
+/// the shared protected data.
+pub trait LockWithThen: LockNew {
+    /// The queue node type to borrow from and form the implicit queue.
+    type Node: Default;
+
     /// A `guard` has access to a type that can can give shared and exclusive
     /// references to the protected data.
     type Guard<'a>: AsDerefMut<Target = Self::Target>
@@ -50,23 +56,56 @@ pub trait LockThen: LockNew {
         Self::Target: 'a;
 
     /// Acquires a mutex and then runs the closure against the protected data.
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    ///
+    /// Requires mutably borrowing a `Self::Node` for the closure scope.
+    fn lock_with_then<F, Ret>(&self, node: &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Self::Guard<'_>) -> Ret;
 }
 
-/// A trait for lock types that can test if the lock is busy and run closures
-/// against the protected data in case of success.
-pub trait TryLockThen: LockThen {
+/// A trait for locks that run closures against the shared protected data.
+pub trait LockThen: LockWithThen {
+    /// Acquires a mutex and then runs the closure against the protected data.
+    ///
+    /// A `Self::Node` is transparently allocated in the stack.
+    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Self::Guard<'_>) -> Ret,
+    {
+        self.lock_with_then(&mut Self::Node::default(), f)
+    }
+}
+
+/// A trait for locks that mutably borrow from nodes, test if the lock is busy
+/// and run closures against the protected data in case of success.
+pub trait TryLockWithThen: LockWithThen {
     /// Attempts to acquire this lock and then runs the closure against the
     /// protected data if successful.
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+    ///
+    /// Requires mutably borrowing a `Self::Node` for the closure scope.
+    fn try_lock_with_then<F, Ret>(&self, node: &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<Self::Guard<'_>>) -> Ret;
 
     /// Returns `true` if the lock is currently held.
-    #[allow(dead_code)]
+    #[cfg_attr(all(loom, test), allow(dead_code))]
     fn is_locked(&self) -> bool;
+}
+
+/// A trait for locks that test if the lock is busy and run closures against the
+/// protected data in case of success.
+pub trait TryLockThen: TryLockWithThen + LockThen {
+    /// Attempts to acquire this lock and then runs the closure against the
+    /// protected data if successful.
+    ///
+    /// A `Self::Node` is transparently allocated in the stack.
+    #[cfg_attr(all(loom, test), allow(dead_code))]
+    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+    where
+        F: FnOnce(Option<Self::Guard<'_>>) -> Ret,
+    {
+        self.try_lock_with_then(&mut Self::Node::default(), f)
+    }
 }
 
 /// A trait for lock types that can return either the underlying value (by
@@ -86,9 +125,11 @@ pub trait LockData: LockNew {
 impl<T: Deref> AsDeref for T {
     type Target = <Self as Deref>::Target;
 
-    type Deref<'a> = &'a <Self as Deref>::Target
+    type Deref<'a>
+        = &'a <Self as Deref>::Target
     where
-        Self: 'a;
+        Self: 'a,
+        Self::Target: 'a;
 
     fn as_deref(&self) -> Self::Deref<'_> {
         self
@@ -97,18 +138,82 @@ impl<T: Deref> AsDeref for T {
 
 // Trivial implementation of `AsDerefMut` for `T` where `T: DerefMut`.
 impl<T: DerefMut> AsDerefMut for T {
-    type DerefMut<'a> = &'a mut <Self as Deref>::Target
+    type DerefMut<'a>
+        = &'a mut <Self as Deref>::Target
     where
-        Self: 'a;
+        Self: 'a,
+        Self::Target: 'a;
 
     fn as_deref_mut(&mut self) -> Self::DerefMut<'_> {
         self
     }
 }
 
+/// An arbitrary unsigned integer type.
+pub type Int = u32;
+
+/// Get a copy of the mutex protected data.
+pub fn get<L>(mutex: &Arc<L>) -> L::Target
+where
+    L: LockThen<Target: Sized + Copy>,
+{
+    mutex.lock_then(|data| *data.as_deref())
+}
+
+/// Increments a shared integer.
+pub fn inc<L>(mutex: &Arc<L>)
+where
+    L: LockThen<Target = Int>,
+{
+    mutex.lock_then(inc_inner::<L>);
+}
+
+/// Increments a shared integer, mutably borrows a queue node.
+#[cfg(not(all(loom, test)))]
+pub fn inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
+where
+    L: LockWithThen<Target = Int>,
+{
+    mutex.lock_with_then(node, inc_inner::<L>);
+}
+
+/// Tries to increment a shared integer, mutably borrows a queue node.
+#[cfg(not(all(loom, test)))]
+pub fn try_inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
+where
+    L: TryLockWithThen<Target = Int>,
+{
+    mutex.try_lock_with_then(node, try_inc_inner::<L>);
+}
+
+/// Tries to increment a shared integer.
+#[cfg(all(loom, test))]
+pub fn try_inc<L>(mutex: &Arc<L>)
+where
+    L: TryLockThen<Target = Int>,
+{
+    mutex.try_lock_then(try_inc_inner::<L>);
+}
+
+/// Increments a shared integer through a guard instance.
+fn inc_inner<L>(mut guard: L::Guard<'_>)
+where
+    L: LockWithThen<Target = Int>,
+{
+    *guard.as_deref_mut() += 1;
+}
+
+/// Tries to increment a shared integer through a guard instance.
+fn try_inc_inner<L>(guard: Option<L::Guard<'_>>)
+where
+    L: TryLockWithThen<Target = Int>,
+{
+    guard.map(inc_inner::<L>);
+}
+
 #[cfg(all(not(loom), test))]
 pub mod tests {
-    // Test suite from the Rust's Mutex implementation with minor modifications
+    // Modified test suite from the Rust's Mutex implementation with minor changes
     // since the API is not compatible with this crate implementation and some
     // new tests as well.
     //
@@ -122,6 +227,8 @@ pub mod tests {
 
     use core::ops::RangeInclusive;
     use std::fmt::Debug;
+    use std::format;
+    use std::string::ToString;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
     use std::sync::Arc;
@@ -130,9 +237,9 @@ pub mod tests {
     #[cfg(feature = "barging")]
     use std::fmt::Display;
 
-    use super::{AsDeref, AsDerefMut, LockData, LockThen, TryLockThen};
-
-    type Int = u32;
+    use super::{get, inc, inc_with, try_inc_with, Int};
+    use super::{AsDeref, AsDerefMut};
+    use super::{LockData, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
     #[derive(Eq, PartialEq, Debug)]
     pub struct NonCopy(u32);
@@ -146,63 +253,60 @@ pub mod tests {
     }
 
     const ITERS: Int = 1000;
-    const CONCURRENCY: Int = 3;
-    const EXPECTED_VALUE: Int = ITERS * CONCURRENCY * 2;
+    const THREADS: Int = 4;
+    const EXPECTED_VALUE: Int = ITERS * THREADS;
     const EXPECTED_RANGE: RangeInclusive<Int> = 1..=EXPECTED_VALUE;
 
-    fn inc<L: LockThen<Target = Int>>(mutex: &Arc<L>) {
-        mutex.lock_then(|mut data| *data.as_deref_mut() += 1);
-    }
-
-    fn try_inc<L: TryLockThen<Target = Int>>(mutex: &Arc<L>) {
-        mutex.try_lock_then(|opt| opt.map(|mut data| *data.as_deref_mut() += 1));
-    }
-
-    fn inc_for<L: LockThen<Target = Int>>(mutex: &Arc<L>) {
-        for _ in 0..ITERS {
-            inc::<L>(mutex);
+    fn inc_for<L, const END: Int>(mutex: &Arc<L>)
+    where
+        L: LockWithThen<Target = Int>,
+    {
+        let mut node = L::Node::default();
+        for _ in 0..END {
+            inc_with::<L>(mutex, &mut node);
         }
     }
 
-    fn try_inc_for<L: TryLockThen<Target = Int>>(mutex: &Arc<L>) {
-        for _ in 0..ITERS {
-            try_inc::<L>(mutex);
+    fn try_inc_for<L, const END: Int>(mutex: &Arc<L>)
+    where
+        L: TryLockWithThen<Target = Int>,
+    {
+        let mut node = L::Node::default();
+        for _ in 0..END {
+            try_inc_with::<L>(mutex, &mut node);
         }
     }
 
-    fn mixed_inc_for<L: TryLockThen<Target = Int>>(mutex: &Arc<L>) {
-        for run in 0..ITERS {
-            let f = if run % 2 == 0 { inc } else { try_inc };
-            f(mutex);
+    fn mixed_inc_for<L, const END: Int>(mutex: &Arc<L>)
+    where
+        L: TryLockWithThen<Target = Int>,
+    {
+        let mut node = L::Node::default();
+        for r in 0..END {
+            let f = if r % 2 == 0 { inc_with } else { try_inc_with };
+            f(mutex, &mut node);
         }
     }
 
-    fn lots_and_lots<L>(f: fn(&Arc<L>)) -> Int
+    fn lots_and_lots<L, const THREADS: Int>(f: fn(&Arc<L>)) -> Int
     where
         L: LockThen<Target = Int> + Send + Sync + 'static,
     {
         let mutex = Arc::new(L::new(0));
         let (tx, rx) = channel();
-        for _ in 0..CONCURRENCY {
-            let c_mutex1 = Arc::clone(&mutex);
-            let tx2 = tx.clone();
+        for _ in 0..THREADS {
+            let c_mutex = Arc::clone(&mutex);
+            let c_tx = tx.clone();
             thread::spawn(move || {
-                f(&c_mutex1);
-                tx2.send(()).unwrap();
-            });
-            let c_mutex2 = Arc::clone(&mutex);
-            let tx2 = tx.clone();
-            thread::spawn(move || {
-                f(&c_mutex2);
-                tx2.send(()).unwrap();
+                f(&c_mutex);
+                c_tx.send(()).unwrap();
             });
         }
-
         drop(tx);
-        for _ in 0..2 * CONCURRENCY {
+        for _ in 0..THREADS {
             rx.recv().unwrap();
         }
-        mutex.lock_then(|data| *data.as_deref())
+        get(&mutex)
     }
 
     pub fn node_waiter_drop_does_not_matter<W>() {
@@ -216,7 +320,7 @@ pub mod tests {
     where
         L: LockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots(inc_for::<L>);
+        let value = lots_and_lots::<L, THREADS>(inc_for::<L, ITERS>);
         assert_eq!(value, EXPECTED_VALUE);
     }
 
@@ -224,7 +328,7 @@ pub mod tests {
     where
         L: TryLockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots(try_inc_for::<L>);
+        let value = lots_and_lots::<L, THREADS>(try_inc_for::<L, ITERS>);
         assert!(EXPECTED_RANGE.contains(&value));
     }
 
@@ -232,24 +336,25 @@ pub mod tests {
     where
         L: TryLockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots(mixed_inc_for::<L>);
+        let value = lots_and_lots::<L, THREADS>(mixed_inc_for::<L, ITERS>);
         assert!(EXPECTED_RANGE.contains(&value));
     }
 
     pub fn smoke<L>()
     where
-        L: LockThen<Target = Int>,
+        L: LockWithThen<Target = Int>,
     {
         let mutex = L::new(1);
-        mutex.lock_then(|data| drop(data));
-        mutex.lock_then(|data| drop(data));
+        let mut node = L::Node::default();
+        mutex.lock_with_then(&mut node, |data| drop(data));
+        mutex.lock_with_then(&mut node, |data| drop(data));
     }
 
     #[cfg(feature = "barging")]
     pub fn test_guard_debug_display<L>()
     where
         L: LockThen<Target = Int>,
-        for<'a> <L as LockThen>::Guard<'a>: Debug + Display,
+        for<'a> <L as LockWithThen>::Guard<'a>: Debug + Display,
     {
         let value = 42;
         let mutex = L::new(value);
@@ -349,8 +454,8 @@ pub mod tests {
         let (tx, rx) = channel();
         let _t = thread::spawn(move || {
             let val = arc2.lock_then(|arc2| {
-                let deref = arc2.as_deref();
-                deref.lock_then(|d| *d.as_deref())
+                let arc2 = arc2.as_deref();
+                get(&arc2)
             });
             assert_eq!(val, 1);
             tx.send(()).unwrap();
@@ -393,14 +498,14 @@ pub mod tests {
             }
             impl<T: LockThen<Target = Int>> Drop for Unwinder<T> {
                 fn drop(&mut self) {
-                    self.i.lock_then(|mut d| *d.as_deref_mut() += 1);
+                    inc(&self.i);
                 }
             }
             let _u = Unwinder { i: arc2 };
             panic!();
         })
         .join();
-        let value = arc.lock_then(|d| *d.as_deref());
+        let value = get(&arc);
         assert_eq!(value, 2);
     }
 
@@ -408,7 +513,7 @@ pub mod tests {
     where
         L: LockThen<Target = [Int; 3]>,
     {
-        let mutex: &L = &L::new([1, 2, 3]);
+        let mutex = Arc::new(L::new([1, 2, 3]));
         {
             mutex.lock_then(|mut d| {
                 d.as_deref_mut()[0] = 4;
@@ -416,6 +521,7 @@ pub mod tests {
             });
         }
         let comp: &[Int] = &[4, 2, 5];
-        mutex.lock_then(|d| assert_eq!(&*d.as_deref(), comp));
+        let data = get(&mutex);
+        assert_eq!(comp, data);
     }
 }

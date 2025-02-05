@@ -3,7 +3,7 @@ use crate::barging;
 #[cfg(test)]
 use crate::relax::Relax;
 #[cfg(test)]
-use crate::test::{LockData, LockNew, LockThen, TryLockThen};
+use crate::test::{LockData, LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 /// A [`lock_api::Mutex`] alias that wraps a [`barging::Mutex`].
 ///
@@ -28,27 +28,31 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockNew for Mutex<T, Rs, Rq> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockWithThen for Mutex<T, Rs, Rq> {
+    // The barging mutex does not require queue node access.
+    type Node = ();
+
+    type Guard<'a>
+        = MutexGuard<'a, T, Rs, Rq>
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
-        F: FnOnce(&mut Self::Target) -> Ret,
+        F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
-        f(&mut *self.lock())
+        f(self.lock())
     }
 }
 
 #[cfg(test)]
-impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockWithThen for Mutex<T, Rs, Rq> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
-        F: FnOnce(Option<&mut Self::Target>) -> Ret,
+        F: FnOnce(Option<MutexGuard<'_, T, Rs, Rq>>) -> Ret,
     {
-        f(self.try_lock().as_deref_mut())
+        f(self.try_lock())
     }
 
     fn is_locked(&self) -> bool {
@@ -69,6 +73,12 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockData for Mutex<T, Rs, Rq> {
         self.get_mut()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for Mutex<T, Rs, Rq> {}
+
+#[cfg(test)]
+impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for Mutex<T, Rs, Rq> {}
 
 #[cfg(test)]
 mod test {

@@ -7,7 +7,7 @@
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __thread_local_node_inner {
-    ($vis:vis $node:ident, $($mod:ident$(::)?)+) => {
+    ($vis:vis $node:ident, $($mod:ident)::+) => {
         $vis const $node: $crate::$($mod::)+LocalMutexNode = {
             ::std::thread_local! {
                 static NODE: ::core::cell::RefCell<$crate::$($mod::)+MutexNode> = const {
@@ -42,6 +42,6 @@ macro_rules! __thread_local_node_inner {
 /// The local node error message as a string literal.
 macro_rules! already_borrowed_error {
     () => {
-        "mcslock::raw::LocalMutexNode is already mutably borrowed"
+        "mcslock's thread local node is already mutably borrowed"
     };
 }

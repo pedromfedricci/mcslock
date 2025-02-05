@@ -6,8 +6,9 @@ use crate::inner::raw as inner;
 use crate::relax::Relax;
 
 #[cfg(test)]
-use crate::test::{LockNew, LockThen, TryLockThen};
+use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
+/// A short alias for a static shared reference over a local mutex node.
 type Key = &'static LocalMutexNode;
 
 /// Declares a new [`raw::LocalMutexNode`] key, which is a handle to the thread
@@ -98,7 +99,7 @@ macro_rules! thread_local_node {
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct LocalMutexNode {
-    inner: inner::LocalMutexNode<MutexNode>,
+    pub(crate) inner: inner::LocalMutexNode<MutexNode>,
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -114,8 +115,7 @@ impl LocalMutexNode {
     #[must_use]
     #[inline(always)]
     pub const fn __new(key: LocalKey<RefCell<MutexNode>>) -> Self {
-        let inner = inner::LocalMutexNode::new(key);
-        Self { inner }
+        Self { inner: inner::LocalMutexNode::new(key) }
     }
 
     /// Creates a new Loom based `LocalMutexNode` key from the provided thread
@@ -123,8 +123,7 @@ impl LocalMutexNode {
     #[cfg(all(loom, test))]
     #[must_use]
     pub(crate) const fn new(key: &'static LocalKey<RefCell<MutexNode>>) -> Self {
-        let inner = inner::LocalMutexNode::new(key);
-        Self { inner }
+        Self { inner: inner::LocalMutexNode::new(key) }
     }
 }
 
@@ -192,7 +191,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// Panic: thread local node cannot be borrowed more than once at the same
     /// time:
     ///
-    #[doc = concat!("```should_panic,", already_borrowed_error!())]
+    #[doc = concat!("```should_panic(expected = ", already_borrowed_error!(), ")")]
     /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
@@ -200,9 +199,9 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// let mutex = Mutex::new(0);
     ///
     /// mutex.lock_with_local_then(&NODE, |_data| {
-    ///     // `NODE` is already mutably borrowed in this thread by the
-    ///     // enclosing `lock_with_local_then`, the borrow is live for the full
-    ///     // duration of this closure scope.
+    ///     // `NODE` is already mutably borrowed in this thread by the enclosing
+    ///     // `lock_with_local_then`, the borrow is live for the full duration
+    ///     // of this closure scope.
     ///     let mutex = Mutex::new(());
     ///     mutex.try_lock_with_local_then(&NODE, |_data| ());
     /// });
@@ -307,7 +306,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     where
         F: FnOnce(Option<&mut T>) -> Ret,
     {
-        self.inner.try_lock_with_local_then_unchecked(&node.inner, f)
+        unsafe { self.inner.try_lock_with_local_then_unchecked(&node.inner, f) }
     }
 
     /// Acquires this mutex and then runs the closure against the protected data.
@@ -366,7 +365,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// Panic: thread local node cannot be borrowed more than once at the same
     /// time:
     ///
-    #[doc = concat!("```should_panic,", already_borrowed_error!())]
+    #[doc = concat!("```should_panic(expected = ", already_borrowed_error!(), ")")]
     /// use mcslock::raw::spins::Mutex;
     ///
     /// mcslock::thread_local_node!(static NODE);
@@ -474,7 +473,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     where
         F: FnOnce(&mut T) -> Ret,
     {
-        self.inner.lock_with_local_then_unchecked(&node.inner, f)
+        unsafe { self.inner.lock_with_local_then_unchecked(&node.inner, f) }
     }
 
     /// Mutable borrows must not escape the closure.
@@ -499,6 +498,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     ///     });
     /// });
     /// ```
+    #[cfg(doctest)]
     #[cfg(not(tarpaulin_include))]
     const fn __borrows_must_not_escape_closure() {}
 }
@@ -526,13 +526,17 @@ impl<T: ?Sized, R> LockNew for MutexPanic<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, R: Relax> LockWithThen for MutexPanic<T, R> {
+    // A thread local node is transparently accessed instead.
+    type Node = ();
+
+    type Guard<'a>
+        = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(&mut Self::Target) -> Ret,
     {
@@ -541,8 +545,8 @@ impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> TryLockThen for MutexPanic<T, R> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, R: Relax> TryLockWithThen for MutexPanic<T, R> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
@@ -553,6 +557,12 @@ impl<T: ?Sized, R: Relax> TryLockThen for MutexPanic<T, R> {
         self.0.is_locked()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> LockThen for MutexPanic<T, R> {}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> TryLockThen for MutexPanic<T, R> {}
 
 /// A Mutex wrapper type that calls `lock_with_local_then_unchecked` and
 /// `try_lock_with_local_then_unchecked` when implementing testing traits.
@@ -572,13 +582,17 @@ impl<T: ?Sized, R> LockNew for MutexUnchecked<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {
-    type Guard<'a> = &'a mut Self::Target
+impl<T: ?Sized, R: Relax> LockWithThen for MutexUnchecked<T, R> {
+    // A thread local node is transparently accessed instead.
+    type Node = ();
+
+    type Guard<'a>
+        = &'a mut Self::Target
     where
         Self: 'a,
         Self::Target: 'a;
 
-    fn lock_then<F, Ret>(&self, f: F) -> Ret
+    fn lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
         F: FnOnce(&mut Self::Target) -> Ret,
     {
@@ -589,10 +603,10 @@ impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {
 }
 
 #[cfg(test)]
-impl<T: ?Sized, R: Relax> TryLockThen for MutexUnchecked<T, R> {
-    fn try_lock_then<F, Ret>(&self, f: F) -> Ret
+impl<T: ?Sized, R: Relax> TryLockWithThen for MutexUnchecked<T, R> {
+    fn try_lock_with_then<F, Ret>(&self, (): &mut Self::Node, f: F) -> Ret
     where
-        F: FnOnce(Option<&mut T>) -> Ret,
+        F: FnOnce(Option<&mut Self::Target>) -> Ret,
     {
         // SAFETY: caller must guarantee that this thread local node is not
         // already mutably borrowed for some other lock acquisition.
@@ -603,6 +617,12 @@ impl<T: ?Sized, R: Relax> TryLockThen for MutexUnchecked<T, R> {
         self.0.is_locked()
     }
 }
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> LockThen for MutexUnchecked<T, R> {}
+
+#[cfg(test)]
+impl<T: ?Sized, R: Relax> TryLockThen for MutexUnchecked<T, R> {}
 
 #[cfg(all(not(loom), test))]
 mod test {
