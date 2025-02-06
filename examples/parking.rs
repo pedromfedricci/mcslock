@@ -6,6 +6,15 @@ use std::thread;
 // `spins::Mutex` spins for a while then parks during contention.
 use mcslock::parking::raw::{spins::Mutex, MutexNode};
 
+// Requires that the `thread_local` feature is enabled.
+mcslock::thread_local_parking_node! {
+    // * Allows multiple static definitions, must be separated with semicolons.
+    // * Visibility is optional (private by default).
+    // * Requires `static` keyword and a UPPER_SNAKE_CASE name.
+    pub static NODE;
+    static UNUSED_NODE;
+}
+
 fn main() {
     const N: usize = 10;
 
@@ -41,7 +50,7 @@ fn main() {
     }
     let _message = rx.recv();
 
-    // A queue node is transparently allocated in the stack.
-    let count = data.lock_then(|data| *data);
+    // A thread local node is borrowed.
+    let count = data.lock_with_local_then(&NODE, |data| *data);
     assert_eq!(count, N);
 }
