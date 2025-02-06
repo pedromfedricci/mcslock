@@ -35,6 +35,7 @@ fn main() {
             // threads to ever fail while holding the lock.
             //
             // Data is exclusively accessed by the guard argument.
+            // A thread local node is borrowed.
             data.lock_with_local_then(&NODE, |data| {
                 *data += 1;
                 if *data == N {
@@ -46,6 +47,7 @@ fn main() {
     }
     let _message = rx.recv();
 
+    // A thread local node is borrowed.
     let count = data.lock_with_local_then(&NODE, |data| *data);
     assert_eq!(count, N);
 }
