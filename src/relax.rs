@@ -301,18 +301,23 @@ mod wait {
     use crate::lock::Wait;
     use crate::relax::Relax;
 
+    #[cfg(feature = "parking")]
+    use crate::parking::park::CantPark;
+
     /// A generic relaxed waiter, that implements [`Relax`] so long as `R`
     /// implements it too.
     ///
     /// This saves us from defining a blanket [`Wait`] impl for a generic `T` where
     /// `T` implements [`Relax`], because that would prevent us from implementing
-    /// `Wait` for `T` where `T` implements some other target trait, since they
-    /// would conflict.
+    /// `Wait` for `T` when it implements [`Park`], since they would conflict. We
+    /// need both `Relax` and `Park` types to implement `Wait`.
     pub struct RelaxWait<R>(PhantomData<R>);
 
     impl<R: Relax> Wait for RelaxWait<R> {
         type LockRelax = R;
         type UnlockRelax = R;
+        #[cfg(feature = "parking")]
+        type Park = CantPark<R>;
     }
 }
 
