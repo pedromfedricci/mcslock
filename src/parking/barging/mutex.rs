@@ -80,7 +80,6 @@ pub struct Mutex<T: ?Sized, Ps, Pq> {
     pub(super) inner: MutexInner<T, Ps, Pq>,
 }
 
-<<<<<<< HEAD
 // SAFETY: `inner::Mutex` is `Send` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, Ps, Pq> Send for Mutex<T, Ps, Pq> {}
 // SAFETY: `inner::Mutex` is `Sync` if `T` is `Send`.
