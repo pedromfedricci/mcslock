@@ -13,11 +13,14 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     ///
     /// # Safety
     ///
-    /// See: `lock_with_local_then_unchecked`.
+    /// Caller must guarantee that the thread local node is not already in use
+    /// by another locking operation for the current thread. The thread local
+    /// node borrow is released to the current thread once this functions returns.
     ///
     /// # Panics
     ///
-    /// See: `lock_with_local_then_unchecked`.
+    /// Panics if the key currently has its destructor running, and it **may**
+    /// panic if the destructor has previously been run for this thread.
     pub unsafe fn lock_with_local_unchecked<N>(&self, node: Key<N>) -> MutexGuard<'_, T, L, Ws, Wq>
     where
         N: DerefMut<Target = raw::MutexNode<L>>,
@@ -25,10 +28,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
         if self.lock.try_lock_acquire_weak() {
             return MutexGuard::new(self);
         }
-        // SAFETY: Caller guaranteed that the target thread local queue node is
-        // exclusively borrowed to this function. And, within this scope, the
-        // borrow of the queue node is exclusively given to the inner queue
-        // `lock with local` operation, throughout all of its scope duration.
+        // SAFETY: Caller guaranteed that we have exclusive access over `node`.
         unsafe {
             self.queue.lock_with_local_then_unchecked(node, |()| {
                 while !self.lock.try_lock_acquire_weak() {

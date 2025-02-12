@@ -17,9 +17,13 @@ pub struct Mutex<T: ?Sized, L, Ws, Wq> {
     data: UnsafeCell<T>,
 }
 
-// Same unsafe impls as `crate::inner::raw::Mutex`.
+// SAFETY: A `Mutex` is safe to be sent across thread boundaries as long as
+// the inlined protected data `T` is also safe to be sent to other threads.
 unsafe impl<T: ?Sized + Send, L: Send, Ws, Wq> Send for Mutex<T, L, Ws, Wq> {}
-unsafe impl<T: ?Sized + Send, L: Send, Ws, Wq> Sync for Mutex<T, L, Ws, Wq> {}
+// SAFETY: A `Mutex` is safe to be shared across thread boundaries since it
+// guarantees linearization of access and modification to the protected data,
+// but only if the protected data `T` is safe to be sent to other threads.
+unsafe impl<T: ?Sized + Send, L: Sync, Ws, Wq> Sync for Mutex<T, L, Ws, Wq> {}
 
 impl<T, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
     /// Creates a new, unlocked and core based mutex (const).
@@ -115,10 +119,16 @@ pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
     lock: &'a Mutex<T, L, Ws, Wq>,
 }
 
-// Rust's `std::sync::MutexGuard` is not Send for pthread compatibility, but this
-// impl is safe to be Send. Same unsafe Sync impl as `std::sync::MutexGuard`.
-unsafe impl<T: ?Sized + Send, L: Lock, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
-unsafe impl<T: ?Sized + Sync, L: Lock, Ws, Wq> Sync for MutexGuard<'_, T, L, Ws, Wq> {}
+// SAFETY: A `MutexGuard` is safe to be sent across thread boundaries as long as
+// the referenced protected data `T` is also safe to be sent to other threads.
+// Note that `std::sync::MutexGuard` is `!Send` because it must be compatible
+// with `Pthreads` implementation on Linux, but we do not have this constraint.
+unsafe impl<T: ?Sized + Send, L: Lock + Send, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
+// SAFETY: A `MutexGuard` is safe to be shared across thread boundaries since
+// it owns exclusive access over the protected data during its lifetime, and so
+// the can safely share references to the data, but only if the protected data
+// is also safe to be shared with other cuncurrent threads.
+unsafe impl<T: ?Sized + Sync, L: Lock + Sync, Ws, Wq> Sync for MutexGuard<'_, T, L, Ws, Wq> {}
 
 impl<'a, T: ?Sized, L: Lock, Ws, Wq> MutexGuard<'a, T, L, Ws, Wq> {
     /// Creates a new `MutexGuard` instance.
@@ -174,10 +184,10 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
     }
 }
 
-// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 

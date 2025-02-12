@@ -182,7 +182,7 @@ The `thread_local` feature enables [`raw::Mutex`] locking APIs that operate over
 queue nodes that are stored at the thread local storage. These locking APIs
 require a static reference to [`raw::LocalMutexNode`] keys. Keys must be generated
 by the [`thread_local_node!`] macro. This feature also enables memory optimizations
-for [`barging::Mutex`] and locking operations. This feature is not `no_std`
+for [`barging::Mutex`] locking operations. This feature is not `no_std`
 compatible.
 
 ### barging

@@ -199,9 +199,10 @@
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::inline_always)]
 #![allow(clippy::module_name_repetitions)]
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
 #![warn(rust_2024_compatibility)]
+#![warn(clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(any(feature = "yield", feature = "thread_local", loom, test))]
 extern crate std;

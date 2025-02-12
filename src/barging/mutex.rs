@@ -80,8 +80,9 @@ pub struct Mutex<T: ?Sized, Rs, Rq> {
     pub(super) inner: MutexInner<T, Rs, Rq>,
 }
 
-// Same unsafe impls as `crate::inner::barging::Mutex`.
+// SAFETY: `inner::Mutex` is `Send` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, Rs, Rq> Send for Mutex<T, Rs, Rq> {}
+// SAFETY: `inner::Mutex` is `Sync` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, Rs, Rq> Sync for Mutex<T, Rs, Rq> {}
 
 impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
@@ -497,6 +498,8 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for MutexStackNode<T, Rs, Rq> {
 impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for MutexStackNode<T, Rs, Rq> {}
 
 #[cfg(all(feature = "lock_api", not(loom)))]
+// SAFETY: This `Mutex` implementation guarantees linearization of access and
+// modification to the protected data in a concurrent, multithreaded context.
 unsafe impl<Rs: Relax, Rq: Relax> lock_api::RawMutex for Mutex<(), Rs, Rq> {
     type GuardMarker = lock_api::GuardSend;
 
@@ -548,8 +551,9 @@ pub struct MutexGuard<'a, T: ?Sized, Rs, Rq> {
     inner: GuardInner<'a, T, Rs, Rq>,
 }
 
-// Same unsafe impls as `crate::inner::barging::MutexGuard`.
+// SAFETY: `inner::MutexGuard` is `Send` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, Rs, Rq> Send for MutexGuard<'_, T, Rs, Rq> {}
+// SAFETY: `inner::MutexGuard` is `Sync` if `T` is `Sync`.
 unsafe impl<T: ?Sized + Sync, Rs, Rq> Sync for MutexGuard<'_, T, Rs, Rq> {}
 
 #[doc(hidden)]
@@ -591,10 +595,10 @@ impl<T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'_, T, Rs, Rq> {
     }
 }
 
-// SAFETY: A guard instance hold the lock locked, with exclusive access to the
-// underlying data.
 #[cfg(all(loom, test))]
 #[cfg(not(tarpaulin_include))]
+// SAFETY: A guard instance hold the lock locked, with exclusive access to the
+// underlying data.
 unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 

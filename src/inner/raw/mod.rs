@@ -108,8 +108,12 @@ pub struct Mutex<T: ?Sized, L, W> {
     data: UnsafeCell<T>,
 }
 
-// Same unsafe impls as `std::sync::Mutex`.
+// SAFETY: A `Mutex` is safe to be sent across thread boundaries as long as
+// the inlined protected data `T` is also safe to be sent to other threads.
 unsafe impl<T: ?Sized + Send, L, W> Send for Mutex<T, L, W> {}
+// SAFETY: A `Mutex` is safe to be shared across thread boundaries since it
+// guarantees linearization of access and modification to the protected data,
+// but only if the protected data `T` is safe to be sent to other threads.
 unsafe impl<T: ?Sized + Send, L, W> Sync for Mutex<T, L, W> {}
 
 impl<T, L, W> Mutex<T, L, W> {
@@ -261,8 +265,16 @@ struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     head: &'a MutexNodeInit<L>,
 }
 
-// Same unsafe Sync impl as `std::sync::MutexGuard`.
-unsafe impl<T: ?Sized + Sync, L: Lock, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
+// SAFETY: A `MutexGuard` is safe to be sent across thread boundaries as long as
+// the referenced protected data `T` is also safe to be sent to other threads.
+// Note that `std::sync::MutexGuard` is `!Send` because it must be compatible
+// with `Pthreads` implementation on Linux, but we do not have this constraint.
+unsafe impl<T: ?Sized + Send, L: Lock + Send, W: Wait> Send for MutexGuard<'_, T, L, W> {}
+// SAFETY: A `MutexGuard` is safe to be shared across thread boundaries since
+// it owns exclusive access over the protected data during its lifetime, and so
+// the can safely share references to the data, but only if the protected data
+// is also safe to be shared with other cuncurrent threads.
+unsafe impl<T: ?Sized + Sync, L: Lock + Sync, W: Wait> Sync for MutexGuard<'_, T, L, W> {}
 
 impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
     /// Creates a new `MutexGuard` instance.

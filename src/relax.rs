@@ -70,7 +70,6 @@ trait RelaxImpl {
 // SAFETY: Both `new` and `relax` function implementation are protected with a
 // process abort (under test with unwind on panic configuration) in case any of
 // them where to panic the thread.
-#[doc(hidden)]
 unsafe impl<R: RelaxImpl> Relax for R {
     #[inline(always)]
     fn new() -> Self {
