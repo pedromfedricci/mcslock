@@ -131,8 +131,9 @@ pub struct Mutex<T: ?Sized, P> {
     pub(super) inner: inner::Mutex<T, Parker, ParkWait<P>>,
 }
 
-// Same unsafe impls as `crate::inner::raw::Mutex`.
+// SAFETY: `inner::Mutex` is `Send` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, P> Send for Mutex<T, P> {}
+// SAFETY: `inner::Mutex` is `Sync` if `T` is `Send`.
 unsafe impl<T: ?Sized + Send, P> Sync for Mutex<T, P> {}
 
 impl<T, P> Mutex<T, P> {
