@@ -104,7 +104,6 @@ use sealed::ParkImpl;
 // SAFETY: All `new`, `should_park` and `on_failure` function implementations are
 // protected with a process abort (under test with unwind on panic configuration)
 // in case any of them where to panic the thread.
-#[doc(hidden)]
 unsafe impl<P: ParkImpl> Park for P {
     type Relax = P::Relax;
 
