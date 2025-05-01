@@ -413,7 +413,6 @@ impl<T: ?Sized, P: Park> Mutex<T, P> {
 }
 
 impl<T: ?Sized, P> Mutex<T, P> {
-    #[inline]
     /// Returns `true` if the lock is currently held.
     ///
     /// This method does not provide any synchronization guarantees, so its only
@@ -435,6 +434,7 @@ impl<T: ?Sized, P> Mutex<T, P> {
     ///
     /// assert_eq!(mutex.is_locked(), false);
     /// ```
+    #[inline]
     pub fn is_locked(&self) -> bool {
         self.inner.is_locked()
     }

@@ -84,7 +84,7 @@ pub trait ParkerT {
 ///
 /// Else, if the limit has been reached and the lock remains locked, then park
 /// the thread and protect it from being awaken by spurious wakeups.
-fn park_current_thread_with_relaxed<P: ParkerT, W: Wait>(parker: &P) {
+fn park_current_thread_relaxed<P: ParkerT, W: Wait>(parker: &P) {
     let mut parking_policy = W::parking_policy();
     while !parking_policy.park.should_park() {
         let true = parker.is_locked_relaxed() else { return };
@@ -124,7 +124,7 @@ impl Lock for Parker {
     }
 
     fn wait_lock_relaxed<W: Wait>(&self) {
-        park_current_thread_with_relaxed::<Self, W>(self);
+        park_current_thread_relaxed::<Self, W>(self);
     }
 
     fn is_locked_relaxed(&self) -> bool {

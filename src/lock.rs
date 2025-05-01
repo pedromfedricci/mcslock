@@ -82,7 +82,7 @@ pub trait Wait {
 
     /// The thread parking policy that will be executed during lock contention.
     ///
-    /// Enabled only for thread parking capabable policies.
+    /// Enabled only for thread parking capable policies.
     #[cfg(feature = "parking")]
     type Park: Park;
 
@@ -94,7 +94,7 @@ pub trait Wait {
 
     /// Returns a initialized thread parking waiting policy.
     ///
-    /// Enabled only for thread parking capabable policies.
+    /// Enabled only for thread parking capable policies.
     #[cfg(feature = "parking")]
     fn parking_policy() -> ParkingPolicy<Self> {
         let relax = Self::LockRelax::new();
