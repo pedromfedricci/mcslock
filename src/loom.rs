@@ -92,7 +92,7 @@ pub mod models {
     use loom::sync::Arc;
     use loom::{model, thread};
 
-    use crate::test::{get, inc, try_inc, Int};
+    use crate::test::{lock_get, lock_inc, try_lock_inc, Int};
     use crate::test::{LockThen, TryLockThen};
 
     /// Get a copy of the shared integer, converting it to usize.
@@ -102,7 +102,7 @@ pub mod models {
     where
         L: LockThen<Target = Int>,
     {
-        get(lock).try_into().unwrap()
+        lock_get(lock).try_into().unwrap()
     }
 
     // TODO: Three or more threads make lock models run for too long. It would
@@ -123,7 +123,7 @@ pub mod models {
             let lock = Arc::new(L::new(0));
             let handles: [_; RUNS] = array::from_fn(|_| {
                 let lock = Arc::clone(&lock);
-                thread::spawn(move || try_inc(&lock))
+                thread::spawn(move || try_lock_inc(&lock))
             });
             for handle in handles {
                 handle.join().unwrap();
@@ -144,7 +144,7 @@ pub mod models {
             let lock = Arc::new(L::new(0));
             let handles: [_; RUNS] = array::from_fn(|_| {
                 let lock = Arc::clone(&lock);
-                thread::spawn(move || inc(&lock))
+                thread::spawn(move || lock_inc(&lock))
             });
             for handle in handles {
                 handle.join().unwrap();
@@ -165,7 +165,7 @@ pub mod models {
             let lock = Arc::new(L::new(0));
             let handles: [_; RUNS] = array::from_fn(|run| {
                 let lock = Arc::clone(&lock);
-                let f = if run % 2 == 0 { inc } else { try_inc };
+                let f = if run % 2 == 0 { lock_inc } else { try_lock_inc };
                 thread::spawn(move || f(&lock))
             });
             for handle in handles {
