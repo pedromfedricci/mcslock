@@ -204,9 +204,9 @@ module. The `lock_api` public dependency is set to version 0.4.
 Base MSRV (default features): guaranteed to compile on version 1.65.0 and above,
 this version will not be changed without a minor version bump.
 
-MSRV with `lock_api` feature enabled: becomes the MSRV required by the `lock_api`
+MSRV with `lock_api` feature enabled: becomes the MSRV required by the [lock_api]
 crate, which may increase at any time. Therefore, MSRV changes are not considered
-breaking changes when this feature is enabled. Check `lock_api`'s documentation
+breaking changes when this feature is enabled. Check [lock_api]'s documentation
 for their latest MSRV under version 0.4.
 
 ## Related projects
