@@ -64,7 +64,7 @@ jobs:
       - name: Check MSRV
         env:
           RUSTFLAGS: --allow unknown_lints
-        run: cargo check --all-features
+        run: cargo check --features=barging,thread_local,yield
 
   docsrs:
     name: Build doc

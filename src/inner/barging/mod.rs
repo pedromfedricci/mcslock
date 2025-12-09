@@ -60,7 +60,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     ///
     /// Try to acquire this mutex, by first racing the shared lock state. On
     /// failure, enqueue the thread's node. Once it reaches the head of the
-    /// queue, then try to acquire the shared lock state in a LOOP, while applying
+    /// queue, then try to acquire the shared lock state in a loop, while applying
     /// the user provided waiting policy (`Ws`).
     ///
     /// Node queueing must be defined through the `enqueue_then` closure.
