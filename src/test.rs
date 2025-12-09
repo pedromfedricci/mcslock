@@ -153,7 +153,7 @@ impl<T: DerefMut> AsDerefMut for T {
 pub type Int = u32;
 
 /// Get a copy of the mutex protected data.
-pub fn get<L>(mutex: &Arc<L>) -> L::Target
+pub fn lock_get<L>(mutex: &Arc<L>) -> L::Target
 where
     L: LockThen<Target: Sized + Copy>,
 {
@@ -161,7 +161,7 @@ where
 }
 
 /// Increments a shared integer.
-pub fn inc<L>(mutex: &Arc<L>)
+pub fn lock_inc<L>(mutex: &Arc<L>)
 where
     L: LockThen<Target = Int>,
 {
@@ -170,7 +170,7 @@ where
 
 /// Increments a shared integer, mutably borrows a queue node.
 #[cfg(not(all(loom, test)))]
-pub fn inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
+pub fn lock_inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
 where
     L: LockWithThen<Target = Int>,
 {
@@ -179,7 +179,7 @@ where
 
 /// Tries to increment a shared integer, mutably borrows a queue node.
 #[cfg(not(all(loom, test)))]
-pub fn try_inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
+pub fn try_lock_inc_with<L>(mutex: &Arc<L>, node: &mut L::Node)
 where
     L: TryLockWithThen<Target = Int>,
 {
@@ -188,7 +188,7 @@ where
 
 /// Tries to increment a shared integer.
 #[cfg(all(loom, test))]
-pub fn try_inc<L>(mutex: &Arc<L>)
+pub fn try_lock_inc<L>(mutex: &Arc<L>)
 where
     L: TryLockThen<Target = Int>,
 {
@@ -236,8 +236,9 @@ pub mod tests {
 
     #[cfg(feature = "barging")]
     use std::fmt::Display;
+    use std::vec::Vec;
 
-    use super::{get, inc, inc_with, try_inc_with, Int};
+    use super::{lock_get, lock_inc, lock_inc_with, try_lock_inc_with, Int};
     use super::{AsDeref, AsDerefMut};
     use super::{LockData, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
@@ -257,33 +258,33 @@ pub mod tests {
     const EXPECTED_VALUE: Int = ITERS * THREADS;
     const EXPECTED_RANGE: RangeInclusive<Int> = 1..=EXPECTED_VALUE;
 
-    fn inc_for<L, const END: Int>(mutex: &Arc<L>)
+    fn lock_inc_for<L, const END: Int>(mutex: &Arc<L>)
     where
         L: LockWithThen<Target = Int>,
     {
         let mut node = L::Node::default();
         for _ in 0..END {
-            inc_with::<L>(mutex, &mut node);
+            lock_inc_with::<L>(mutex, &mut node);
         }
     }
 
-    fn try_inc_for<L, const END: Int>(mutex: &Arc<L>)
+    fn try_lock_inc_for<L, const END: Int>(mutex: &Arc<L>)
     where
         L: TryLockWithThen<Target = Int>,
     {
         let mut node = L::Node::default();
         for _ in 0..END {
-            try_inc_with::<L>(mutex, &mut node);
+            try_lock_inc_with::<L>(mutex, &mut node);
         }
     }
 
-    fn mixed_inc_for<L, const END: Int>(mutex: &Arc<L>)
+    fn mixed_lock_inc_for<L, const END: Int>(mutex: &Arc<L>)
     where
         L: TryLockWithThen<Target = Int>,
     {
         let mut node = L::Node::default();
         for r in 0..END {
-            let f = if r % 2 == 0 { inc_with } else { try_inc_with };
+            let f = if r % 2 == 0 { lock_inc_with } else { try_lock_inc_with };
             f(mutex, &mut node);
         }
     }
@@ -306,7 +307,7 @@ pub mod tests {
         for _ in 0..THREADS {
             rx.recv().unwrap();
         }
-        get(&mutex)
+        lock_get(&mutex)
     }
 
     pub fn node_waiter_drop_does_not_matter<W>() {
@@ -320,7 +321,7 @@ pub mod tests {
     where
         L: LockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots::<L, THREADS>(inc_for::<L, ITERS>);
+        let value = lots_and_lots::<L, THREADS>(lock_inc_for::<L, ITERS>);
         assert_eq!(value, EXPECTED_VALUE);
     }
 
@@ -328,7 +329,7 @@ pub mod tests {
     where
         L: TryLockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots::<L, THREADS>(try_inc_for::<L, ITERS>);
+        let value = lots_and_lots::<L, THREADS>(try_lock_inc_for::<L, ITERS>);
         assert!(EXPECTED_RANGE.contains(&value));
     }
 
@@ -336,7 +337,7 @@ pub mod tests {
     where
         L: TryLockThen<Target = Int> + Send + Sync + 'static,
     {
-        let value = lots_and_lots::<L, THREADS>(mixed_inc_for::<L, ITERS>);
+        let value = lots_and_lots::<L, THREADS>(mixed_lock_inc_for::<L, ITERS>);
         assert!(EXPECTED_RANGE.contains(&value));
     }
 
@@ -449,18 +450,16 @@ pub mod tests {
     {
         // Tests nested locks and access
         // to underlying data.
-        let arc = Arc::new(L1::new(1));
-        let arc2 = Arc::new(L2::new(arc));
-        let (tx, rx) = channel();
+        let arc1 = Arc::new(L1::new(1));
+        let arc2 = Arc::new(L2::new(arc1));
         let _t = thread::spawn(move || {
-            let val = arc2.lock_then(|arc2| {
-                let arc2 = arc2.as_deref();
-                get(&arc2)
+            let val = arc2.lock_then(|arc1| {
+                let arc1 = arc1.as_deref();
+                lock_get(&arc1)
             });
             assert_eq!(val, 1);
-            tx.send(()).unwrap();
-        });
-        rx.recv().unwrap();
+        })
+        .join();
     }
 
     pub fn test_acquire_more_than_one_lock<L>()
@@ -468,21 +467,19 @@ pub mod tests {
         L: LockThen<Target = Int> + Send + Sync + 'static,
     {
         let arc = Arc::new(L::new(1));
-        let (tx, rx) = channel();
+        let mut threads = Vec::new();
         for _ in 0..4 {
-            let tx2 = tx.clone();
             let c_arc = Arc::clone(&arc);
-            let _t = thread::spawn(move || {
+            let t = thread::spawn(move || {
                 c_arc.lock_then(|_d| {
                     let mutex = L::new(1);
                     mutex.lock_then(|_d| ());
                 });
-                tx2.send(()).unwrap();
             });
+            threads.push(t);
         }
-        drop(tx);
-        for _ in 0..4 {
-            rx.recv().unwrap();
+        for thread in threads {
+            let _t = thread.join();
         }
     }
 
@@ -498,14 +495,14 @@ pub mod tests {
             }
             impl<T: LockThen<Target = Int>> Drop for Unwinder<T> {
                 fn drop(&mut self) {
-                    inc(&self.i);
+                    lock_inc(&self.i);
                 }
             }
             let _u = Unwinder { i: arc2 };
             panic!();
         })
         .join();
-        let value = get(&arc);
+        let value = lock_get(&arc);
         assert_eq!(value, 2);
     }
 
@@ -521,7 +518,7 @@ pub mod tests {
             });
         }
         let comp: &[Int] = &[4, 2, 5];
-        let data = get(&mutex);
+        let data = lock_get(&mutex);
         assert_eq!(comp, data);
     }
 }

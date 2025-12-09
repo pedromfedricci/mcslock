@@ -230,7 +230,7 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// each call, storing it at the current stack frame.
     #[cfg(any(test, not(feature = "thread_local")))]
     fn lock_with_stack_queue_node(&self) -> MutexGuard<'_, T, Rs, Rq> {
-        self.inner.lock().into()
+        self.inner.lock_with_stack_queue_node().into()
     }
 }
 

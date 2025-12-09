@@ -52,31 +52,46 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     /// This implementation will allocate, access and modify a queue node for
     /// each call, storing it at the current stack frame.
     #[cfg(any(test, not(feature = "thread_local")))]
-    pub fn lock(&self) -> MutexGuard<'_, T, L, Ws, Wq> {
-        if self.lock.try_lock_acquire_weak() {
-            return MutexGuard::new(self);
+    pub fn lock_with_stack_queue_node(&self) -> MutexGuard<'_, T, L, Ws, Wq> {
+        self.lock(|f| self.queue.lock_with_then(&mut raw::MutexNode::new(), |()| f(self)))
+    }
+
+    /// Generic lock implementation over call site provided queueing logic.
+    ///
+    /// Try to acquire this mutex, by first racing the shared lock state. On
+    /// failure, enqueue the thread's node. Once it reaches the head of the
+    /// queue, then try to acquire the shared lock state in a LOOP, while applying
+    /// the user provided waiting policy (`Ws`).
+    ///
+    /// Node queueing must be defined through the `enqueue_then` closure.
+    fn lock<F>(&self, enqueue_then: F) -> MutexGuard<'_, T, L, Ws, Wq>
+    where
+        F: FnOnce(fn(&Self)),
+    {
+        if !self.lock.try_lock_acquire_weak() {
+            enqueue_then(|this| {
+                while !this.lock.try_lock_acquire_weak() {
+                    this.lock.wait_lock_relaxed::<Ws>();
+                }
+            });
         }
-        let mut node = raw::MutexNode::new();
-        self.queue.lock_with_then(&mut node, |()| {
-            while !self.lock.try_lock_acquire_weak() {
-                self.lock.wait_lock_relaxed::<Ws>();
-            }
-        });
         MutexGuard::new(self)
     }
 }
 
 impl<T: ?Sized, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
-    /// Attempts to acquire this mutex without blocking the thread.
-    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, L, Ws, Wq>> {
-        self.lock.try_lock_acquire().then(|| MutexGuard::new(self))
-    }
-
     /// Returns `true` if the lock is currently held.
     ///
     /// This function does not guarantee strong ordering, only atomicity.
     pub fn is_locked(&self) -> bool {
         self.lock.is_locked_relaxed()
+    }
+
+    /// Attempts to acquire this mutex without blocking the thread.
+    ///
+    /// The lock state is loaded with acquire ordering.
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T, L, Ws, Wq>> {
+        self.lock.try_lock_acquire().then(|| MutexGuard::new(self))
     }
 
     /// Unlocks this mutex.

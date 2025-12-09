@@ -25,17 +25,7 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     where
         N: DerefMut<Target = raw::MutexNode<L>>,
     {
-        if self.lock.try_lock_acquire_weak() {
-            return MutexGuard::new(self);
-        }
         // SAFETY: Caller guaranteed that we have exclusive access over `node`.
-        unsafe {
-            self.queue.lock_with_local_then_unchecked(node, |()| {
-                while !self.lock.try_lock_acquire_weak() {
-                    self.lock.wait_lock_relaxed::<Ws>();
-                }
-            });
-        }
-        MutexGuard::new(self)
+        self.lock(|f| unsafe { self.queue.lock_with_local_then_unchecked(node, |()| f(self)) })
     }
 }

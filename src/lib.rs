@@ -71,8 +71,8 @@
 //! and can be enabled through the `thread_local` feature.
 //!
 //! ```
-//! # #[cfg(feature = "thread_local")]
-//! # {
+//! #[cfg(feature = "thread_local")]
+//! {
 //! use std::sync::Arc;
 //! use std::thread;
 //!
@@ -95,9 +95,7 @@
 //! // A node may also be transparently allocated in the stack.
 //! // Critical section must be defined as a closure.
 //! assert_eq!(mutex.try_lock_then(|data| *data.unwrap()), 10);
-//! # }
-//! # #[cfg(not(feature = "thread_local"))]
-//! # fn main() {}
+//! }
 //! ```
 //!
 //! ## Locking with a barging MCS spinlock
@@ -110,8 +108,8 @@
 //! more information.
 //!
 //! ```
-//! # #[cfg(feature = "barging")]
-//! # {
+//! #[cfg(feature = "barging")]
+//! {
 //! use std::sync::Arc;
 //! use std::thread;
 //!
@@ -128,9 +126,7 @@
 //! .join().expect("thread::spawn failed");
 //!
 //! assert_eq!(*mutex.lock(), 10);
-//! # }
-//! # #[cfg(not(feature = "barging"))]
-//! # fn main() {}
+//! }
 //! ```
 //!
 //! ## Features
@@ -207,8 +203,8 @@
 #[cfg(any(feature = "yield", feature = "thread_local", loom, test))]
 extern crate std;
 
-#[cfg(feature = "thread_local")]
 #[macro_use]
+#[cfg(feature = "thread_local")]
 pub(crate) mod thread_local;
 
 pub mod raw;
