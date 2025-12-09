@@ -27,6 +27,7 @@ pub struct MutexNodeInit<L> {
 
 impl<L> MutexNodeInit<L> {
     /// Returns a raw mutable pointer of this node.
+    #[allow(clippy::ref_as_ptr)] // 1.91.0
     const fn as_ptr(&self) -> *mut Self {
         (self as *const Self).cast_mut()
     }
@@ -87,6 +88,7 @@ impl<L> MutexNode<L> {
 impl<L: Lock> MutexNode<L> {
     /// Initializes this node's inner state, returning a shared reference
     /// pointing to it.
+    #[allow(clippy::missing_const_for_fn)] // 1.91.0
     fn initialize(&mut self) -> &MutexNodeInit<L> {
         self.inner.write(MutexNodeInit::locked())
     }
