@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.4.1..HEAD
+[Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.4.2..HEAD
+
+## [0.4.2] - 2025-12-10
+
+### Changed
+
+- Updated the MSRV policy: the base crate now guarantees a stable MSRV, but enabling the
+`lock_api` feature makes the MSRV follow `lock_api`'s MSRV, and it may raise at any moment [#20].
 
 ## [0.4.1] - 2025-02-04
 

@@ -170,7 +170,7 @@
 //! crate for [`barging::Mutex`]. Aliases are provided by the [`barging::lock_api`]
 //! (`no_std`) module. The `lock_api` public dependency is set to version 0.4.
 //!
-//! ### Minimum Supported Rust Version (MSRV)
+//! ## Minimum Supported Rust Version (MSRV)
 //!
 //! Base MSRV (default features): guaranteed to compile on version 1.65.0 and above,
 //! this version will not be changed without a minor version bump.

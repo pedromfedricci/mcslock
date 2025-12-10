@@ -4,7 +4,7 @@ An implementation of Mellor-Crummey and Scott contention-free
 lock for mutual exclusion, referred to as MCS lock.
 """
 name = "mcslock"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
