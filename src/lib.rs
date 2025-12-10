@@ -230,7 +230,6 @@
 //! are published under the [`parking`] module. Each `no_std` mutex flavors
 //! provided by this crate have corresponding parking implementations under that
 //! module. Users may select a out of the box parking policy at [`parking::park`].
->>>>>>> 1428d85 (feat: support thread parking (MVP))
 //!
 //! ## Related projects
 //!

@@ -348,6 +348,7 @@ impl<const MAX: Uint> Bounded<MAX> {
         self.attempts >= MAX
     }
 
+    #[allow(clippy::missing_const_for_fn)] // 1.91.0
     fn on_failure(&mut self) {
         self.attempts += 1;
     }
