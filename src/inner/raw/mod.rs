@@ -27,7 +27,7 @@ pub struct MutexNodeInit<L> {
 
 impl<L> MutexNodeInit<L> {
     /// Returns a raw mutable pointer of this node.
-    #[allow(clippy::ref_as_ptr)] // 1.91.0
+    #[allow(clippy::ref_as_ptr)] // `from_ref`: 1.76.0
     const fn as_ptr(&self) -> *mut Self {
         (self as *const Self).cast_mut()
     }
@@ -88,7 +88,7 @@ impl<L> MutexNode<L> {
 impl<L: Lock> MutexNode<L> {
     /// Initializes this node's inner state, returning a shared reference
     /// pointing to it.
-    #[allow(clippy::missing_const_for_fn)] // 1.91.0
+    #[allow(clippy::missing_const_for_fn)] // &mut self in const: 1.83.0
     fn initialize(&mut self) -> &MutexNodeInit<L> {
         self.inner.write(MutexNodeInit::locked())
     }
@@ -113,6 +113,7 @@ pub struct Mutex<T: ?Sized, L, W> {
 // SAFETY: A `Mutex` is safe to be sent across thread boundaries as long as
 // the inlined protected data `T` is also safe to be sent to other threads.
 unsafe impl<T: ?Sized + Send, L, W> Send for Mutex<T, L, W> {}
+
 // SAFETY: A `Mutex` is safe to be shared across thread boundaries since it
 // guarantees linearization of access and modification to the protected data,
 // but only if the protected data `T` is safe to be sent to other threads.
@@ -267,11 +268,6 @@ struct MutexGuard<'a, T: ?Sized, L: Lock, W: Wait> {
     head: &'a MutexNodeInit<L>,
 }
 
-// SAFETY: A `MutexGuard` is safe to be sent across thread boundaries as long as
-// the referenced protected data `T` is also safe to be sent to other threads.
-// Note that `std::sync::MutexGuard` is `!Send` because it must be compatible
-// with `Pthreads` implementation on Linux, but we do not have this constraint.
-unsafe impl<T: ?Sized + Send, L: Lock + Send, W: Wait> Send for MutexGuard<'_, T, L, W> {}
 // SAFETY: A `MutexGuard` is safe to be shared across thread boundaries since
 // it owns exclusive access over the protected data during its lifetime, and so
 // the can safely share references to the data, but only if the protected data

@@ -497,9 +497,9 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> LockThen for MutexStackNode<T, Rs, Rq> {
 #[cfg(test)]
 impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for MutexStackNode<T, Rs, Rq> {}
 
-#[cfg(all(feature = "lock_api", not(loom)))]
 // SAFETY: This `Mutex` implementation guarantees linearization of access and
 // modification to the protected data in a concurrent, multithreaded context.
+#[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Rs: Relax, Rq: Relax> lock_api::RawMutex for Mutex<(), Rs, Rq> {
     type GuardMarker = lock_api::GuardSend;
 
@@ -595,10 +595,10 @@ impl<T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'_, T, Rs, Rq> {
     }
 }
 
-#[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
 // SAFETY: A guard instance hold the lock locked, with exclusive access to the
 // underlying data.
+#[cfg(all(loom, test))]
+#[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 

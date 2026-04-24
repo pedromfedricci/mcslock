@@ -12,7 +12,7 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// in the thread local storage of the locking threads. That is, the number
     /// of queue nodes is proportional at 1:1 to the number of locking threads.
     pub(super) fn lock_with_local_queue_node(&self) -> MutexGuard<'_, T, Rs, Rq> {
-        crate::thread_local_node!(static NODE);
+        crate::thread_local_node! { static NODE }
         // SAFETY: The thread local node: `NODE` is not borrowed to any other
         // locking operation for all duration of the `inner` borrow of it.
         unsafe { self.inner.lock_with_local_unchecked(&NODE.inner) }.into()

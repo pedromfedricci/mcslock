@@ -21,7 +21,7 @@ macro_rules! __thread_local_node_inner {
 
 /// Non-recursive, Loom based inner definition of `thread_local_node!`.
 ///
-/// This node definition uses Loom primitives and it can't be evaluated at
+/// This node declaration uses Loom primitives and it can't be evaluated at
 /// compile-time since Loom does not support that feature. Loom's `thread_local!`
 /// macro defines a `static` value as oppose to std's `const` value.
 #[cfg(all(loom, test))]

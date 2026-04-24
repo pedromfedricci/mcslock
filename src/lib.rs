@@ -80,7 +80,7 @@
 //! use mcslock::raw::spins::Mutex;
 //!
 //! // Requires `thread_local` feature.
-//! mcslock::thread_local_node!(static NODE);
+//! mcslock::thread_local_node! { static NODE }
 //!
 //! let mutex = Arc::new(Mutex::new(0));
 //! let c_mutex = Arc::clone(&mutex);

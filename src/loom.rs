@@ -92,8 +92,8 @@ pub mod models {
     use loom::sync::Arc;
     use loom::{model, thread};
 
-    use crate::test::{lock_get, lock_inc, try_lock_inc, Int};
-    use crate::test::{LockThen, TryLockThen};
+    use crate::test::{lock_get, lock_inc, try_lock_inc};
+    use crate::test::{Int, LockThen, TryLockThen};
 
     /// Get a copy of the shared integer, converting it to usize.
     ///
