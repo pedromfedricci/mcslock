@@ -163,13 +163,22 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     #[inline]
-    #[allow(clippy::non_minimal_cfg)]
+    #[rustfmt::skip]
     pub fn lock(&self) -> MutexGuard<'_, T, Rs, Rq> {
         #[cfg(not(feature = "thread_local"))]
+        #[cfg_attr(
+            not(feature = "thread_local"),
+            cfg(not(tarpaulin_include))
+        )]
         {
             self.lock_with_stack_queue_node()
         }
-        #[cfg(any(feature = "thread_local"))]
+
+        #[cfg(feature = "thread_local")]
+        #[cfg_attr(
+            feature = "thread_local",
+            cfg(not(tarpaulin_include))
+        )]
         {
             self.lock_with_local_queue_node()
         }
