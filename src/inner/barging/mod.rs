@@ -20,6 +20,7 @@ pub struct Mutex<T: ?Sized, L, Ws, Wq> {
 // SAFETY: A `Mutex` is safe to be sent across thread boundaries as long as
 // the inlined protected data `T` is also safe to be sent to other threads.
 unsafe impl<T: ?Sized + Send, L: Send, Ws, Wq> Send for Mutex<T, L, Ws, Wq> {}
+
 // SAFETY: A `Mutex` is safe to be shared across thread boundaries since it
 // guarantees linearization of access and modification to the protected data,
 // but only if the protected data `T` is safe to be sent to other threads.
@@ -53,7 +54,10 @@ impl<T: ?Sized, L: Lock, Ws: Wait, Wq: Wait> Mutex<T, L, Ws, Wq> {
     /// each call, storing it at the current stack frame.
     #[cfg(any(test, not(feature = "thread_local")))]
     pub fn lock_with_stack_queue_node(&self) -> MutexGuard<'_, T, L, Ws, Wq> {
-        self.lock(|f| self.queue.lock_with_then(&mut raw::MutexNode::new(), |()| f(self)))
+        self.lock(|f| {
+            let mut node = raw::MutexNode::new();
+            self.queue.lock_with_then(&mut node, |()| f(self));
+        })
     }
 
     /// Generic lock implementation over call site provided queueing logic.
@@ -139,6 +143,7 @@ pub struct MutexGuard<'a, T: ?Sized, L: Lock, Ws, Wq> {
 // Note that `std::sync::MutexGuard` is `!Send` because it must be compatible
 // with `Pthreads` implementation on Linux, but we do not have this constraint.
 unsafe impl<T: ?Sized + Send, L: Lock + Send, Ws, Wq> Send for MutexGuard<'_, T, L, Ws, Wq> {}
+
 // SAFETY: A `MutexGuard` is safe to be shared across thread boundaries since
 // it owns exclusive access over the protected data during its lifetime, and so
 // the can safely share references to the data, but only if the protected data
@@ -199,10 +204,10 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
     }
 }
 
-#[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
 // SAFETY: A guard instance hold the lock locked, with exclusive access to the
 // underlying data.
+#[cfg(all(loom, test))]
+#[cfg(not(tarpaulin_include))]
 unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 

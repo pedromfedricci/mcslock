@@ -112,7 +112,7 @@ use std::thread;
 use mcslock::raw::spins::Mutex;
 
 // Requires `thread_local` feature.
-mcslock::thread_local_node!(static NODE);
+mcslock::thread_local_node! { static NODE }
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));
