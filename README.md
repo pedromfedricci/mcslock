@@ -179,7 +179,7 @@ use std::thread;
 use mcslock::parking::raw::{spins::Mutex, MutexNode};
 
 // Requires `parking` and `thread_local` features.
-mcslock::thread_local_parking_node!(static NODE);
+mcslock::thread_local_parking_node! { static NODE }
 
 fn main() {
     let mutex = Arc::new(Mutex::new(0));

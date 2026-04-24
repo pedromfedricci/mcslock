@@ -454,7 +454,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```no_run
     /// use mcslock::raw::spins::Mutex;
     ///
-    /// mcslock::thread_local_node!{ static NODE }
+    /// mcslock::thread_local_node! { static NODE }
     ///
     /// let mutex = Mutex::new(0);
     ///
@@ -505,7 +505,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     const fn __borrows_must_not_escape_closure() {}
 }
 
-// A thread local node definition used for testing.
+// A thread local node declaration used for testing.
 //
 // NOTE: Be mindfull of usage since it is a module global name.
 #[cfg(test)]

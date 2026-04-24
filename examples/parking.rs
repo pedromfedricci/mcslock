@@ -8,7 +8,7 @@ use mcslock::parking::raw::{spins::Mutex, MutexNode};
 
 // Requires that the `thread_local` feature is enabled.
 mcslock::thread_local_parking_node! {
-    // * Allows multiple static definitions, must be separated with semicolons.
+    // * Allows multiple static declarations, must be separated with semicolons.
     // * Visibility is optional (private by default).
     // * Requires `static` keyword and a UPPER_SNAKE_CASE name.
     pub static NODE;
