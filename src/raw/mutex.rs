@@ -160,7 +160,7 @@ impl<T, R> Mutex<T, R> {
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     pub(crate) fn new(value: T) -> Self {
         Self { inner: inner::Mutex::new(value) }
     }

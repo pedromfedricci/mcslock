@@ -188,6 +188,7 @@ where
 
 /// Tries to increment a shared integer.
 #[cfg(all(loom, test))]
+#[cfg(not(tarpaulin))]
 pub fn try_lock_inc<L>(mutex: &Arc<L>)
 where
     L: TryLockThen<Target = Int>,
@@ -250,6 +251,15 @@ pub mod tests {
     impl Drop for Foo {
         fn drop(&mut self) {
             self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    struct Unwinder<T: LockThen<Target = Int>> {
+        i: Arc<T>,
+    }
+    impl<T: LockThen<Target = Int>> Drop for Unwinder<T> {
+        fn drop(&mut self) {
+            lock_inc(&self.i);
         }
     }
 
@@ -490,14 +500,6 @@ pub mod tests {
         let arc = Arc::new(L::new(1));
         let arc2 = arc.clone();
         let _ = thread::spawn(move || {
-            struct Unwinder<T: LockThen<Target = Int>> {
-                i: Arc<T>,
-            }
-            impl<T: LockThen<Target = Int>> Drop for Unwinder<T> {
-                fn drop(&mut self) {
-                    lock_inc(&self.i);
-                }
-            }
             let _u = Unwinder { i: arc2 };
             panic!();
         })

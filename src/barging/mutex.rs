@@ -107,7 +107,7 @@ impl<T, Rs, Rq> Mutex<T, Rs, Rq> {
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     pub(super) fn new(value: T) -> Self {
         Self { inner: inner::Mutex::new(value) }
     }
@@ -163,16 +163,8 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     #[inline]
-    #[allow(clippy::non_minimal_cfg)]
     pub fn lock(&self) -> MutexGuard<'_, T, Rs, Rq> {
-        #[cfg(not(feature = "thread_local"))]
-        {
-            self.lock_with_stack_queue_node()
-        }
-        #[cfg(any(feature = "thread_local"))]
-        {
-            self.lock_with_local_queue_node()
-        }
+        self.lock_impl()
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -221,6 +213,17 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
         F: FnOnce(MutexGuard<'_, T, Rs, Rq>) -> Ret,
     {
         f(self.lock())
+    }
+}
+
+impl<T: ?Sized, Rs: Relax, Rq: Relax> Mutex<T, Rs, Rq> {
+    /// The non `thread_local` enabled `lock` implementation.
+    ///
+    /// Implemented by `lock_with_stack_queue_node`.
+    #[cfg(not(feature = "thread_local"))]
+    #[cfg(not(tarpaulin_include))]
+    fn lock_impl(&self) -> MutexGuard<'_, T, Rs, Rq> {
+        self.lock_with_stack_queue_node()
     }
 
     /// Underlying implementation of `lock` that is only enabled when the
@@ -598,7 +601,7 @@ impl<T: ?Sized, Rs, Rq> core::ops::DerefMut for MutexGuard<'_, T, Rs, Rq> {
 // SAFETY: A guard instance hold the lock locked, with exclusive access to the
 // underlying data.
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
@@ -608,7 +611,7 @@ unsafe impl<T: ?Sized, Rs, Rq> Guard for MutexGuard<'_, T, Rs, Rq> {
 }
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
     type Target = T;
 
@@ -624,7 +627,7 @@ impl<T: ?Sized, Rs, Rq> AsDeref for MutexGuard<'_, T, Rs, Rq> {
 }
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 impl<T: ?Sized, Rs, Rq> AsDerefMut for MutexGuard<'_, T, Rs, Rq> {
     type DerefMut<'a>
         = GuardDerefMut<'a, Self>

@@ -57,7 +57,7 @@ impl<L: Lock> MutexNodeInit<L> {
 
     /// Creates a new, locked, initialized and loom based node (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn locked() -> Self {
         let next = AtomicPtr::null_mut();
         let lock = Lock::locked();
@@ -130,7 +130,7 @@ impl<T, L, W> Mutex<T, L, W> {
 
     /// Creates a new, unlocked and loom based mutex (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     pub fn new(value: T) -> Self {
         let tail = AtomicPtr::null_mut();
         let data = UnsafeCell::new(value);
