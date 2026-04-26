@@ -17,7 +17,7 @@ pub mod atomic {
         };
 
         #[cfg(all(loom, test))]
-        #[cfg(not(tarpaulin_include))]
+        #[cfg(not(tarpaulin))]
         fn null_mut() -> AtomicPtr<Self::Target> {
             Self::new(core::ptr::null_mut())
         }
@@ -65,7 +65,7 @@ pub mod cell {
         }
 
         #[cfg(all(loom, test))]
-        #[cfg(not(tarpaulin_include))]
+        #[cfg(not(tarpaulin))]
         unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&Self::Target) -> Ret,
@@ -84,7 +84,7 @@ pub mod cell {
         }
 
         #[cfg(all(loom, test))]
-        #[cfg(not(tarpaulin_include))]
+        #[cfg(not(tarpaulin))]
         unsafe fn with_mut_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(&mut Self::Target) -> Ret,
@@ -108,7 +108,7 @@ pub mod cell {
         }
 
         #[cfg(all(loom, test))]
-        #[cfg(not(tarpaulin_include))]
+        #[cfg(not(tarpaulin))]
         unsafe fn as_deref_with_mut_unchecked<F, Ret>(&self, f: F) -> Ret
         where
             F: FnOnce(Option<&mut T>) -> Ret,

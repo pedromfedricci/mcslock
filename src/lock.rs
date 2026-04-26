@@ -93,13 +93,13 @@ impl Lock for AtomicBool {
     const UNLOCKED: Self = Self::new(false);
 
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn locked() -> Self {
         Self::new(true)
     }
 
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn unlocked() -> Self {
         Self::new(false)
     }

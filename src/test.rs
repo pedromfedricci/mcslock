@@ -188,7 +188,7 @@ where
 
 /// Tries to increment a shared integer.
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 pub fn try_lock_inc<L>(mutex: &Arc<L>)
 where
     L: TryLockThen<Target = Int>,

@@ -232,5 +232,5 @@ pub mod barging;
 pub(crate) mod test;
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 pub(crate) mod loom;

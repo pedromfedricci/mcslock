@@ -38,7 +38,7 @@ impl<T, L: Lock, Ws, Wq> Mutex<T, L, Ws, Wq> {
 
     /// Creates a new, unlocked and loom base mutex (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     pub fn new(value: T) -> Self {
         let lock = Lock::unlocked();
         let queue = raw::Mutex::new(());
@@ -207,7 +207,7 @@ impl<T: ?Sized, L: Lock, Ws, Wq> Drop for MutexGuard<'_, T, L, Ws, Wq> {
 // SAFETY: A guard instance hold the lock locked, with exclusive access to the
 // underlying data.
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 unsafe impl<T: ?Sized, L: Lock, Ws, Wq> crate::loom::Guard for MutexGuard<'_, T, L, Ws, Wq> {
     type Target = T;
 
