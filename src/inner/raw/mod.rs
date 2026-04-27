@@ -353,7 +353,7 @@ impl<T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'_, T, L, W> {
 }
 
 #[cfg(not(all(loom, test)))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 impl<T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'_, T, L, W> {
     /// Mutably dereferences the guard to access the underlying data.
     #[inline(always)]

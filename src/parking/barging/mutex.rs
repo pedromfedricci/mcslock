@@ -107,7 +107,7 @@ impl<T, Ps, Pq> Mutex<T, Ps, Pq> {
 
     /// Creates a new unlocked mutex with Loom primitives (non-const).
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     pub(super) fn new(value: T) -> Self {
         Self { inner: inner::Mutex::new(value) }
     }
@@ -163,16 +163,8 @@ impl<T: ?Sized, Ps: Park, Pq: Park> Mutex<T, Ps, Pq> {
     /// assert_eq!(*mutex.lock(), 10);
     /// ```
     #[inline]
-    #[allow(clippy::non_minimal_cfg)]
     pub fn lock(&self) -> MutexGuard<'_, T, Ps, Pq> {
-        #[cfg(not(feature = "thread_local"))]
-        {
-            self.lock_with_stack_queue_node()
-        }
-        #[cfg(any(feature = "thread_local"))]
-        {
-            self.lock_with_local_queue_node()
-        }
+        self.lock_impl()
     }
 
     /// Acquires this mutex and then runs the closure against its guard.
@@ -221,6 +213,17 @@ impl<T: ?Sized, Ps: Park, Pq: Park> Mutex<T, Ps, Pq> {
         F: FnOnce(MutexGuard<'_, T, Ps, Pq>) -> Ret,
     {
         f(self.lock())
+    }
+}
+
+impl<T: ?Sized, Ps: Park, Pq: Park> Mutex<T, Ps, Pq> {
+    /// The non `thread_local` enabled `lock` implementation.
+    ///
+    /// Implemented by `lock_with_stack_queue_node`.
+    #[cfg(not(feature = "thread_local"))]
+    #[cfg(not(tarpaulin_include))]
+    fn lock_impl(&self) -> MutexGuard<'_, T, Ps, Pq> {
+        self.lock_with_stack_queue_node()
     }
 
     /// Underlying implementation of `lock` that is only enabled when the
@@ -497,9 +500,9 @@ impl<T: ?Sized, Ps: Park, Pq: Park> LockThen for MutexStackNode<T, Ps, Pq> {
 #[cfg(test)]
 impl<T: ?Sized, Ps: Park, Pq: Park> TryLockThen for MutexStackNode<T, Ps, Pq> {}
 
-#[cfg(all(feature = "lock_api", not(loom)))]
 // SAFETY: This `Mutex` implementation guarantees linearization of access and
 // modification to the protected data in a concurrent, multithreaded context.
+#[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Ps: Park, Pq: Park> lock_api::RawMutex for Mutex<(), Ps, Pq> {
     type GuardMarker = lock_api::GuardSend;
 
@@ -608,7 +611,7 @@ unsafe impl<T: ?Sized, Ps, Pq> Guard for MutexGuard<'_, T, Ps, Pq> {
 }
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 impl<T: ?Sized, Ps, Pq> AsDeref for MutexGuard<'_, T, Ps, Pq> {
     type Target = T;
 
@@ -624,7 +627,7 @@ impl<T: ?Sized, Ps, Pq> AsDeref for MutexGuard<'_, T, Ps, Pq> {
 }
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 impl<T: ?Sized, Ps, Pq> AsDerefMut for MutexGuard<'_, T, Ps, Pq> {
     type DerefMut<'a>
         = GuardDerefMut<'a, Self>

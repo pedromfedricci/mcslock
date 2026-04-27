@@ -32,14 +32,14 @@ pub trait ParkerT {
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn locked() -> Self;
 
     /// Creates a new unlocked `Parker` instance with Loom primitives (non-const).
     ///
     /// Loom primitives are not compiler-time evaluable.
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn unlocked() -> Self;
 
     /// Returns `true` if the lock is currently held.
@@ -104,13 +104,13 @@ impl Lock for Parker {
     const UNLOCKED: Self = ParkerT::UNLOCKED;
 
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn locked() -> Self {
         ParkerT::locked()
     }
 
     #[cfg(all(loom, test))]
-    #[cfg(not(tarpaulin_include))]
+    #[cfg(not(tarpaulin))]
     fn unlocked() -> Self {
         ParkerT::unlocked()
     }
@@ -195,7 +195,7 @@ mod common {
 }
 
 #[cfg(all(loom, test))]
-#[cfg(not(tarpaulin_include))]
+#[cfg(not(tarpaulin))]
 mod loom {
     use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
 

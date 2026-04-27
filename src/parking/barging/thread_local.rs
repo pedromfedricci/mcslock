@@ -5,13 +5,20 @@ use crate::parking::park::Park;
 use crate::test::{LockNew, LockThen, LockWithThen, TryLockThen, TryLockWithThen};
 
 impl<T: ?Sized, Ps: Park, Pq: Park> Mutex<T, Ps, Pq> {
+    /// The `thread_local` enabled `lock` implementation.
+    ///
+    /// Implemented by `lock_with_local_queue_node`.
+    pub(super) fn lock_impl(&self) -> MutexGuard<'_, T, Ps, Pq> {
+        self.lock_with_local_queue_node()
+    }
+
     /// Underlying implementation of `lock` that is only enabled when the
     /// `thread_local` feature is enabled.
     ///
     /// This implementation will access and modify queue nodes that are stored
     /// in the thread local storage of the locking threads. That is, the number
     /// of queue nodes is proportional at 1:1 to the number of locking threads.
-    pub(super) fn lock_with_local_queue_node(&self) -> MutexGuard<'_, T, Ps, Pq> {
+    fn lock_with_local_queue_node(&self) -> MutexGuard<'_, T, Ps, Pq> {
         crate::thread_local_parking_node! { static NODE }
         // SAFETY: The thread local node: `NODE` is not borrowed to any other
         // locking operation for all duration of the `inner` borrow of it.
