@@ -44,7 +44,10 @@ pub mod atomic {
 }
 
 pub mod cell {
-    pub use sealed::{UnsafeCellOptionWith, UnsafeCellWith};
+    pub use sealed::{UnsafeCellOptionWith, UnsafeCellWithMut};
+
+    #[cfg(feature = "barging")]
+    pub use sealed::UnsafeCellWith;
 
     #[cfg(not(all(loom, test)))]
     pub use core::cell::UnsafeCell;
@@ -52,27 +55,8 @@ pub mod cell {
     #[cfg(all(loom, test))]
     pub use loom::cell::UnsafeCell;
 
-    impl<T: ?Sized> UnsafeCellWith for UnsafeCell<T> {
+    impl<T: ?Sized> UnsafeCellWithMut for UnsafeCell<T> {
         type Target = T;
-
-        #[cfg(not(all(loom, test)))]
-        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
-        where
-            F: FnOnce(&Self::Target) -> Ret,
-        {
-            // SAFETY: Caller guaranteed that there are no mutable aliases.
-            f(unsafe { &*self.get() })
-        }
-
-        #[cfg(all(loom, test))]
-        #[cfg(not(tarpaulin))]
-        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
-        where
-            F: FnOnce(&Self::Target) -> Ret,
-        {
-            // SAFETY: Caller guaranteed that there are no mutable aliases.
-            self.with(|ptr| f(unsafe { &*ptr }))
-        }
 
         #[cfg(not(all(loom, test)))]
         unsafe fn with_mut_unchecked<F, Ret>(&self, f: F) -> Ret
@@ -91,6 +75,28 @@ pub mod cell {
         {
             // SAFETY: Caller guaranteed that there are no mutable aliases.
             self.with_mut(|ptr| f(unsafe { &mut *ptr }))
+        }
+    }
+
+    #[cfg(feature = "barging")]
+    impl<T: ?Sized> UnsafeCellWith for UnsafeCell<T> {
+        #[cfg(not(all(loom, test)))]
+        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
+        where
+            F: FnOnce(&Self::Target) -> Ret,
+        {
+            // SAFETY: Caller guaranteed that there are no mutable aliases.
+            f(unsafe { &*self.get() })
+        }
+
+        #[cfg(all(loom, test))]
+        #[cfg(not(tarpaulin))]
+        unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
+        where
+            F: FnOnce(&Self::Target) -> Ret,
+        {
+            // SAFETY: Caller guaranteed that there are no mutable aliases.
+            self.with(|ptr| f(unsafe { &*ptr }))
         }
     }
 
@@ -121,20 +127,10 @@ pub mod cell {
 
     mod sealed {
         /// A trait that extends [`UnsafeCell`] to allow running closures against
-        /// its underlying data.
-        pub trait UnsafeCellWith {
+        /// an exclusive reference of the underlying data.
+        pub trait UnsafeCellWithMut {
             /// The type of the underlying data.
             type Target: ?Sized;
-
-            /// Runs `f` against a shared reference borrowed from a [`UnsafeCell`].
-            ///
-            /// # Safety
-            ///
-            /// Caller must guarantee there are no mutable aliases to the
-            /// underlying data.
-            unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
-            where
-                F: FnOnce(&Self::Target) -> Ret;
 
             /// Runs `f` against a mutable reference borrowed from a [`UnsafeCell`].
             ///
@@ -145,6 +141,21 @@ pub mod cell {
             unsafe fn with_mut_unchecked<F, Ret>(&self, f: F) -> Ret
             where
                 F: FnOnce(&mut Self::Target) -> Ret;
+        }
+
+        /// A trait that extends [`UnsafeCell`] to allow running closures against
+        /// a shared reference of the underlying data.
+        #[cfg(feature = "barging")]
+        pub trait UnsafeCellWith: UnsafeCellWithMut {
+            /// Runs `f` against a shared reference borrowed from a [`UnsafeCell`].
+            ///
+            /// # Safety
+            ///
+            /// Caller must guarantee there are no mutable aliases to the
+            /// underlying data.
+            unsafe fn with_unchecked<F, Ret>(&self, f: F) -> Ret
+            where
+                F: FnOnce(&Self::Target) -> Ret;
         }
 
         /// A trait that extends `Option<&UnsafeCell>` to allow running closures

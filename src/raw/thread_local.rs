@@ -454,7 +454,7 @@ impl<T: ?Sized, R: Relax> Mutex<T, R> {
     /// ```no_run
     /// use mcslock::raw::spins::Mutex;
     ///
-    /// mcslock::thread_local_node!{ static NODE }
+    /// mcslock::thread_local_node! { static NODE }
     ///
     /// let mutex = Mutex::new(0);
     ///
