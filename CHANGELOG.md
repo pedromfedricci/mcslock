@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/pedromfedricci/mcslock/compare/v0.4.2..HEAD
 
-## [0.4.2] - 2025-12-10
+## [0.4.2] - 2026-05-16
 
 ### Changed
 
-- Updated the MSRV policy: the base crate now guarantees a stable MSRV, but enabling the
+- Updated the MSRV policy: the base crate continues to guarantees a stable MSRV, but enabling the
 `lock_api` feature makes the MSRV follow `lock_api`'s MSRV, and it may raise at any moment [#20].
+- Documentation: improve `thread_local_node!` usage examples [#21].
+
+[#20]: https://github.com/pedromfedricci/mcslock/pull/20
+[#21]: https://github.com/pedromfedricci/mcslock/pull/21
 
 ## [0.4.1] - 2025-02-04
 
