@@ -1,11 +1,11 @@
-use core::fmt::{self, Debug, Display, Formatter};
+use core::fmt::{self, Debug, Formatter};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 use crate::cfg::atomic::{fence, AtomicPtr, AtomicPtrNull};
-use crate::cfg::cell::{UnsafeCell, UnsafeCellOptionWith, UnsafeCellWith};
+use crate::cfg::cell::{UnsafeCell, UnsafeCellOptionWith, UnsafeCellWithMut};
 use crate::lock::{Lock, Wait};
 use crate::relax::Relax;
 
@@ -164,7 +164,7 @@ impl<T: ?Sized, L: Lock, W: Wait> Mutex<T, L, W> {
     /// # Safety
     ///
     /// The returned guard instance **must** be dropped, that is, it **must not**
-    /// be "forgotten" (e.g. `core::mem::forget`), or being targeted of any
+    /// be "forgotten" (e.g. `core::mem::forget`), or being targeted by any
     /// other operation that would prevent it from executing its `drop` call.
     unsafe fn lock_with<'a>(&'a self, n: &'a mut MutexNode<L>) -> MutexGuard<'a, T, L, W> {
         let node = n.initialize();
@@ -280,16 +280,6 @@ impl<'a, T: ?Sized, L: Lock, W: Wait> MutexGuard<'a, T, L, W> {
         Self { lock, head }
     }
 
-    /// Runs `f` against a shared reference pointing to the underlying data.
-    #[cfg(not(tarpaulin_include))]
-    fn with<F, Ret>(&self, f: F) -> Ret
-    where
-        F: FnOnce(&T) -> Ret,
-    {
-        // SAFETY: A guard instance holds the lock locked.
-        unsafe { self.lock.data.with_unchecked(f) }
-    }
-
     /// Runs `f` against a mutable reference pointing to the underlying data.
     fn with_mut<F, Ret>(&mut self, f: F) -> Ret
     where
@@ -322,44 +312,6 @@ impl<T: ?Sized, L: Lock, W: Wait> AsDerefMutWithMut for OptionGuard<'_, T, L, W>
         let data = self.as_ref().map(|guard| &guard.lock.data);
         // SAFETY: A guard instance holds the lock locked.
         unsafe { data.as_deref_with_mut_unchecked(f) }
-    }
-}
-
-#[cfg(not(tarpaulin_include))]
-impl<T: ?Sized + Debug, L: Lock, W: Wait> Debug for MutexGuard<'_, T, L, W> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.with(|data| data.fmt(f))
-    }
-}
-
-#[cfg(not(tarpaulin_include))]
-impl<T: ?Sized + Display, L: Lock, W: Wait> Display for MutexGuard<'_, T, L, W> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.with(|data| data.fmt(f))
-    }
-}
-
-#[cfg(not(all(loom, test)))]
-#[cfg(not(tarpaulin_include))]
-impl<T: ?Sized, L: Lock, W: Wait> core::ops::Deref for MutexGuard<'_, T, L, W> {
-    type Target = T;
-
-    /// Dereferences the guard to access the underlying data.
-    #[inline(always)]
-    fn deref(&self) -> &T {
-        // SAFETY: A guard instance holds the lock locked.
-        unsafe { &*self.lock.data.get() }
-    }
-}
-
-#[cfg(not(all(loom, test)))]
-#[cfg(not(tarpaulin))]
-impl<T: ?Sized, L: Lock, W: Wait> core::ops::DerefMut for MutexGuard<'_, T, L, W> {
-    /// Mutably dereferences the guard to access the underlying data.
-    #[inline(always)]
-    fn deref_mut(&mut self) -> &mut T {
-        // SAFETY: A guard instance holds the lock locked.
-        unsafe { &mut *self.lock.data.get() }
     }
 }
 

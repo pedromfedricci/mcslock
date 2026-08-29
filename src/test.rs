@@ -257,6 +257,7 @@ pub mod tests {
     struct Unwinder<T: LockThen<Target = Int>> {
         i: Arc<T>,
     }
+
     impl<T: LockThen<Target = Int>> Drop for Unwinder<T> {
         fn drop(&mut self) {
             lock_inc(&self.i);
