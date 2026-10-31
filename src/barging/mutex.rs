@@ -504,23 +504,25 @@ impl<T: ?Sized, Rs: Relax, Rq: Relax> TryLockThen for MutexStackNode<T, Rs, Rq> 
 // modification to the protected data in a concurrent, multithreaded context.
 #[cfg(all(feature = "lock_api", not(loom)))]
 unsafe impl<Rs: Relax, Rq: Relax> lock_api::RawMutex for Mutex<(), Rs, Rq> {
-    type GuardMarker = lock_api::GuardSend;
+    type Guard = lock_api::GuardSend;
 
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = Self::new(());
 
     #[inline]
-    fn lock(&self) {
+    fn lock(&self) -> Self::Guard {
         core::mem::forget(Self::lock(self));
+        Self::Guard::new()
     }
 
     #[inline]
-    fn try_lock(&self) -> bool {
-        Self::try_lock(self).map(core::mem::forget).is_some()
+    fn try_lock(&self) -> Option<Self::Guard> {
+        Self::try_lock(self).map(core::mem::forget)?;
+        Some(Self::Guard::new())
     }
 
     #[inline]
-    unsafe fn unlock(&self) {
+    unsafe fn unlock(&self, _guard: Self::Guard) {
         self.inner.unlock();
     }
 
