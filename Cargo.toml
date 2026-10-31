@@ -23,7 +23,7 @@ barging = []
 lock_api = ["dep:lock_api"]
 
 [dependencies.lock_api]
-version = "0.4"
+version = "0.5"
 default-features = false
 optional = true
 
